@@ -1,0 +1,20 @@
+---
+description: Show mobile numbers with Persian digits; store and send Latin digits
+alwaysApply: true
+---
+
+# شماره موبایل
+
+هر شماره موبایلی که کاربر می‌بیند با ارقام فارسی نوشته شود. مقدار ذخیره‌شده و ارسالی به API لاتین بماند (`09xxxxxxxxx`).
+
+- نمایش: `formatMobile` از `Gold-System/apps/web/src/lib/utils.ts`. در JSX از `MobileNumber` در `apps/web/src/components/ui/mobile-input.tsx` با `dir="ltr"`.
+- سمت API همان تبدیل در `apps/api/src/common/digits.ts` است. ورودی‌ها با دکوراتور `LatinDigits` قبل از اعتبارسنجی لاتین می‌شوند.
+- ورودی: `MobileInput`. مقدار فرم لاتین است؛ روی صفحه فارسی دیده می‌شود.
+- قبل از اعتبارسنجی و ارسال: `latinMobile` یا `toLatinDigits`. ارقام فارسی `۰–۹` و عربی `٠–٩` هر دو پذیرفته می‌شوند.
+- در دیتابیس، JWT، پیامک و بدنه درخواست ارقام فارسی ننویسید.
+
+```tsx
+<MobileNumber value={customer.mobile} />
+<MobileInput value={mobile} onValueChange={setMobile} />
+await api.register({ mobile: latinMobile(mobile) });
+```
