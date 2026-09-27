@@ -1,0 +1,169 @@
+| سؤال                            | پاسخ پیشنهادی                                                                          |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| **Q1.1 API Unit**               | باید از مشخصات API قیمت بررسی شود؛ فعلاً **نامشخص**                                    |
+| **Q1.2 Reference Purity**       | **نامشخص**؛ عیار طلای آب‌شده باید مشخص شود                                             |
+| **Q1.3 Purity Conversion**      | وابسته به Q1.1 و Q1.2؛ فعلاً **نامشخص**                                                |
+| **Q1.4 Wage**                   | قابل تنظیم                                               |
+| **Q1.5 Profit**                 | باید توسط فروشنده در Pricing Rule قابل تنظیم باشد؛ روش دقیق **نیازمند تصمیم کسب‌وکار** |
+| **Q1.6 Tax**                    | ، قابل تنظیم باشد نیازمند تعیین قوانین مالیاتی پروژه؛ نباید فعلاً 10٪ را فرض کنیم                         |
+| **Q1.7 Discount**               | قابل تنظیم در Pricing Engine؛ ترتیب دقیق **نیازمند تصمیم**                             |
+| **Q1.8 Pipeline**               | اصل Pipeline درست است، ولی ترتیب دقیق Tax/Discount/Profit باید نهایی شود               |
+| **Q1.9 Rounding**               | باید مشخص شود؛ پیشنهاد فعلی: **قابل تنظیم در Pricing Rule**                            |
+| **Q1.10 Adjustment Precedence** | پیشنهاد معماری: **Global Adjustment → Customer Group Rule → سایر تخفیف‌ها**            |
+
+
+Q2.1 → At the moment the customer submits the Order. The customer accepts the displayed price by submitting the Order, and that price is locked for the Order. The system immediately generates a Quotation based on the locked price. The Seller's subsequent approval confirms the Trade and converts the Quotation into the final Invoice; it does not change the locked price.
+Q2.2 → Nothing — the price locked at Order time stands regardless
+Q2.3 → Quotation validity is tied to the submitted Order. Once the customer submits the Order, the quoted price is locked and remains valid until the Trade is approved or rejected.
+=================================================================================
+Q3.1 → Prepaid balance: Customer deposits money in advance
+======================================================
+Q3.2 → Other
+
+Gold credit is a Rial-denominated credit limit assigned by the
+seller to the customer.
+
+It is NOT physical gold inventory and NOT a pre-purchased gold balance.
+
+The customer's gold trading capacity is calculated dynamically
+based on the Rial credit limit and the current applicable gold price.
+
+Example:
+Rial Gold Credit = 1,000,000,000 Toman
+Current applicable gold price = 10,000,000 Toman/gram
+Available capacity ≈ 100 grams.
+
+Q3.3 → Credit is reserved at Order submission.
+=========================================================================
+When the customer submits an Order, the required Rial-based credit
+is immediately blocked/reserved.
+
+The reserved amount remains blocked while the Order is awaiting
+manual review.
+
+If the Order is:
+- Approved → reserved credit becomes consumed.
+- Rejected → reserved credit is automatically released.
+- Cancelled by customer → reserved credit is automatically released.
+- Cancelled by authorized staff → reserved credit is automatically released.
+====================================================================
+Q3.4 → Hard Block
+
+If the order exceeds the customer's available Rial-based credit
+limit, the system must immediately reject/block the order.
+
+The customer cannot submit the order for manual review or
+manager override.
+
+Only orders within the customer's available credit limit can
+proceed to quotation and manual trade approval.
+
+======================**********************************************^^^^^^^^^^^^^^^^^^^^^===========================
+Customer Cancellation:
+Configurable by system settings.
+
+The system must provide a setting that determines whether a customer
+is allowed to cancel an Order before manual approval.
+
+If enabled:
+Customer can cancel before Trade approval.
+
+If disabled:
+Customer cannot cancel after Order submission; cancellation must be
+performed by an authorized Operator/Manager according to permissions.
+================================
+
+Q3.5 → Credit is released immediately and automatically.
+
+When an Order is rejected or cancelled, the reserved/blocked credit
+must be released immediately and automatically.
+
+This applies to:
+- Customer cancellation
+- Operator/Reviewer/Manager cancellation
+- Order rejection
+
+If the Trade is approved, the reserved credit becomes consumed.
+=====================================================================================================
+GROUP 4 — CHART OF ACCOUNTS
+
+Q4.1 — Required financial accounts:
+
+Customer Receivable (مطالبات مشتری): YES
+Customer Prepaid/Deposit (پیش‌دریافت مشتری): YES
+Supplier Payable (بدهی به بالادستی): YES
+Cash / Bank (صندوق / بانک): YES
+Sales Revenue (درآمد فروش): YES
+Purchase Cost (بهای خرید): YES
+Gold Position / Gold Obligation (تعهد طلا): YES
+Tax Payable (مالیات پرداختنی): YES
+Wage Income (درآمد اجرت): NO — not applicable to molten gold sales at this stage
+Discount Expense (تخفیف اعطایی): YES
+General Expenses (هزینه‌های عمومی): YES
+
+Additional accounts required:
+
+- Customer Rial Credit
+- Customer Gold Credit / Gold Obligation
+- Sales Profit
+- Price Adjustments
+- Customer Settlement
+- Supplier Settlement
+- Reversal / Adjustment Accounts
+- Operating Expenses
+
+IMPORTANT:
+
+"Gold Credit" must NOT be modeled as physical gold inventory.
+
+It represents a gold-denominated customer credit/obligation.
+
+The accounting system must support both:
+1. Financial Ledger
+2. Gold Ledger
+
+Ledger entries must be traceable to their source transaction and must not be physically deleted. Corrections must use reversal/adjustment entries.
+
+Q5.1 → National ID + Birth Certificate + Proof of Address + Selfie with ID.
+       Business Registration required for همکار customers.
+       Additional documents configurable.
+all documents should be configurable to be necessary or not
+
+Q5.2 → 7 years, subject to legal/compliance confirmation.
+
+Q5.3 → KYC Reviewer + Store Manager + accountant.
+       All document access/downloads must be audited.
+==================
+Q6.1 → Any authorized Reviewer/Seller/Manager with Trade Approval permission.
+
+Q6.2 → Yes — define the threshold amount and second approver role
+
+Q6.3 → Yes — after a Trade has been confirmed and finalized, cancellation or reversal is permitted only in exceptional circumstances and with Manager approval. The cancellation request must include a documented reason, and all related financial, credit, payment, and gold inventory/obligation effects must be systematically adjusted and recorded.
+
+If payment has already been made or gold has already been delivered, cancellation will require Manager review and approval, along with a formal adjustment/reversal accounting entry. All cancellation and adjustment actions must also be recorded in the system’s Audit Log.
+
+===================
+Q7.1 → Customer can cancel any time before Trade confirmation.
+       After confirmation, cancellation requires authorized staff action.
+
+Q7.2 → Only with Manager/Seller authorization + documented reason.
+       Cancellation must create formal reversal/adjustment entries in the ledgers.
+===================
+Q8.1 → Trade is fully settled when 100% of the Trade total has been paid/settled
+  Q8.2 →No — full payment required at once   .
+  Q8.3 →No — there is no payment deadline after Trade confirmation. The customer must have sufficient available credit before placing the Order, and the Trade is only processed within the customer’s available credit limit. No additional payment period or post-confirmation credit is granted.
+
+  Q8.4 → Not included in the MVP. Supplier/upstream settlement, including bank transfers, cash payments, physical gold settlement, supplier credit accounts, and payment terms, will not be implemented in the initial version of the system and may be addressed in a future phase.
+
+==================================
+Q9.1 → sms.ir and Melipayamak , i will choose which one to work , multiple provider is required
+
+Q9.2 → Combination:
+       Bank Transfer + Card-to-Card + Cash
+       Online Gateway → قابل اضافه شدن در آینده
+online is not supported in mvp, all others should bring documents for pays.
+
+Q9.3 → al is required, otp 
+
+Q9.4 → Manual entry only in MVP.
+       Upstream API integration → Future phase.
