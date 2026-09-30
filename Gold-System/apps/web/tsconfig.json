@@ -1,0 +1,25 @@
+{
+  "extends": "@gold/tsconfig/nextjs.json",
+  "compilerOptions": {
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ],
+      "@gold/shared-types": [
+        "../../packages/shared-types/src/index.ts"
+      ]
+    },
+    "noEmit": true,
+    "incremental": true,
+    "isolatedModules": true
+  },
+  "include": [
+    "next-env.d.ts",
+    "**/*.ts",
+    "**/*.tsx",
+    ".next/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

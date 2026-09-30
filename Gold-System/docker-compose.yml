@@ -1,0 +1,89 @@
+version: '3.9'
+
+services:
+  # ─────────────────────────────────────────
+  # PostgreSQL — primary database
+  # ─────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: gold_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: gold_db
+      POSTGRES_USER: gold_user
+      POSTGRES_PASSWORD: gold_pass
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U gold_user -d gold_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # MinIO — S3-compatible object storage (dev)
+  # ─────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: gold_minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - '9000:9000'
+      - '9001:9001'
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ─────────────────────────────────────────
+  # NestJS API
+  # ─────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.api
+    container_name: gold_api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '4001:4001'
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - ./apps/api:/app/apps/api
+      - /app/node_modules
+    command: pnpm --filter @gold/api dev
+
+  # ─────────────────────────────────────────
+  # Next.js Web
+  # ─────────────────────────────────────────
+  web:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.web
+    container_name: gold_web
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - '4000:4000'
+    depends_on:
+      - api
+    volumes:
+      - ./apps/web:/app/apps/web
+      - /app/node_modules
+
+volumes:
+  postgres_data:
+  minio_data:

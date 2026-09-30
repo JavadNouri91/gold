@@ -1,0 +1,37 @@
+{
+  "name": "gold-system",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Gold System — Single-store molten gold trading and management platform",
+  "scripts": {
+    "dev:api": "pnpm --filter @gold/api dev",
+    "dev:web": "pnpm --filter @gold/web dev",
+    "build:api": "pnpm --filter @gold/api build",
+    "build:web": "pnpm --filter @gold/web build",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,tsx,js,json,md}\"",
+    "test": "pnpm -r test",
+    "test:e2e": "pnpm --filter @gold/api test:e2e",
+    "db:generate": "prisma generate --schema=prisma/schema.prisma",
+    "db:migrate:dev": "prisma migrate dev --schema=prisma/schema.prisma",
+    "db:migrate:deploy": "prisma migrate deploy --schema=prisma/schema.prisma",
+    "db:studio": "prisma studio --schema=prisma/schema.prisma",
+    "db:seed": "pnpm --filter @gold/api db:seed",
+    "prepare": "node -e \"try{require('husky').install()}catch(e){}\""
+  },
+  "dependencies": {
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "prettier": "^3.3.0",
+    "prisma": "^5.22.0",
+    "typescript": "^5.4.5"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.15.0"
+}

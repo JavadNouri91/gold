@@ -1,0 +1,1289 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Store {
+  id                        String   @id @default(cuid())
+  name                      String
+  legalName                 String?
+  taxId                     String?
+  address                   String?
+  phone                     String?
+  status                    String   @default("ACTIVE")
+  createdAt                 DateTime @default(now()) @map("created_at")
+  updatedAt                 DateTime @updatedAt @map("updated_at")
+  allowCustomerCancellation Boolean  @default(true) @map("allow_customer_cancellation")
+
+  @@map("stores")
+}
+
+model Role {
+  id          String           @id @default(cuid())
+  name        String           @unique
+  description String?
+  isSystem    Boolean          @default(false) @map("is_system")
+  createdAt   DateTime         @default(now()) @map("created_at")
+  updatedAt   DateTime         @updatedAt @map("updated_at")
+  permissions   RolePermission[]
+  users         UserRole[]
+  sessionPolicy RoleSessionPolicy?
+
+  @@map("roles")
+}
+
+model Permission {
+  id          String           @id @default(cuid())
+  key         String           @unique
+  description String?
+  module      String
+  createdAt   DateTime         @default(now()) @map("created_at")
+  roles       RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  roleId       String     @map("role_id")
+  permissionId String     @map("permission_id")
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model User {
+  id                 String              @id @default(cuid())
+  name               String
+  mobile             String              @unique
+  email              String?             @unique
+  passwordHash       String?             @map("password_hash")
+  status             UserStatus          @default(ACTIVE)
+  lastLoginAt        DateTime?           @map("last_login_at")
+  createdAt          DateTime            @default(now()) @map("created_at")
+  updatedAt          DateTime            @updatedAt @map("updated_at")
+  assignedByMe       Assignment[]        @relation("AssignedByUser")
+  assignedToMe       Assignment[]        @relation("AssignedToUser")
+  auditLogs          AuditLog[]
+  creditTransactions CreditTransaction[] @relation("CreditActor")
+  reviewedDocuments  CustomerDocument[]  @relation("DocumentReviewer")
+  customer           Customer?
+  reviewedKyc        KYCVerification[]   @relation("KYCReviewer")
+  notifications      Notification[]      @relation("UserNotifications")
+  cancelledOrders    Order[]             @relation("OrderCancelledBy")
+  rejectedOrders     Order[]             @relation("OrderRejectedBy")
+  otpCodes           OtpCode[]
+  paymentAllocations PaymentAllocation[] @relation("AllocationCreatedBy")
+  recordedPayments   Payment[]           @relation("PaymentRecordedBy")
+  validatedPayments  Payment[]           @relation("PaymentValidatedBy")
+  priceAdjustments   PriceAdjustment[]   @relation("AdjustmentActor")
+  pricingRules       PricingRule[]       @relation("PricingRuleActor")
+  cancelledPurchases Purchase[]          @relation("PurchaseCancelledBy")
+  confirmedPurchases Purchase[]          @relation("PurchaseConfirmedBy")
+  recordedPurchases  Purchase[]          @relation("PurchaseRecordedBy")
+  refreshTokens      RefreshToken[]
+  settledSettlements Settlement[]        @relation("SettlementSettledBy")
+  confirmedTrades    Trade[]             @relation("TradeConfirmedBy")
+  reversedTrades     Trade[]             @relation("TradeReversedBy")
+  roles                 UserRole[]
+  authoredCustomerNotes CustomerNote[]       @relation("CustomerNoteAuthor")
+  sessionPolicy         UserSessionPolicy?
+  loginConfirmations    LoginConfirmation[]
+
+  @@map("users")
+}
+
+model UserRole {
+  userId String @map("user_id")
+  roleId String @map("role_id")
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@map("user_roles")
+}
+
+model RefreshToken {
+  id             String    @id @default(cuid())
+  userId         String    @map("user_id")
+  tokenHash      String    @unique @map("token_hash")
+  expiresAt      DateTime  @map("expires_at")
+  revokedAt      DateTime? @map("revoked_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  lastActivityAt DateTime  @default(now()) @map("last_activity_at")
+  userAgent      String?   @map("user_agent")
+  ipAddress      String?   @map("ip_address")
+  deviceName     String?   @map("device_name")
+  browser        String?
+  os             String?
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([userId, revokedAt, expiresAt])
+  @@index([expiresAt])
+  @@index([revokedAt])
+  @@map("refresh_tokens")
+}
+
+/// Singleton row id = "global". Role and user policies fall back to this row.
+model SessionSetting {
+  id            String               @id
+  limitType     SessionLimitType     @default(LIMITED) @map("limit_type")
+  maxSessions   Int?                 @map("max_sessions")
+  loginBehavior SessionLoginBehavior @default(BLOCK) @map("login_behavior")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  updatedById   String?              @map("updated_by_id")
+
+  @@map("session_settings")
+}
+
+model RoleSessionPolicy {
+  roleId        String                @id @map("role_id")
+  useDefault    Boolean               @default(true) @map("use_default")
+  limitType     SessionLimitType?     @map("limit_type")
+  maxSessions   Int?                  @map("max_sessions")
+  loginBehavior SessionLoginBehavior? @map("login_behavior")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  updatedById   String?               @map("updated_by_id")
+  role          Role                  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@map("role_session_policies")
+}
+
+model UserSessionPolicy {
+  userId        String                @id @map("user_id")
+  mode          UserSessionPolicyMode @default(INHERIT)
+  limitType     SessionLimitType?     @map("limit_type")
+  maxSessions   Int?                  @map("max_sessions")
+  loginBehavior SessionLoginBehavior? @map("login_behavior")
+  updatedAt     DateTime              @updatedAt @map("updated_at")
+  updatedById   String?               @map("updated_by_id")
+  user          User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_session_policies")
+}
+
+/// Short-lived proof that credentials were accepted while a session slot must be freed.
+/// Only the SHA-256 hash of the token is stored.
+model LoginConfirmation {
+  id        String    @id @default(cuid())
+  userId    String    @map("user_id")
+  tokenHash String    @unique @map("token_hash")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  ipAddress String?   @map("ip_address")
+  userAgent String?   @map("user_agent")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("login_confirmations")
+}
+
+model OtpCode {
+  id        String     @id @default(cuid())
+  userId    String?    @map("user_id")
+  mobile    String
+  codeHash  String     @map("code_hash")
+  purpose   OtpPurpose
+  expiresAt DateTime   @map("expires_at")
+  usedAt    DateTime?  @map("used_at")
+  createdAt DateTime   @default(now()) @map("created_at")
+  attempts  Int        @default(0)
+  user      User?      @relation(fields: [userId], references: [id])
+
+  @@index([mobile, purpose])
+  @@map("otp_codes")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorId       String?  @map("actor_id")
+  actorType     String   @default("USER") @map("actor_type")
+  action        String
+  entityType    String   @map("entity_type")
+  entityId      String   @map("entity_id")
+  before        Json?
+  after         Json?
+  reason        String?
+  ipAddress     String?  @map("ip_address")
+  correlationId String?  @map("correlation_id")
+  timestamp     DateTime @default(now())
+  actor         User?    @relation(fields: [actorId], references: [id])
+
+  @@index([entityType, entityId])
+  @@index([actorId])
+  @@index([timestamp])
+  @@index([action])
+  @@map("audit_logs")
+}
+
+model Customer {
+  id               String             @id @default(cuid())
+  customerNumber   String             @unique @map("customer_number")
+  userId           String?            @unique @map("user_id")
+  firstName        String             @map("first_name")
+  lastName         String             @map("last_name")
+  nationalId       String             @unique @map("national_id")
+  mobile           String             @unique
+  email            String?            @unique
+  dateOfBirth      DateTime?          @map("date_of_birth")
+  address          String?
+  avatarKey         String?               @map("avatar_key")
+  type              CustomerType?
+  gender            CustomerGender?
+  level             CustomerLevel?        @default(NORMAL)
+  postalCode        String?               @map("postal_code")
+  phone             String?
+  referenceSource   ReferenceSource?      @map("reference_source")
+  companyName       String?               @map("company_name")
+  companyNationalId String?               @map("company_national_id")
+  companyEconomicId String?               @map("company_economic_id")
+  contactName       String?               @map("contact_name")
+  contactTitle      String?               @map("contact_title")
+  secondaryMobile   String?               @map("secondary_mobile")
+  workPhone         String?               @map("work_phone")
+  fax               String?
+  workAddress       String?               @map("work_address")
+  contactNotes      String?               @map("contact_notes")
+  province          String?
+  city              String?
+  status            CustomerStatus        @default(PENDING)
+  accountStatus     CustomerAccountStatus @default(INACTIVE) @map("account_status")
+  rejectionReason   String?               @map("rejection_reason")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
+  account          CustomerAccount?
+  documents        CustomerDocument[]
+  user             User?                 @relation(fields: [userId], references: [id])
+  kycVerifications KYCVerification[]
+  notes            CustomerNote[]
+  orders           Order[]
+  payments         Payment[]
+  quotations       Quotation[]
+  trades           Trade[]
+
+  @@index([status])
+  @@index([accountStatus])
+  @@index([mobile])
+  @@index([nationalId])
+  @@index([customerNumber])
+  @@map("customers")
+}
+
+model CustomerNote {
+  id         String   @id @default(cuid())
+  customerId String   @map("customer_id")
+  authorId   String?  @map("author_id")
+  body       String
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  author     User?    @relation("CustomerNoteAuthor", fields: [authorId], references: [id])
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("customer_notes")
+}
+
+model CustomerDocument {
+  id              String             @id @default(cuid())
+  customerId      String             @map("customer_id")
+  documentType    String             @map("document_type")
+  fileKey         String             @map("file_key")
+  fileName        String             @map("file_name")
+  fileMimeType    String             @map("file_mime_type")
+  fileSizeBytes   Int                @map("file_size_bytes")
+  status          VerificationStatus @default(PENDING)
+  reviewedBy      String?            @map("reviewed_by")
+  reviewedAt      DateTime?          @map("reviewed_at")
+  rejectionReason String?            @map("rejection_reason")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+  customer        Customer           @relation(fields: [customerId], references: [id])
+  reviewer        User?              @relation("DocumentReviewer", fields: [reviewedBy], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@index([documentType])
+  @@map("customer_documents")
+}
+
+model KYCVerification {
+  id             String             @id @default(cuid())
+  customerId     String             @map("customer_id")
+  status         VerificationStatus @default(PENDING)
+  reviewerId     String?            @map("reviewer_id")
+  decisionReason String?            @map("decision_reason")
+  reviewedAt     DateTime?          @map("reviewed_at")
+  createdAt      DateTime           @default(now()) @map("created_at")
+  updatedAt      DateTime           @updatedAt @map("updated_at")
+  customer       Customer           @relation(fields: [customerId], references: [id])
+  reviewer       User?              @relation("KYCReviewer", fields: [reviewerId], references: [id])
+
+  @@index([customerId])
+  @@index([status])
+  @@map("kyc_verifications")
+}
+
+model CustomerAccount {
+  id                     String              @id @default(cuid())
+  customerId             String              @unique @map("customer_id")
+  status                 String              @default("ACTIVE")
+  creditLimitRial        Decimal             @default(0) @map("credit_limit_rial") @db.Decimal(20, 2)
+  reservedCreditRial     Decimal             @default(0) @map("reserved_credit_rial") @db.Decimal(20, 2)
+  consumedCreditRial     Decimal             @default(0) @map("consumed_credit_rial") @db.Decimal(20, 2)
+  creditLimitGoldRial    Decimal             @default(0) @map("credit_limit_gold_rial") @db.Decimal(20, 2)
+  reservedCreditGoldRial Decimal             @default(0) @map("reserved_credit_gold_rial") @db.Decimal(20, 2)
+  consumedCreditGoldRial Decimal             @default(0) @map("consumed_credit_gold_rial") @db.Decimal(20, 2)
+  createdAt              DateTime            @default(now()) @map("created_at")
+  updatedAt              DateTime            @updatedAt @map("updated_at")
+  creditTransactions     CreditTransaction[]
+  customer               Customer            @relation(fields: [customerId], references: [id])
+  orders                 Order[]
+
+  @@map("customer_accounts")
+}
+
+model CreditTransaction {
+  id           String                @id @default(cuid())
+  accountId    String                @map("account_id")
+  type         CreditTransactionType
+  creditPool   String                @map("credit_pool")
+  amount       Decimal               @db.Decimal(20, 2)
+  balanceAfter Decimal               @map("balance_after") @db.Decimal(20, 2)
+  sourceType   String?               @map("source_type")
+  sourceId     String?               @map("source_id")
+  reason       String?
+  createdBy    String?               @map("created_by")
+  createdAt    DateTime              @default(now()) @map("created_at")
+  account      CustomerAccount       @relation(fields: [accountId], references: [id])
+  actor        User?                 @relation("CreditActor", fields: [createdBy], references: [id])
+
+  @@index([accountId])
+  @@index([createdAt])
+  @@index([type])
+  @@map("credit_transactions")
+}
+
+model PriceSource {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  providerType String          @map("provider_type")
+  config       Json?
+  status       String          @default("ACTIVE")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
+  snapshots    PriceSnapshot[]
+
+  @@index([status])
+  @@map("price_sources")
+}
+
+model PriceSnapshot {
+  id              String               @id @default(cuid())
+  sourceId        String               @map("source_id")
+  rawValue        Decimal              @map("raw_value") @db.Decimal(20, 6)
+  normalizedValue Decimal              @map("normalized_value") @db.Decimal(20, 6)
+  unit            String
+  currency        String               @default("IRR")
+  purityReference String?              @map("purity_reference")
+  externalRef     String?              @map("external_ref")
+  metadata        Json?
+  capturedAt      DateTime             @map("captured_at")
+  validityStatus  PriceSnapshotStatus  @default(VALID) @map("validity_status")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  source          PriceSource          @relation(fields: [sourceId], references: [id])
+  calculations    PricingCalculation[]
+
+  @@index([sourceId])
+  @@index([capturedAt(sort: Desc)])
+  @@index([validityStatus])
+  @@map("price_snapshots")
+}
+
+model PriceAdjustment {
+  id            String               @id @default(cuid())
+  name          String
+  mode          AdjustmentMode
+  direction     AdjustmentDirection
+  value         Decimal              @db.Decimal(20, 6)
+  effectiveFrom DateTime             @map("effective_from")
+  effectiveTo   DateTime?            @map("effective_to")
+  status        String               @default("ACTIVE")
+  createdBy     String?              @map("created_by")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+  actor         User?                @relation("AdjustmentActor", fields: [createdBy], references: [id])
+  calculations  PricingCalculation[]
+
+  @@index([status])
+  @@index([effectiveFrom])
+  @@map("price_adjustments")
+}
+
+model PricingRule {
+  id                String               @id @default(cuid())
+  name              String
+  customerType      CustomerType?        @map("customer_type")
+  groupAdjMode      GroupAdjMode         @default(NONE) @map("group_adj_mode")
+  groupAdjValue     Decimal              @default(0) @map("group_adj_value") @db.Decimal(10, 6)
+  groupAdjDirection AdjustmentDirection  @default(INCREASE) @map("group_adj_direction")
+  wageMode          WageMode             @default(NONE) @map("wage_mode")
+  wageValue         Decimal              @default(0) @map("wage_value") @db.Decimal(20, 6)
+  discountMode      DiscountMode         @default(NONE) @map("discount_mode")
+  discountValue     Decimal              @default(0) @map("discount_value") @db.Decimal(20, 6)
+  roundingMethod    RoundingMethod       @default(NONE) @map("rounding_method")
+  roundingPrecision Decimal              @default(1) @map("rounding_precision") @db.Decimal(20, 2)
+  priority          Int                  @default(0)
+  activeFrom        DateTime             @map("active_from")
+  activeTo          DateTime?            @map("active_to")
+  status            String               @default("ACTIVE")
+  createdBy         String?              @map("created_by")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  calculations      PricingCalculation[]
+  actor             User?                @relation("PricingRuleActor", fields: [createdBy], references: [id])
+
+  @@index([customerType])
+  @@index([status])
+  @@index([activeFrom])
+  @@map("pricing_rules")
+}
+
+model PricingCalculation {
+  id                     String           @id @default(cuid())
+  referenceType          String?          @map("reference_type")
+  referenceId            String?          @map("reference_id")
+  priceSnapshotId        String           @map("price_snapshot_id")
+  globalAdjId            String?          @map("global_adj_id")
+  pricingRuleId          String?          @map("pricing_rule_id")
+  weightGrams            Decimal          @map("weight_grams") @db.Decimal(20, 6)
+  purityRatio            Decimal          @map("purity_ratio") @db.Decimal(10, 6)
+  customerType           String?          @map("customer_type")
+  inputDiscountAmount    Decimal          @default(0) @map("input_discount_amount") @db.Decimal(20, 2)
+  step1BasePrice         Decimal          @map("step1_base_price") @db.Decimal(20, 6)
+  step2AfterGlobalAdj    Decimal          @map("step2_after_global_adj") @db.Decimal(20, 6)
+  step3PurityConvApplied Boolean          @default(false) @map("step3_purity_conv_applied")
+  step4AfterWeight       Decimal          @map("step4_after_weight") @db.Decimal(20, 2)
+  step5AfterGroupRule    Decimal          @map("step5_after_group_rule") @db.Decimal(20, 2)
+  wageAmount             Decimal          @default(0) @map("wage_amount") @db.Decimal(20, 2)
+  profitAmount           Decimal?         @map("profit_amount") @db.Decimal(20, 2)
+  taxAmount              Decimal?         @map("tax_amount") @db.Decimal(20, 2)
+  discountAmount         Decimal          @default(0) @map("discount_amount") @db.Decimal(20, 2)
+  priceBeforeRounding    Decimal          @map("price_before_rounding") @db.Decimal(20, 2)
+  roundingAmount         Decimal          @default(0) @map("rounding_amount") @db.Decimal(20, 2)
+  finalPrice             Decimal          @map("final_price") @db.Decimal(20, 2)
+  isComplete             Boolean          @default(false) @map("is_complete")
+  blockedSteps           Json?            @map("blocked_steps")
+  calculatedAt           DateTime         @default(now()) @map("calculated_at")
+  calculationVersion     String           @default("1") @map("calculation_version")
+  order                  Order?
+  globalAdj              PriceAdjustment? @relation(fields: [globalAdjId], references: [id])
+  priceSnapshot          PriceSnapshot    @relation(fields: [priceSnapshotId], references: [id])
+  pricingRule            PricingRule?     @relation(fields: [pricingRuleId], references: [id])
+  quotations             Quotation[]
+  trades                 Trade[]
+
+  @@index([referenceType, referenceId])
+  @@index([priceSnapshotId])
+  @@index([calculatedAt])
+  @@map("pricing_calculations")
+}
+
+model Order {
+  id                   String              @id @default(cuid())
+  orderNumber          String              @unique @map("order_number")
+  customerId           String              @map("customer_id")
+  customerAccountId    String              @map("customer_account_id")
+  pricingCalculationId String?             @unique @map("pricing_calculation_id")
+  status               OrderStatus         @default(DRAFT)
+  totalAmountRial      Decimal             @map("total_amount_rial") @db.Decimal(20, 2)
+  reservedAmountRial   Decimal             @default(0) @map("reserved_amount_rial") @db.Decimal(20, 2)
+  weightGrams          Decimal             @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio          Decimal             @map("purity_ratio") @db.Decimal(8, 6)
+  customerType         CustomerType?       @map("customer_type")
+  submittedAt          DateTime?           @map("submitted_at") @db.Timestamptz(6)
+  cancelledAt          DateTime?           @map("cancelled_at") @db.Timestamptz(6)
+  rejectedAt           DateTime?           @map("rejected_at") @db.Timestamptz(6)
+  cancellationReason   String?             @map("cancellation_reason")
+  cancelledByUserId    String?             @map("cancelled_by_user_id")
+  rejectionReason      String?             @map("rejection_reason")
+  rejectedByUserId     String?             @map("rejected_by_user_id")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments          Assignment[]
+  items                OrderItem[]
+  cancelledByUser      User?               @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id])
+  customerAccount      CustomerAccount     @relation(fields: [customerAccountId], references: [id])
+  customer             Customer            @relation(fields: [customerId], references: [id])
+  pricingCalculation   PricingCalculation? @relation(fields: [pricingCalculationId], references: [id], onDelete: Restrict)
+  rejectedByUser       User?               @relation("OrderRejectedBy", fields: [rejectedByUserId], references: [id])
+  quotations           Quotation[]
+  trade                Trade?
+
+  @@index([customerId])
+  @@index([customerAccountId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id             String   @id @default(cuid())
+  orderId        String   @map("order_id")
+  weightGrams    Decimal  @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio    Decimal  @map("purity_ratio") @db.Decimal(8, 6)
+  unitPriceRial  Decimal  @map("unit_price_rial") @db.Decimal(20, 6)
+  totalPriceRial Decimal  @map("total_price_rial") @db.Decimal(20, 2)
+  description    String?
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+model Quotation {
+  id                   String             @id @default(cuid())
+  quotationNumber      String             @unique @map("quotation_number")
+  orderId              String             @map("order_id")
+  customerId           String             @map("customer_id")
+  pricingCalculationId String             @map("pricing_calculation_id")
+  version              Int                @default(1)
+  status               QuotationStatus    @default(ACTIVE)
+  totalAmountRial      Decimal            @map("total_amount_rial") @db.Decimal(20, 2)
+  weightGrams          Decimal            @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio          Decimal            @map("purity_ratio") @db.Decimal(8, 6)
+  step1BasePrice       Decimal?           @map("step1_base_price") @db.Decimal(20, 6)
+  wageAmount           Decimal?           @map("wage_amount") @db.Decimal(20, 2)
+  discountAmount       Decimal?           @map("discount_amount") @db.Decimal(20, 2)
+  roundingAmount       Decimal?           @map("rounding_amount") @db.Decimal(20, 2)
+  isComplete           Boolean            @default(false) @map("is_complete")
+  documentKey          String?            @map("document_key")
+  documentMimeType     String?            @map("document_mime_type")
+  documentGeneratedAt  DateTime?          @map("document_generated_at") @db.Timestamptz(6)
+  generatedAt          DateTime           @default(now()) @map("generated_at") @db.Timestamptz(6)
+  createdAt            DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignments          Assignment[]
+  items                QuotationItem[]
+  customer             Customer           @relation(fields: [customerId], references: [id])
+  order                Order              @relation(fields: [orderId], references: [id])
+  pricingCalculation   PricingCalculation @relation(fields: [pricingCalculationId], references: [id])
+  trades               Trade[]
+
+  @@unique([orderId, version])
+  @@index([customerId])
+  @@index([orderId])
+  @@index([status])
+  @@index([generatedAt])
+  @@map("quotations")
+}
+
+model QuotationItem {
+  id             String    @id @default(cuid())
+  quotationId    String    @map("quotation_id")
+  weightGrams    Decimal   @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio    Decimal   @map("purity_ratio") @db.Decimal(8, 6)
+  unitPriceRial  Decimal   @map("unit_price_rial") @db.Decimal(20, 6)
+  totalPriceRial Decimal   @map("total_price_rial") @db.Decimal(20, 2)
+  description    String?
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  quotation      Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+
+  @@index([quotationId])
+  @@map("quotation_items")
+}
+
+model Trade {
+  id                   String              @id @default(cuid())
+  tradeNumber          String              @unique @map("trade_number")
+  orderId              String              @unique @map("order_id")
+  quotationId          String              @map("quotation_id")
+  customerId           String              @map("customer_id")
+  pricingCalculationId String              @map("pricing_calculation_id")
+  status               TradeStatus         @default(CONFIRMED)
+  totalAmountRial      Decimal             @map("total_amount_rial") @db.Decimal(20, 2)
+  weightGrams          Decimal             @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio          Decimal             @map("purity_ratio") @db.Decimal(8, 6)
+  unitPriceRial        Decimal             @map("unit_price_rial") @db.Decimal(20, 6)
+  step1BasePrice       Decimal?            @map("step1_base_price") @db.Decimal(20, 6)
+  wageAmount           Decimal?            @map("wage_amount") @db.Decimal(20, 2)
+  profitAmount         Decimal?            @map("profit_amount") @db.Decimal(20, 2)
+  taxAmount            Decimal?            @map("tax_amount") @db.Decimal(20, 2)
+  discountAmount       Decimal?            @map("discount_amount") @db.Decimal(20, 2)
+  roundingAmount       Decimal?            @map("rounding_amount") @db.Decimal(20, 2)
+  isComplete           Boolean             @default(false) @map("is_complete")
+  customerType         String?             @map("customer_type")
+  lockedTermsSnapshot  Json                @map("locked_terms_snapshot")
+  confirmedByUserId    String              @map("confirmed_by_user_id")
+  confirmedAt          DateTime            @map("confirmed_at") @db.Timestamptz(6)
+  reversedByUserId     String?             @map("reversed_by_user_id")
+  reversedAt           DateTime?           @map("reversed_at") @db.Timestamptz(6)
+  reversalReason       String?             @map("reversal_reason")
+  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  paymentAllocations   PaymentAllocation[]
+  payments             Payment[]
+  settlement           Settlement?
+  items                TradeItem[]
+  confirmedBy          User                @relation("TradeConfirmedBy", fields: [confirmedByUserId], references: [id])
+  customer             Customer            @relation(fields: [customerId], references: [id])
+  order                Order               @relation(fields: [orderId], references: [id])
+  pricingCalculation   PricingCalculation  @relation(fields: [pricingCalculationId], references: [id])
+  quotation            Quotation           @relation(fields: [quotationId], references: [id])
+  reversedBy           User?               @relation("TradeReversedBy", fields: [reversedByUserId], references: [id])
+
+  @@index([customerId])
+  @@index([orderId])
+  @@index([status])
+  @@index([confirmedAt])
+  @@map("trades")
+}
+
+model FinancialLedgerJournal {
+  id             String                 @id @default(cuid())
+  idempotencyKey String                 @unique @map("idempotency_key")
+  sourceType     String                 @map("source_type")
+  sourceId       String                 @map("source_id")
+  description    String?
+  postedAt       DateTime               @default(now()) @map("posted_at")
+  postedByUserId String?                @map("posted_by_user_id")
+  entries        FinancialLedgerEntry[]
+
+  @@index([sourceType, sourceId])
+  @@index([postedAt])
+  @@map("financial_ledger_journals")
+}
+
+model FinancialLedgerEntry {
+  id          String                 @id @default(cuid())
+  journalId   String                 @map("journal_id")
+  accountCode String                 @map("account_code")
+  accountName String                 @map("account_name")
+  accountType String                 @map("account_type")
+  debit       Decimal                @default(0) @db.Decimal(20, 2)
+  credit      Decimal                @default(0) @db.Decimal(20, 2)
+  currency    String                 @default("IRR")
+  description String?
+  createdAt   DateTime               @default(now()) @map("created_at")
+  journal     FinancialLedgerJournal @relation(fields: [journalId], references: [id])
+
+  @@index([journalId])
+  @@index([accountCode])
+  @@index([createdAt])
+  @@map("financial_ledger_entries")
+}
+
+model GoldLedgerJournal {
+  id             String            @id @default(cuid())
+  idempotencyKey String            @unique @map("idempotency_key")
+  sourceType     String            @map("source_type")
+  sourceId       String            @map("source_id")
+  description    String?
+  postedAt       DateTime          @default(now()) @map("posted_at")
+  postedByUserId String?           @map("posted_by_user_id")
+  entries        GoldLedgerEntry[]
+
+  @@index([sourceType, sourceId])
+  @@index([postedAt])
+  @@map("gold_ledger_journals")
+}
+
+model GoldLedgerEntry {
+  id          String            @id @default(cuid())
+  journalId   String            @map("journal_id")
+  accountCode String            @map("account_code")
+  accountName String            @map("account_name")
+  direction   String
+  quantity    Decimal           @db.Decimal(20, 6)
+  purity      Decimal           @db.Decimal(10, 6)
+  description String?
+  createdAt   DateTime          @default(now()) @map("created_at")
+  journal     GoldLedgerJournal @relation(fields: [journalId], references: [id])
+
+  @@index([journalId])
+  @@index([accountCode])
+  @@index([createdAt])
+  @@map("gold_ledger_entries")
+}
+
+model Supplier {
+  id              String                  @id @default(cuid())
+  supplierNumber  String                  @unique @map("supplier_number")
+  name            String
+  contactName     String?                 @map("contact_name")
+  contactPhone    String?                 @map("contact_phone")
+  contactEmail    String?                 @map("contact_email")
+  integrationMode SupplierIntegrationMode @default(MANUAL) @map("integration_mode")
+  status          SupplierStatus          @default(ACTIVE)
+  notes           String?
+  createdAt       DateTime                @default(now()) @map("created_at")
+  updatedAt       DateTime                @updatedAt @map("updated_at")
+  purchases       Purchase[]
+  account         SupplierAccount?
+
+  @@index([status])
+  @@map("suppliers")
+}
+
+model SupplierAccount {
+  id                 String   @id @default(cuid())
+  supplierId         String   @unique @map("supplier_id")
+  status             String   @default("ACTIVE")
+  totalPurchasedRial Decimal  @default(0) @map("total_purchased_rial") @db.Decimal(20, 2)
+  totalPaidRial      Decimal  @default(0) @map("total_paid_rial") @db.Decimal(20, 2)
+  notes              String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  supplier           Supplier @relation(fields: [supplierId], references: [id])
+
+  @@map("supplier_accounts")
+}
+
+model Purchase {
+  id                 String                 @id @default(cuid())
+  purchaseNumber     String                 @unique @map("purchase_number")
+  idempotencyKey     String                 @unique @map("idempotency_key")
+  supplierId         String                 @map("supplier_id")
+  status             PurchaseStatus         @default(DRAFT)
+  settlementType     PurchaseSettlementType @map("settlement_type")
+  purchaseDate       DateTime               @map("purchase_date")
+  totalAmountRial    Decimal                @map("total_amount_rial") @db.Decimal(20, 2)
+  weightGrams        Decimal                @map("weight_grams") @db.Decimal(20, 6)
+  purityRatio        Decimal                @map("purity_ratio") @db.Decimal(10, 6)
+  pricePerGramRial   Decimal                @map("price_per_gram_rial") @db.Decimal(20, 6)
+  supplierReference  String?                @map("supplier_reference")
+  notes              String?
+  recordedByUserId   String?                @map("recorded_by_user_id")
+  confirmedByUserId  String?                @map("confirmed_by_user_id")
+  confirmedAt        DateTime?              @map("confirmed_at")
+  cancelledByUserId  String?                @map("cancelled_by_user_id")
+  cancelledAt        DateTime?              @map("cancelled_at")
+  cancellationReason String?                @map("cancellation_reason")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  updatedAt          DateTime               @updatedAt @map("updated_at")
+  items              PurchaseItem[]
+  cancelledBy        User?                  @relation("PurchaseCancelledBy", fields: [cancelledByUserId], references: [id])
+  confirmedBy        User?                  @relation("PurchaseConfirmedBy", fields: [confirmedByUserId], references: [id])
+  recordedBy         User?                  @relation("PurchaseRecordedBy", fields: [recordedByUserId], references: [id])
+  supplier           Supplier               @relation(fields: [supplierId], references: [id])
+
+  @@index([supplierId])
+  @@index([status])
+  @@index([purchaseDate])
+  @@index([createdAt])
+  @@map("purchases")
+}
+
+model PurchaseItem {
+  id               String   @id @default(cuid())
+  purchaseId       String   @map("purchase_id")
+  weightGrams      Decimal  @map("weight_grams") @db.Decimal(20, 6)
+  purityRatio      Decimal  @map("purity_ratio") @db.Decimal(10, 6)
+  pricePerGramRial Decimal  @map("price_per_gram_rial") @db.Decimal(20, 6)
+  totalAmountRial  Decimal  @map("total_amount_rial") @db.Decimal(20, 2)
+  description      String?
+  createdAt        DateTime @default(now()) @map("created_at")
+  purchase         Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@map("purchase_items")
+}
+
+model Payment {
+  id                String              @id @default(cuid())
+  idempotencyKey    String              @unique @map("idempotency_key")
+  tradeId           String              @map("trade_id")
+  customerId        String              @map("customer_id")
+  method            PaymentMethod
+  amount            Decimal             @db.Decimal(20, 2)
+  currency          String              @default("IRR")
+  status            PaymentStatus       @default(PENDING)
+  referenceNumber   String?             @map("reference_number")
+  receiptKey        String?             @map("receipt_key")
+  receiptMimeType   String?             @map("receipt_mime_type")
+  receiptFileName   String?             @map("receipt_file_name")
+  notes             String?
+  receivedAt        DateTime?           @map("received_at")
+  recordedByUserId  String?             @map("recorded_by_user_id")
+  validatedAt       DateTime?           @map("validated_at")
+  validatedByUserId String?             @map("validated_by_user_id")
+  createdAt         DateTime            @default(now()) @map("created_at")
+  updatedAt         DateTime            @updatedAt @map("updated_at")
+  allocations       PaymentAllocation[]
+  customer          Customer            @relation(fields: [customerId], references: [id])
+  recordedBy        User?               @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
+  trade             Trade               @relation(fields: [tradeId], references: [id])
+  validatedBy       User?               @relation("PaymentValidatedBy", fields: [validatedByUserId], references: [id])
+
+  @@index([tradeId])
+  @@index([customerId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+model PaymentAllocation {
+  id                String   @id @default(cuid())
+  paymentId         String   @map("payment_id")
+  tradeId           String   @map("trade_id")
+  amount            Decimal  @db.Decimal(20, 2)
+  allocatedByUserId String?  @map("allocated_by_user_id")
+  allocatedAt       DateTime @default(now()) @map("allocated_at")
+  allocatedBy       User?    @relation("AllocationCreatedBy", fields: [allocatedByUserId], references: [id])
+  payment           Payment  @relation(fields: [paymentId], references: [id])
+  trade             Trade    @relation(fields: [tradeId], references: [id])
+
+  @@unique([paymentId, tradeId])
+  @@index([paymentId])
+  @@index([tradeId])
+  @@map("payment_allocations")
+}
+
+model Settlement {
+  id              String           @id @default(cuid())
+  tradeId         String           @unique @map("trade_id")
+  status          SettlementStatus @default(PENDING)
+  settledAmount   Decimal          @default(0) @map("settled_amount") @db.Decimal(20, 2)
+  settledAt       DateTime?        @map("settled_at")
+  settledByUserId String?          @map("settled_by_user_id")
+  notes           String?
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+  settledBy       User?            @relation("SettlementSettledBy", fields: [settledByUserId], references: [id])
+  trade           Trade            @relation(fields: [tradeId], references: [id])
+
+  @@index([status])
+  @@map("settlements")
+}
+
+model TradeItem {
+  id             String   @id @default(cuid())
+  tradeId        String   @map("trade_id")
+  weightGrams    Decimal  @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio    Decimal  @map("purity_ratio") @db.Decimal(8, 6)
+  unitPriceRial  Decimal  @map("unit_price_rial") @db.Decimal(20, 6)
+  totalPriceRial Decimal  @map("total_price_rial") @db.Decimal(20, 2)
+  description    String?
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  trade          Trade    @relation(fields: [tradeId], references: [id], onDelete: Cascade)
+
+  @@index([tradeId])
+  @@map("trade_items")
+}
+
+model Assignment {
+  id           String           @id @default(cuid())
+  orderId      String           @map("order_id")
+  quotationId  String?          @map("quotation_id")
+  assignedToId String           @map("assigned_to_id")
+  assignedById String           @map("assigned_by_id")
+  status       AssignmentStatus @default(ACTIVE)
+  notes        String?
+  completedAt  DateTime?        @map("completed_at") @db.Timestamptz(6)
+  createdAt    DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime         @updatedAt @map("updated_at") @db.Timestamptz(6)
+  assignedBy   User             @relation("AssignedByUser", fields: [assignedById], references: [id])
+  assignedTo   User             @relation("AssignedToUser", fields: [assignedToId], references: [id])
+  order        Order            @relation(fields: [orderId], references: [id])
+  quotation    Quotation?       @relation(fields: [quotationId], references: [id])
+
+  @@index([orderId])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("assignments")
+}
+
+model Notification {
+  id                String              @id @default(cuid()) @db.VarChar(30)
+  recipientId       String?             @map("recipient_id") @db.VarChar(30)
+  recipientMobile   String?             @map("recipient_mobile") @db.VarChar(20)
+  channel           NotificationChannel
+  type              NotificationType
+  subject           String?
+  body              String
+  status            NotificationStatus  @default(PENDING)
+  relatedEntityType String?             @map("related_entity_type") @db.VarChar(100)
+  relatedEntityId   String?             @map("related_entity_id") @db.VarChar(30)
+  providerReference String?             @map("provider_reference") @db.VarChar(255)
+  retry_count       Int                 @default(0)
+  max_retries       Int                 @default(3)
+  sentAt            DateTime?           @map("sent_at") @db.Timestamptz(6)
+  failedAt          DateTime?           @map("failed_at") @db.Timestamptz(6)
+  errorMessage      String?             @map("error_message")
+  readAt            DateTime?           @map("read_at") @db.Timestamptz(6)
+  createdAt         DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime            @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+  recipient         User?               @relation("UserNotifications", fields: [recipientId], references: [id], onUpdate: NoAction, map: "notifications_recipient_fk")
+
+  @@index([recipientId])
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@index([recipientId, channel, createdAt])
+  @@index([recipientId, readAt])
+  @@map("notifications")
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DEACTIVATED
+}
+
+enum CustomerType {
+  HOUSEHOLD
+  PARTNER
+  VIP
+  WHOLESALE
+  CORPORATE
+}
+
+enum CustomerGender {
+  MALE
+  FEMALE
+  OTHER
+  NOT_SPECIFIED
+}
+
+enum CustomerLevel {
+  NORMAL
+  VIP
+  PREMIUM
+}
+
+enum ReferenceSource {
+  FRIEND_REFERRAL
+  INTERNET_SEARCH
+  SOCIAL_MEDIA
+  IN_PERSON
+  ADVERTISEMENT
+  OTHER
+}
+
+enum CustomerAccountStatus {
+  ACTIVE
+  INACTIVE
+  BLOCKED
+}
+
+enum CustomerStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+  ACTIVE
+  SUSPENDED
+  BLOCKED
+}
+
+enum VerificationStatus {
+  PENDING
+  UNDER_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum OtpPurpose {
+  LOGIN
+  PASSWORD_RESET
+  SENSITIVE_ACTION
+}
+
+enum CreditTransactionType {
+  GRANT
+  INCREASE
+  DECREASE
+  CONSUME
+  RELEASE
+  EXPIRE
+  ADJUSTMENT
+  REVERSAL
+  RESERVATION
+}
+
+enum QuotationStatus {
+  ACTIVE
+  EXPIRED
+  REVISED
+  CONVERTED
+}
+
+enum TradeStatus {
+  PENDING_CONFIRMATION
+  CONFIRMED
+  SETTLING
+  COMPLETED
+  REJECTED
+  CANCELLED
+  REVERSED
+}
+
+enum AssignmentStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderStatus {
+  DRAFT
+  SUBMITTED
+  QUOTED
+  ASSIGNED
+  UNDER_REVIEW
+  REVISION_REQUESTED
+  REJECTED
+  APPROVED
+  TRADE_CREATED
+  SETTLING
+  COMPLETED
+  CANCELLED
+}
+
+enum AdjustmentMode {
+  PERCENTAGE
+  FIXED
+}
+
+enum AdjustmentDirection {
+  INCREASE
+  DECREASE
+}
+
+enum PriceSnapshotStatus {
+  VALID
+  STALE
+  INVALID
+}
+
+enum WageMode {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+enum DiscountMode {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+enum RoundingMethod {
+  NONE
+  ROUND_UP
+  ROUND_DOWN
+  ROUND_NEAREST
+}
+
+enum GroupAdjMode {
+  NONE
+  PERCENTAGE
+}
+
+enum SupplierStatus {
+  ACTIVE
+  SUSPENDED
+  INACTIVE
+}
+
+enum SupplierIntegrationMode {
+  MANUAL
+  API_FUTURE
+}
+
+enum PurchaseStatus {
+  DRAFT
+  CONFIRMED
+  SETTLING
+  SETTLED
+  CANCELLED
+}
+
+enum PurchaseSettlementType {
+  RIAL
+  GOLD
+}
+
+enum PaymentMethod {
+  BANK_TRANSFER
+  CARD_TO_CARD
+  CASH
+}
+
+enum PaymentStatus {
+  PENDING
+  VALIDATED
+  ALLOCATED
+  COMPLETED
+  FAILED
+  REVERSED
+}
+
+enum SettlementStatus {
+  PENDING
+  SETTLED
+}
+
+enum NotificationChannel {
+  SMS
+  IN_APP
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+enum SessionLimitType {
+  LIMITED
+  UNLIMITED
+}
+
+enum SessionLoginBehavior {
+  BLOCK
+  REVOKE_OLDEST
+  REQUIRE_CONFIRMATION
+}
+
+enum UserSessionPolicyMode {
+  INHERIT
+  CUSTOM
+}
+
+/// All documented notification event types.
+/// Customer events: delivered via SMS + IN_APP.
+/// Internal events: delivered via IN_APP.
+/// OTP: delivered via SMS only.
+enum NotificationType {
+  CUSTOMER_REGISTERED
+  KYC_APPROVED
+  KYC_REJECTED
+  ORDER_RECEIVED
+  QUOTATION_GENERATED
+  REVIEW_STARTED
+  TRADE_CONFIRMED
+  TRADE_REVERSED
+  PAYMENT_RECORDED
+  SETTLEMENT_COMPLETED
+  INTERNAL_NEW_ORDER
+  INTERNAL_ORDER_ASSIGNED
+  INTERNAL_PENDING_REVIEW
+  INTERNAL_PAYMENT_ISSUE
+  INTERNAL_SETTLEMENT_ISSUE
+  OTP_LOGIN
+}
+
+enum TradingWeekday {
+  SATURDAY
+  SUNDAY
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+}
+
+enum TradingOverrideKind {
+  FULL_CLOSURE
+  SPECIAL_SCHEDULE
+}
+
+enum TradingLimitScope {
+  GLOBAL
+  ROLE
+  USER
+  CUSTOMER
+  TRANSACTION_TYPE
+}
+
+/// One market calendar. Caps for a session live on TradingSession and can be
+/// narrowed later by TradingLimit (role, user, customer, or transaction type).
+model TradingSchedule {
+  id        String           @id
+  timezone  String           @default("Asia/Tehran")
+  enabled   Boolean          @default(true)
+  createdAt DateTime         @default(now()) @map("created_at")
+  updatedAt DateTime         @updatedAt @map("updated_at")
+  sessions  TradingSession[]
+
+  @@map("trading_schedules")
+}
+
+/// A calendar date that replaces the weekly template.
+/// FULL_CLOSURE blocks the whole day. SPECIAL_SCHEDULE uses its own sessions.
+model TradingDayOverride {
+  id        String              @id @default(cuid())
+  date      DateTime            @unique @db.Date
+  kind      TradingOverrideKind
+  title     String
+  enabled   Boolean             @default(true)
+  createdAt DateTime            @default(now()) @map("created_at")
+  updatedAt DateTime            @updatedAt @map("updated_at")
+  sessions  TradingSession[]
+
+  @@index([date])
+  @@map("trading_day_overrides")
+}
+
+/// A weekly template session (weekday set) or a special-day session (dayOverrideId set).
+/// Times are minutes from midnight in the schedule timezone. The interval is [start, end).
+model TradingSession {
+  id                   String              @id @default(cuid())
+  scheduleId           String              @default("global") @map("schedule_id")
+  weekday              TradingWeekday?
+  dayOverrideId        String?             @map("day_override_id")
+  title                String
+  startMinute          Int                 @map("start_minute")
+  endMinute            Int                 @map("end_minute")
+  enabled              Boolean             @default(true)
+  sortOrder            Int                 @default(0) @map("sort_order")
+  maxAmountRial        Decimal?            @map("max_amount_rial") @db.Decimal(20, 2)
+  minAmountRial        Decimal?            @map("min_amount_rial") @db.Decimal(20, 2)
+  maxWeightGrams       Decimal?            @map("max_weight_grams") @db.Decimal(12, 6)
+  minWeightGrams       Decimal?            @map("min_weight_grams") @db.Decimal(12, 6)
+  maxCount             Int?                @map("max_count")
+  maxSingleAmountRial  Decimal?            @map("max_single_amount_rial") @db.Decimal(20, 2)
+  maxSingleWeightGrams Decimal?            @map("max_single_weight_grams") @db.Decimal(12, 6)
+  createdAt            DateTime            @default(now()) @map("created_at")
+  updatedAt            DateTime            @updatedAt @map("updated_at")
+  schedule             TradingSchedule     @relation(fields: [scheduleId], references: [id])
+  dayOverride          TradingDayOverride? @relation(fields: [dayOverrideId], references: [id], onDelete: Cascade)
+  limits               TradingLimit[]
+
+  @@index([weekday])
+  @@index([dayOverrideId])
+  @@index([startMinute, endMinute])
+  @@map("trading_sessions")
+}
+
+model TradingLimit {
+  id                   String            @id @default(cuid())
+  scope                TradingLimitScope
+  scopeKey             String?           @map("scope_key")
+  sessionId            String?           @map("session_id")
+  enabled              Boolean           @default(true)
+  maxAmountRial        Decimal?          @map("max_amount_rial") @db.Decimal(20, 2)
+  minAmountRial        Decimal?          @map("min_amount_rial") @db.Decimal(20, 2)
+  maxWeightGrams       Decimal?          @map("max_weight_grams") @db.Decimal(12, 6)
+  minWeightGrams       Decimal?          @map("min_weight_grams") @db.Decimal(12, 6)
+  maxCount             Int?              @map("max_count")
+  maxSingleAmountRial  Decimal?          @map("max_single_amount_rial") @db.Decimal(20, 2)
+  maxSingleWeightGrams Decimal?          @map("max_single_weight_grams") @db.Decimal(12, 6)
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+  session              TradingSession?   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([scope, scopeKey])
+  @@index([sessionId])
+  @@map("trading_limits")
+}

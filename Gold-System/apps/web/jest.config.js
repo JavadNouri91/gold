@@ -1,0 +1,17 @@
+/** @type {import('jest').Config} */
+const nextJest = require('next/jest');
+
+const createJestConfig = nextJest({ dir: './' });
+
+const config = {
+  coverageProvider: 'v8',
+  testEnvironment: 'jsdom',
+  setupFilesAfterEnv: ['<rootDir>/jest.setup.ts'],
+  moduleNameMapper: {
+    '^@/(.*)$': '<rootDir>/src/$1',
+    '^@gold/shared-types$': '<rootDir>/../../packages/shared-types/src/index.ts',
+  },
+  testMatch: ['**/__tests__/**/*.test.{ts,tsx}'],
+};
+
+module.exports = createJestConfig(config);

@@ -1,0 +1,9 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@gold/shared-types": ["./packages/shared-types/src/index.ts"]
+    }
+  },
+  "exclude": ["node_modules", "dist", "build", ".next"]
+}

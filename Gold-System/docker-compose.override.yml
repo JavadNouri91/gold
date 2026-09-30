@@ -1,0 +1,5 @@
+# Local override: host port 5432 is already taken by another project.
+services:
+  postgres:
+    ports: !override
+      - '5433:5432'

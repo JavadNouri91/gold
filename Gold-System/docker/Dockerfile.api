@@ -1,0 +1,31 @@
+FROM node:20-alpine AS base
+RUN npm install -g pnpm
+
+WORKDIR /app
+
+# Install dependencies
+COPY package.json pnpm-workspace.yaml pnpm-lock.yaml* ./
+COPY apps/api/package.json ./apps/api/
+COPY packages/ ./packages/
+RUN pnpm install --frozen-lockfile
+
+# Development stage
+FROM base AS development
+COPY . .
+EXPOSE 3001
+CMD ["pnpm", "--filter", "@gold/api", "dev"]
+
+# Build stage
+FROM base AS build
+COPY . .
+RUN pnpm --filter @gold/api build
+
+# Production stage
+FROM node:20-alpine AS production
+RUN npm install -g pnpm
+WORKDIR /app
+COPY --from=build /app/apps/api/dist ./apps/api/dist
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/apps/api/package.json ./apps/api/
+EXPOSE 3001
+CMD ["node", "apps/api/dist/main.js"]

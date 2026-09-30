@@ -1,0 +1,52 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build outputs
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+*.js.map
+packages/shared-types/src/index.js
+
+# Windows device-name accidents
+NUL
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Prisma
+prisma/migrations/dev.db
+prisma/*.db
+
+# Test coverage
+coverage/
+
+# Docker volumes
+.docker/
+
+# pnpm
+.pnpm-store/

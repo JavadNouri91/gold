@@ -1,0 +1,14 @@
+{
+  "moduleFileExtensions": ["js", "json", "ts"],
+  "rootDir": "../src",
+  "testEnvironment": "node",
+  "testRegex": "(orders\\.service|trades\\.service|trades-ledger|payment\\.service|kyc\\.service|quotations\\.service|auth\\.service|financial-ledger\\.service|gold-ledger\\.service|purchase\\.service|invariants|permission-matrix|access-control|pricing-engine\\.service)\\.spec\\.ts$",
+  "transform": {
+    "^.+\\.(t|j)s$": "ts-jest"
+  },
+  "globals": {
+    "ts-jest": {
+      "tsconfig": "<rootDir>/../tsconfig.json"
+    }
+  }
+}
