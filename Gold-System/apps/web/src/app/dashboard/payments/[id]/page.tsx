@@ -17,8 +17,8 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
   const allowed = hasPermission(user?.permissions, 'payment.read');
   const payment = useSWR(allowed ? ['payment', params.id] : null, () => internalPaymentsApi.getById(params.id));
   const status = useSWR(
-    payment.data ? ['payment-trade', payment.data.tradeId] : null,
-    () => internalPaymentsApi.tradeStatus(payment.data!.tradeId),
+    payment.data?.tradeId ? ['payment-trade', payment.data.tradeId] : null,
+    () => internalPaymentsApi.tradeStatus(payment.data!.tradeId!),
   );
 
   if (!allowed) return <ForbiddenNotice permission="payment.read" />;

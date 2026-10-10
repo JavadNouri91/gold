@@ -131,7 +131,7 @@ export function MyPaymentsPage({
       <header className="hidden lg:block">
         <h1 className="text-[26px] font-bold text-[#202124]">پرداخت‌های من</h1>
         <p className="mt-1 max-w-2xl text-sm leading-7 text-[#6B7280]">
-          مشاهده و پیگیری تمام پرداخت‌های مربوط به سفارش‌ها و معاملات شما
+          واریزهای افزایش اعتبار و پرداخت‌های ثبت‌شده حساب شما
         </p>
       </header>
       <div className="flex justify-end">

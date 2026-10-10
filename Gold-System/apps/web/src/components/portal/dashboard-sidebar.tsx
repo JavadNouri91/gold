@@ -1,52 +1,133 @@
 'use client';
 
-import Link from 'next/link';
+import { useState } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   Coins,
-  CreditCard,
-  ArrowDownLeft,
-  ArrowUpRight,
-  ShoppingCart,
-  TrendingUp,
   WalletCards,
+  TrendingUp,
+  TrendingDown,
+  ShoppingCart,
+  BarChart3,
+  CreditCard,
   Bell,
-  User,
+  UserRound,
   ShieldCheck,
   Settings,
-  LogOut,
-  X,
+  Headset,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import type { LucideIcon } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
-import { Button } from '@/components/ui/button';
 import { MobileNumber } from '@/components/ui/mobile-input';
+import { SidebarShell } from '@/components/navigation/sidebar-shell';
+import { SidebarBrand } from '@/components/navigation/sidebar-brand';
+import { SidebarNavItem } from '@/components/navigation/sidebar-nav-item';
+import { SidebarLogout } from '@/components/navigation/sidebar-logout';
+import { PortalSupportModal } from '@/components/portal/portal-support-modal';
 
 type NavItem = {
   href: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  description?: string;
+  icon: LucideIcon;
+  iconClassName?: string;
   exact?: boolean;
   query?: Record<string, string>;
 };
 
 const primaryNav: NavItem[] = [
-  { href: '/portal/dashboard', label: 'داشبورد', icon: LayoutDashboard, exact: true },
-  { href: '/portal/assets', label: 'دارایی من', icon: Coins },
-  { href: '/portal/credit', label: 'اعتبار', icon: CreditCard },
-  { href: '/portal/orders/new', label: 'خرید طلا', icon: ArrowDownLeft, query: { side: 'buy' } },
-  { href: '/portal/orders/new', label: 'فروش طلا', icon: ArrowUpRight, query: { side: 'sell' } },
-  { href: '/portal/orders', label: 'سفارش‌ها', icon: ShoppingCart, exact: true },
-  { href: '/portal/trades', label: 'معاملات', icon: TrendingUp },
-  { href: '/portal/payments', label: 'پرداخت‌ها', icon: WalletCards },
-  { href: '/portal/notifications', label: 'اعلان‌ها', icon: Bell },
+  {
+    href: '/portal/dashboard',
+    label: 'داشبورد',
+    description: 'نمای کلی حساب شما',
+    icon: LayoutDashboard,
+    iconClassName: 'bg-amber-50 text-amber-700',
+    exact: true,
+  },
+  {
+    href: '/portal/assets',
+    label: 'دارایی من',
+    description: 'موجودی طلا و ارزش دارایی',
+    icon: Coins,
+    iconClassName: 'bg-sky-50 text-sky-700',
+  },
+  {
+    href: '/portal/credit',
+    label: 'اعتبار',
+    description: 'موجودی ریالی و گردش حساب',
+    icon: WalletCards,
+    iconClassName: 'bg-emerald-50 text-emerald-700',
+  },
+  {
+    href: '/portal/orders/new',
+    label: 'خرید طلا',
+    description: 'خرید طلای آبشده',
+    icon: TrendingUp,
+    iconClassName: 'bg-blue-50 text-blue-700',
+    query: { side: 'buy' },
+  },
+  {
+    href: '/portal/orders/new',
+    label: 'فروش طلا',
+    description: 'فروش طلای آبشده',
+    icon: TrendingDown,
+    iconClassName: 'bg-rose-50 text-rose-700',
+    query: { side: 'sell' },
+  },
+  {
+    href: '/portal/orders',
+    label: 'سفارش‌ها',
+    description: 'مدیریت سفارش‌های خرید و فروش',
+    icon: ShoppingCart,
+    iconClassName: 'bg-violet-50 text-violet-700',
+    exact: true,
+  },
+  {
+    href: '/portal/trades',
+    label: 'معاملات',
+    description: 'تاریخچه معاملات شما',
+    icon: BarChart3,
+    iconClassName: 'bg-orange-50 text-orange-700',
+  },
+  {
+    href: '/portal/payments',
+    label: 'پرداخت‌ها',
+    description: 'واریزها و برداشت‌ها',
+    icon: CreditCard,
+    iconClassName: 'bg-indigo-50 text-indigo-700',
+  },
+  {
+    href: '/portal/notifications',
+    label: 'اعلان‌ها',
+    description: 'پیام‌ها و اطلاعیه‌ها',
+    icon: Bell,
+    iconClassName: 'bg-red-50 text-red-700',
+  },
 ];
 
 const accountNav: NavItem[] = [
-  { href: '/portal/profile', label: 'پروفایل', icon: User },
-  { href: '/portal/kyc', label: 'احراز هویت', icon: ShieldCheck },
-  { href: '/portal/settings', label: 'تنظیمات', icon: Settings },
+  {
+    href: '/portal/profile',
+    label: 'پروفایل',
+    description: 'اطلاعات شخصی و تماس',
+    icon: UserRound,
+    iconClassName: 'bg-sky-50 text-sky-700',
+  },
+  {
+    href: '/portal/kyc',
+    label: 'احراز هویت',
+    description: 'تکمیل و مدیریت مدارک',
+    icon: ShieldCheck,
+    iconClassName: 'bg-emerald-50 text-emerald-700',
+  },
+  {
+    href: '/portal/settings',
+    label: 'تنظیمات',
+    description: 'تنظیمات حساب و امنیت',
+    icon: Settings,
+    iconClassName: 'bg-slate-100 text-slate-700',
+  },
 ];
 
 function itemHref(item: NavItem): string {
@@ -71,35 +152,8 @@ function isActive(pathname: string, search: string, item: NavItem): boolean {
   return pathname === item.href || pathname.startsWith(`${item.href}/`);
 }
 
-function NavLink({
-  item,
-  pathname,
-  search,
-  onNavigate,
-}: {
-  item: NavItem;
-  pathname: string;
-  search: string;
-  onNavigate?: () => void;
-}) {
-  const Icon = item.icon;
-  const active = isActive(pathname, search, item);
-  return (
-    <Link
-      href={itemHref(item)}
-      onClick={onNavigate}
-      aria-current={active ? 'page' : undefined}
-      className={cn(
-        'flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-colors',
-        active
-          ? 'bg-[#FFF4D6] text-[#B77900]'
-          : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-      )}
-    >
-      <Icon className={cn('h-4 w-4 shrink-0', active && 'text-[#D99A00]')} />
-      {item.label}
-    </Link>
-  );
+function SectionHeading({ children }: { children: string }) {
+  return <p className="px-3 pb-1 pt-1 text-xs font-medium text-muted-foreground">{children}</p>;
 }
 
 export function DashboardSidebar({
@@ -113,80 +167,65 @@ export function DashboardSidebar({
   const searchParams = useSearchParams();
   const search = searchParams.toString();
   const { user, logout } = useAuth();
+  const [supportOpen, setSupportOpen] = useState(false);
 
   return (
     <>
-      {open ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
-          aria-label="بستن منو"
-          onClick={onClose}
-        />
-      ) : null}
-      <aside
-        className={cn(
-          'fixed inset-y-0 right-0 z-40 flex w-64 flex-col border-l border-slate-100 bg-white transition-transform lg:static lg:translate-x-0',
-          open ? 'translate-x-0' : 'translate-x-full lg:translate-x-0',
-        )}
-      >
-        <div className="flex items-center justify-between gap-3 px-5 py-5 border-b border-slate-100">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <span className="flex h-9 w-9 items-center justify-center rounded-full bg-gold-100 text-lg" aria-hidden>
-              🟡
-            </span>
-            <div className="min-w-0">
-              <p className="font-bold text-slate-800 truncate">سامانه طلا</p>
-              <p className="text-[11px] text-muted-foreground truncate">معاملات آنلاین طلای آبشده</p>
-            </div>
-          </div>
-          <Button variant="ghost" size="icon" className="lg:hidden shrink-0" onClick={onClose} aria-label="بستن">
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
+      <SidebarShell open={open} onClose={onClose}>
+        <SidebarBrand subtitle="معاملات آنلاین طلای آبشده" onClose={onClose} />
 
-        <nav className="flex-1 overflow-y-auto px-3 py-4 space-y-4" aria-label="منوی پورتال">
+        <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-3" aria-label="منوی پورتال">
           <div className="space-y-1">
             {primaryNav.map((item) => (
-              <NavLink
+              <SidebarNavItem
                 key={itemHref(item)}
-                item={item}
-                pathname={pathname}
-                search={search}
+                href={itemHref(item)}
+                label={item.label}
+                description={item.description}
+                icon={item.icon}
+                iconClassName={item.iconClassName}
+                active={isActive(pathname, search, item)}
                 onNavigate={onClose}
               />
             ))}
           </div>
-          <div className="border-t border-slate-100 pt-3 space-y-1">
+
+          <div className="space-y-1 border-t border-slate-100 pt-3">
+            <SectionHeading>حساب کاربری</SectionHeading>
             {accountNav.map((item) => (
-              <NavLink
+              <SidebarNavItem
                 key={item.href}
-                item={item}
-                pathname={pathname}
-                search={search}
+                href={item.href}
+                label={item.label}
+                description={item.description}
+                icon={item.icon}
+                iconClassName={item.iconClassName}
+                active={isActive(pathname, search, item)}
                 onNavigate={onClose}
               />
             ))}
+          </div>
+
+          <div className="space-y-1 border-t border-slate-100 pt-3">
+            <SectionHeading>پشتیبانی</SectionHeading>
+            <SidebarNavItem
+              label="راهنما و پشتیبانی"
+              description="سوالات متداول و ارتباط با ما"
+              icon={Headset}
+              iconClassName="bg-violet-50 text-violet-700"
+              onClick={() => setSupportOpen(true)}
+              onNavigate={onClose}
+            />
           </div>
         </nav>
 
-        <div className="px-3 py-4 border-t border-slate-100">
-          {user ? (
-            <div className="px-3 pb-2 text-xs text-muted-foreground truncate">
-              <MobileNumber value={user.mobile} />
-            </div>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="w-full justify-start gap-3 text-red-600 hover:text-red-700 hover:bg-red-50"
-            onClick={logout}
-          >
-            <LogOut className="h-4 w-4" />
-            خروج
-          </Button>
-        </div>
-      </aside>
+        <SidebarLogout
+          onClick={() => void logout()}
+          footer={user ? <MobileNumber value={user.mobile} /> : null}
+        />
+      </SidebarShell>
+
+      <PortalSupportModal open={supportOpen} onClose={() => setSupportOpen(false)} />
     </>
   );
 }

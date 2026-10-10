@@ -19,11 +19,12 @@ describe('payment display', () => {
   it('labels only supported payment types', () => {
     expect(paymentTypeLabel('BUY')).toBe('پرداخت سفارش خرید');
     expect(paymentTypeLabel('SELL')).toBe('پرداخت سفارش فروش');
-    expect(paymentTypeLabel(null)).toBe('سایر');
+    expect(paymentTypeLabel(null)).toBe('افزایش اعتبار');
   });
 
   it('prefers the order number and falls back to the trade number', () => {
     expect(relatedPaymentLabel({ orderNumber: 'ORD-1', tradeNumber: 'TR-1' })).toBe('ORD-1');
     expect(relatedPaymentLabel({ orderNumber: null, tradeNumber: 'TR-1' })).toBe('TR-1');
+    expect(relatedPaymentLabel({ orderNumber: null, tradeNumber: null })).toBe('افزایش اعتبار');
   });
 });

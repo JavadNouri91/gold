@@ -1,5 +1,6 @@
 import {
   computeCustomerActivity,
+  computeCustomerHolding,
   readOrderSide,
   type ActivityOrderInput,
 } from './customer-activity.math';
@@ -212,5 +213,27 @@ describe('customer activity analytics', () => {
     expect(readOrderSide({ side: 'HOLD' })).toBeNull();
     expect(readOrderSide(null)).toBeNull();
     expect(readOrderSide([])).toBeNull();
+  });
+
+  it('nets booked buy and sell grams for the customer holding', () => {
+    expect(
+      computeCustomerHolding([
+        row({ id: 'buy', side: 'BUY', weightGrams: '30.000000', totalAmountRial: '1500000000.00' }),
+        row({
+          id: 'sell',
+          side: 'SELL',
+          weightGrams: '10.000000',
+          totalAmountRial: '600000000.00',
+        }),
+        row({ id: 'draft', status: 'DRAFT', side: 'BUY', weightGrams: '5.000000' }),
+        row({ id: 'unknown', side: null, weightGrams: '2.000000' }),
+      ]),
+    ).toEqual({
+      weightGrams: '20.000000',
+      purityRatio: '0.750000',
+      averageBuyPriceRial: '50000000.00',
+      totalBuyValueRial: '1500000000.00',
+      totalSellValueRial: '600000000.00',
+    });
   });
 });

@@ -8,6 +8,8 @@ import { PrismaService } from '../../../database/prisma.service';
 import { OrderNotFoundException } from '../domain/exceptions/order.exceptions';
 import {
   computeCustomerActivity,
+  computeCustomerHolding,
+  EMPTY_CUSTOMER_HOLDING,
   readOrderSide,
   type ActivityBucket,
   type ActivityComputation,
@@ -147,6 +149,16 @@ function mapRow(row: ActivityRow): ActivityOrderInput {
 @Injectable()
 export class CustomerActivityService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async portfolio(userId: string) {
+    const customerId = await this.resolveCustomerId(userId);
+    if (!customerId) return EMPTY_CUSTOMER_HOLDING;
+    const rows = await this.prisma.order.findMany({
+      where: { customerId },
+      select: orderActivitySelect,
+    });
+    return computeCustomerHolding(rows.map(mapRow));
+  }
 
   async summary(userId: string, dto: CustomerActivityQueryDto) {
     const computed = await this.compute(userId, dto);

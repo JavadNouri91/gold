@@ -10,11 +10,13 @@ import { CustomerType } from '@gold/shared-types';
  */
 export class CalculatePriceDto {
   @ApiProperty({
-    description: 'Weight in grams — positive decimal string. e.g. "10.500"',
+    description: 'Weight in grams — positive decimal string with at most 3 decimal places. e.g. "10.500"',
     example: '10.500',
   })
   @IsString()
-  @Matches(/^\d+(\.\d+)?$/, { message: 'weightGrams must be a positive numeric string' })
+  @Matches(/^\d+(\.\d{1,3})?$/, {
+    message: 'weightGrams must be a positive numeric string with at most 3 decimal places',
+  })
   weightGrams: string;
 
   @ApiProperty({

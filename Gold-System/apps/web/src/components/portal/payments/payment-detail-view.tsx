@@ -57,7 +57,7 @@ export function PaymentDetailView({ payment }: { payment: Payment }) {
           <ReceiptText className="h-4 w-4" aria-hidden />
           مشاهده سفارش
         </Link>
-      ) : (
+      ) : payment.tradeId ? (
         <Link
           href={`/portal/trades/${payment.tradeId}`}
           className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#F8F9FA] px-4 text-sm font-semibold text-[#202124] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8922E]"
@@ -65,7 +65,7 @@ export function PaymentDetailView({ payment }: { payment: Payment }) {
           <CreditCard className="h-4 w-4" aria-hidden />
           مشاهده معامله مرتبط
         </Link>
-      )}
+      ) : null}
     </div>
   );
 }

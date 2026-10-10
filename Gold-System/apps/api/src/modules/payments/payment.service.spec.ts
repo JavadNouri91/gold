@@ -37,6 +37,8 @@ import { AuditService } from '../audit/application/audit.service';
 import { NotificationService } from '../notifications/application/notification.service';
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
+import { CustomerAccountRepository } from '../customer-accounts/infrastructure/repositories/customer-account.repository';
+import { ForbiddenException } from '@nestjs/common';
 import {
   PaymentNotFoundException,
   TradeNotPayableException,
@@ -47,6 +49,7 @@ import {
   InvalidPaymentTransitionException,
   MissingPaymentReferenceException,
   PaymentNotValidatedException,
+  DepositCannotBeAllocatedException,
 } from './domain/exceptions/payment.exceptions';
 import { PaymentEntity } from './domain/entities/payment.entity';
 import { PaymentMethod, PaymentStatus, SettlementStatus } from './domain/constants/payment-methods';
@@ -59,7 +62,7 @@ const makePaymentEntity = (
     id: string;
     status: PaymentStatus;
     amount: Decimal;
-    tradeId: string;
+    tradeId: string | null;
     customerId: string;
     method: PaymentMethod;
   }> = {},
@@ -67,7 +70,7 @@ const makePaymentEntity = (
   new PaymentEntity({
     id: overrides.id ?? 'pay-1',
     idempotencyKey: 'ikey-1',
-    tradeId: overrides.tradeId ?? 'trade-1',
+    tradeId: overrides.tradeId === undefined ? 'trade-1' : overrides.tradeId,
     customerId: overrides.customerId ?? 'cust-1',
     method: overrides.method ?? PaymentMethod.BANK_TRANSFER,
     amount: overrides.amount ?? new Decimal('100000000'),
@@ -136,6 +139,10 @@ function buildMockTx() {
     order: {
       update: jest.fn().mockResolvedValue({}),
     },
+    customerAccount: {
+      findUnique: jest.fn().mockResolvedValue({ id: 'acc-1', customerId: 'cust-1' }),
+      create: jest.fn(),
+    },
     $executeRaw: jest.fn().mockResolvedValue(1),
   };
 }
@@ -147,6 +154,7 @@ describe('PaymentService', () => {
   let auditService: MockAudit;
   let prismaService: jest.Mocked<PrismaService>;
   let storage: { upload: jest.Mock; delete: jest.Mock; getObject: jest.Mock };
+  let customerAccounts: { grantCreditInTx: jest.Mock };
   let fakeTx: ReturnType<typeof buildMockTx>;
 
   beforeEach(async () => {
@@ -221,6 +229,12 @@ describe('PaymentService', () => {
             getObject: jest.fn().mockResolvedValue(Buffer.from('img')),
           },
         },
+        {
+          provide: CustomerAccountRepository,
+          useValue: {
+            grantCreditInTx: jest.fn().mockResolvedValue({ id: 'acc-1' }),
+          },
+        },
       ],
     }).compile();
 
@@ -230,6 +244,7 @@ describe('PaymentService', () => {
     auditService = module.get(AuditService) as MockAudit;
     prismaService = module.get(PrismaService) as jest.Mocked<PrismaService>;
     storage = module.get(StorageService);
+    customerAccounts = module.get(CustomerAccountRepository);
   });
 
   afterEach(() => jest.clearAllMocks());
@@ -443,6 +458,35 @@ describe('PaymentService', () => {
       expect(auditService.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'PAYMENT_VALIDATED' }),
       );
+      expect(customerAccounts.grantCreditInTx).not.toHaveBeenCalled();
+    });
+
+    it('grants RIAL credit when validating an unallocated deposit', async () => {
+      const pending = makePaymentEntity({
+        status: PaymentStatus.PENDING,
+        tradeId: null,
+        amount: new Decimal('250000'),
+      });
+      const validated = makePaymentEntity({
+        status: PaymentStatus.VALIDATED,
+        tradeId: null,
+        amount: new Decimal('250000'),
+      });
+      paymentRepo.findById.mockResolvedValue(pending);
+      paymentRepo.updateStatusInTx.mockResolvedValue(validated);
+
+      const result = await service.validatePayment('pay-1', 'user-1');
+
+      expect(result.status).toBe(PaymentStatus.VALIDATED);
+      expect(customerAccounts.grantCreditInTx).toHaveBeenCalledWith(
+        fakeTx,
+        expect.objectContaining({
+          accountId: 'acc-1',
+          pool: 'RIAL',
+          sourceType: 'PAYMENT',
+          sourceId: 'pay-1',
+        }),
+      );
     });
 
     it('should throw PaymentNotFoundException for unknown ID', async () => {
@@ -490,6 +534,18 @@ describe('PaymentService', () => {
   // ─────────────────────────────────────────────────────────────────────────
   // 9. Allocate payment — valid allocation
   // ─────────────────────────────────────────────────────────────────────────
+
+  describe('allocatePayment — deposits', () => {
+    it('rejects allocating a credit deposit to a trade', async () => {
+      paymentRepo.findById.mockResolvedValue(
+        makePaymentEntity({ status: PaymentStatus.VALIDATED, tradeId: null }),
+      );
+
+      await expect(
+        service.allocatePayment('pay-1', { tradeId: 'trade-1', amount: '1000' }, 'user-1'),
+      ).rejects.toBeInstanceOf(DepositCannotBeAllocatedException);
+    });
+  });
 
   describe('allocatePayment — valid', () => {
     it('should create allocation, transition payment to ALLOCATED, update settlement', async () => {
@@ -917,13 +973,12 @@ describe('PaymentService', () => {
       expect(result.hasReceipt).toBe(false);
     });
 
-    it('does not store a receipt on another customer trade', async () => {
-      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-real' });
+    it('does not store a receipt when the actor has no customer profile', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue(null);
       const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
 
       await expect(
         service.submitOwnReceipt('user-1', {
-          tradeId: 'trade-1',
           method: PaymentMethod.BANK_TRANSFER,
           amount: '1000',
           referenceNumber: 'REF-1',
@@ -934,9 +989,43 @@ describe('PaymentService', () => {
             originalname: 'receipt.jpg',
           },
         }),
-      ).rejects.toBeInstanceOf(TradeNotFoundForPaymentException);
+      ).rejects.toBeInstanceOf(ForbiddenException);
 
       expect(storage.upload).not.toHaveBeenCalled();
+    });
+
+    it('stores a deposit receipt without a trade', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-real' });
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+      const created = makePaymentEntity({
+        tradeId: null,
+        customerId: 'cust-real',
+        amount: new Decimal('1000'),
+      });
+      paymentRepo.createPaymentInTx.mockResolvedValue(created);
+
+      const result = await service.submitOwnReceipt('user-1', {
+        method: PaymentMethod.BANK_TRANSFER,
+        amount: '1000',
+        referenceNumber: 'REF-1',
+        file: {
+          buffer: jpeg,
+          mimetype: 'image/jpeg',
+          size: jpeg.length,
+          originalname: 'receipt.jpg',
+        },
+      });
+
+      expect(storage.upload).toHaveBeenCalled();
+      expect(paymentRepo.createPaymentInTx).toHaveBeenCalledWith(
+        fakeTx,
+        expect.objectContaining({
+          tradeId: null,
+          customerId: 'cust-real',
+        }),
+      );
+      expect(result.tradeId).toBeNull();
+      expect(result.relatedSide).toBeNull();
     });
 
     it('lets staff read a payment without an ownership filter', async () => {

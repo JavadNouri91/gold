@@ -71,53 +71,64 @@ export class CustomerAccountRepository {
     sourceType?: string;
     sourceId?: string;
   }): Promise<CustomerAccountEntity> {
-    const { accountId, pool, amount, reason, actorId } = params;
-
-    if (amount.lte(0)) {
+    if (params.amount.lte(0)) {
       throw new Error('Credit grant amount must be positive');
     }
 
-    const updated = await this.prisma.$transaction(async (tx) => {
-      const account = await tx.customerAccount.findUnique({
-        where: { id: accountId },
-      });
-      if (!account) throw new Error(`CustomerAccount ${accountId} not found`);
+    const updated = await this.prisma.$transaction((tx) => this.grantCreditInTx(tx, params));
+    return this.toDomain(updated);
+  }
 
-      let newLimit: Decimal;
-      let updateField: Record<string, Decimal>;
+  async grantCreditInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      accountId: string;
+      pool: 'RIAL' | 'GOLD_RIAL';
+      amount: Decimal;
+      reason: string;
+      actorId: string;
+      sourceType?: string;
+      sourceId?: string;
+    },
+  ) {
+    const { accountId, pool, amount, reason, actorId } = params;
+    await tx.$executeRaw`SELECT id FROM customer_accounts WHERE id = ${accountId} FOR UPDATE`;
+    const account = await tx.customerAccount.findUnique({
+      where: { id: accountId },
+    });
+    if (!account) throw new Error(`CustomerAccount ${accountId} not found`);
 
-      if (pool === 'RIAL') {
-        newLimit = new Decimal(account.creditLimitRial.toString()).plus(amount);
-        updateField = { creditLimitRial: newLimit };
-      } else {
-        newLimit = new Decimal(account.creditLimitGoldRial.toString()).plus(amount);
-        updateField = { creditLimitGoldRial: newLimit };
-      }
+    let newLimit: Decimal;
+    let updateField: Record<string, Decimal>;
 
-      const updatedRow = await tx.customerAccount.update({
-        where: { id: accountId },
-        data: { ...updateField, updatedAt: new Date() },
-      });
+    if (pool === 'RIAL') {
+      newLimit = new Decimal(account.creditLimitRial.toString()).plus(amount);
+      updateField = { creditLimitRial: newLimit };
+    } else {
+      newLimit = new Decimal(account.creditLimitGoldRial.toString()).plus(amount);
+      updateField = { creditLimitGoldRial: newLimit };
+    }
 
-      // Immutable credit transaction record
-      await tx.creditTransaction.create({
-        data: {
-          accountId,
-          type: CreditTransactionType.GRANT,
-          creditPool: pool,
-          amount,
-          balanceAfter: newLimit,
-          reason,
-          createdBy: actorId,
-          sourceType: params.sourceType ?? 'MANUAL',
-          sourceId: params.sourceId ?? null,
-        },
-      });
-
-      return updatedRow;
+    const updatedRow = await tx.customerAccount.update({
+      where: { id: accountId },
+      data: { ...updateField, updatedAt: new Date() },
     });
 
-    return this.toDomain(updated);
+    await tx.creditTransaction.create({
+      data: {
+        accountId,
+        type: CreditTransactionType.GRANT,
+        creditPool: pool,
+        amount,
+        balanceAfter: newLimit,
+        reason,
+        createdBy: actorId,
+        sourceType: params.sourceType ?? 'MANUAL',
+        sourceId: params.sourceId ?? null,
+      },
+    });
+
+    return updatedRow;
   }
 
   /**

@@ -5,9 +5,8 @@ import Decimal from 'decimal.js';
 /**
  * Customer payment ledger.
  *
- * Payments are receipts against a confirmed trade. There is no payment-type
- * column, gateway, or refund record. Buy/sell is read from the related order
- * item metadata, the same source the trades page uses.
+ * Customer deposits have no trade. Buy/sell is read from related order
+ * item metadata when a trade exists. Deposits appear as type OTHER.
  *
  * Pending receipts are accounting work in progress and are excluded from this
  * ledger. They are not a customer "awaiting payment" queue.
@@ -104,7 +103,9 @@ export function customerLedgerWhere(
   if (bounds.type === 'BUY' || bounds.type === 'SELL') {
     filters.push(sideClause(bounds.type));
   } else if (bounds.type === 'OTHER') {
-    filters.push({ NOT: { OR: [sideClause('BUY'), sideClause('SELL')] } });
+    filters.push({
+      OR: [{ tradeId: null }, { NOT: { OR: [sideClause('BUY'), sideClause('SELL')] } }],
+    });
   }
 
   if (bounds.q) {

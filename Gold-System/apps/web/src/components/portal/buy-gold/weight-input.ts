@@ -1,6 +1,6 @@
 import { toLatinDigits } from '@/lib/utils';
 
-/** Latin decimal string, at most 6 fractional digits, matching CreateOrderDto. */
+/** Latin decimal string, at most 3 fractional digits for a buy request. */
 export function normalizeWeightInput(raw: string): string {
   const withDot = raw.replace(/[٫]/g, '.');
   const keepDot = withDot.trim().endsWith('.');
@@ -9,7 +9,7 @@ export function normalizeWeightInput(raw: string): string {
   const dot = latin.indexOf('.');
   if (dot === -1) return latin.replace(/^0+(?=\d)/, '');
   const intPart = latin.slice(0, dot).replace(/^0+(?=\d)/, '') || '0';
-  const frac = latin.slice(dot + 1).replace(/\./g, '').slice(0, 6);
+  const frac = latin.slice(dot + 1).replace(/\./g, '').slice(0, 3);
   if (frac.length === 0) return keepDot ? `${intPart}.` : intPart;
   return `${intPart}.${frac}`;
 }
@@ -21,6 +21,19 @@ export function canonicalWeight(value: string): string {
 
 export function isPositiveWeight(value: string): boolean {
   const weight = canonicalWeight(value);
-  if (!/^\d+(\.\d{1,6})?$/.test(weight)) return false;
+  if (!/^\d+(\.\d{1,3})?$/.test(weight)) return false;
   return !/^0+(\.0+)?$/.test(weight);
+}
+
+/** One milligram less, or null when the result would not be a positive weight. */
+export function decreaseWeightByMilli(value: string): string | null {
+  const weight = canonicalWeight(value);
+  if (!/^\d+(\.\d{1,3})?$/.test(weight)) return null;
+  const [intPart, frac = ''] = weight.split('.');
+  const milli = Number(intPart) * 1000 + Number((frac + '000').slice(0, 3));
+  if (!Number.isSafeInteger(milli) || milli <= 1) return null;
+  const next = milli - 1;
+  const whole = Math.floor(next / 1000);
+  const rem = String(next % 1000).padStart(3, '0').replace(/0+$/, '');
+  return rem ? `${whole}.${rem}` : String(whole);
 }

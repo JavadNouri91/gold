@@ -346,7 +346,7 @@ export interface StaffTradeList {
 
 export interface StaffPayment {
   id: string;
-  tradeId: string;
+  tradeId: string | null;
   customerId: string;
   method: string;
   amount: string;
@@ -545,7 +545,7 @@ export interface DashboardSummary {
   }>;
   recentPayments: Array<{
     id: string;
-    tradeId: string;
+    tradeId: string | null;
     method: string;
     amount: string;
     status: string;
@@ -616,7 +616,7 @@ export interface PaymentReport {
   totalValueRial: string | null;
   payments: Array<{
     id: string;
-    tradeId: string;
+    tradeId: string | null;
     customerId: string;
     method: string;
     amount: string;

@@ -5,6 +5,7 @@ import { PaymentRepository } from './infrastructure/repositories/payment.reposit
 import { SettlementsModule } from '../settlements/settlements.module';
 import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { CustomerAccountsModule } from '../customer-accounts/customer-accounts.module';
 
 /**
  * Payments Module � Phase 5
@@ -42,7 +43,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
  * architecture/STATE-MACHINES.md (Payment state machine)
  */
 @Module({
-  imports: [SettlementsModule, AuditModule, NotificationsModule],
+  imports: [SettlementsModule, AuditModule, NotificationsModule, CustomerAccountsModule],
   controllers: [PaymentController],
   providers: [PaymentService, PaymentRepository],
   exports: [PaymentService, PaymentRepository],

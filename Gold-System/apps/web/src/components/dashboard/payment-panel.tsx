@@ -31,6 +31,7 @@ export function PaymentActionPanel({
     try {
       if (open === 'validate') await internalPaymentsApi.validate(payment.id);
       if (open === 'allocate') {
+        if (!payment.tradeId) throw new Error('این پرداخت واریز اعتبار است و به معامله تخصیص داده نمی‌شود.');
         await internalPaymentsApi.allocate(payment.id, {
           tradeId: payment.tradeId,
           amount: amount.trim(),
@@ -61,9 +62,11 @@ export function PaymentActionPanel({
         <PermissionGate anyOf="payment.validate">
           <Button variant="outline" onClick={() => setOpen('validate')}>تأیید پرداخت</Button>
         </PermissionGate>
-        <PermissionGate anyOf="payment.allocate">
-          <Button onClick={() => setOpen('allocate')}>تخصیص به معامله</Button>
-        </PermissionGate>
+        {payment.tradeId ? (
+          <PermissionGate anyOf="payment.allocate">
+            <Button onClick={() => setOpen('allocate')}>تخصیص به معامله</Button>
+          </PermissionGate>
+        ) : null}
       </div>
       {open === 'allocate' ? (
         <Input
@@ -76,7 +79,13 @@ export function PaymentActionPanel({
       <ConfirmDialog
         open={open !== null}
         title={open === 'allocate' ? 'تخصیص پرداخت' : 'تأیید پرداخت'}
-        message="مانده حساب از این صفحه تغییر داده نمی‌شود. سرور تخصیص و وضعیت تسویه را ثبت می‌کند."
+        message={
+          open === 'allocate'
+            ? 'سرور تخصیص و وضعیت تسویه معامله را ثبت می‌کند.'
+            : payment.tradeId
+              ? 'وضعیت پرداخت به تأییدشده تغییر می‌کند.'
+              : 'پس از تأیید، اعتبار ریالی مشتری به اندازه مبلغ این واریز افزایش می‌یابد.'
+        }
         isLoading={busy}
         onClose={() => setOpen(null)}
         onConfirm={() => void run()}

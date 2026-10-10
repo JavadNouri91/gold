@@ -107,6 +107,22 @@ export interface ActivityTransaction {
   settlementStatus: string | null;
 }
 
+export interface CustomerHolding {
+  weightGrams: string;
+  purityRatio: string | null;
+  averageBuyPriceRial: string | null;
+  totalBuyValueRial: string | null;
+  totalSellValueRial: string | null;
+}
+
+export const EMPTY_CUSTOMER_HOLDING: CustomerHolding = {
+  weightGrams: '0.000000',
+  purityRatio: null,
+  averageBuyPriceRial: null,
+  totalBuyValueRial: null,
+  totalSellValueRial: null,
+};
+
 export interface ActivityComputation {
   pnl: {
     supported: false;
@@ -390,5 +406,27 @@ export function computeCustomerActivity(
     totalsBasis: query.status ? 'status-filter' : 'booked',
     transactions,
     meta: { page: query.page, limit: query.limit, total, totalPages },
+  };
+}
+
+/** Net melted-gold holding from booked buy and sell orders. Unclassified rows are ignored. */
+export function computeCustomerHolding(rows: ActivityOrderInput[]): CustomerHolding {
+  const computed = computeCustomerActivity(rows, { bucket: 'month', page: 1, limit: 10 });
+  const buyWeight = new Decimal(computed.buy.grams);
+  const sellWeight = new Decimal(computed.sell.grams);
+  const net = Decimal.max(buyWeight.minus(sellWeight), 0);
+  const buyAmount = new Decimal(computed.buy.amountRial);
+  const sellAmount = new Decimal(computed.sell.amountRial);
+  const purities = new Set(
+    rows
+      .filter((row) => isBookedActivity(row) && row.side === 'BUY')
+      .map((row) => purityKey(row.purityRatio)),
+  );
+  return {
+    weightGrams: grams(net),
+    purityRatio: purities.size === 1 ? [...purities][0] : null,
+    averageBuyPriceRial: buyWeight.gt(0) ? money(buyAmount.div(buyWeight)) : null,
+    totalBuyValueRial: buyWeight.gt(0) ? money(buyAmount) : null,
+    totalSellValueRial: sellWeight.gt(0) ? money(sellAmount) : null,
   };
 }

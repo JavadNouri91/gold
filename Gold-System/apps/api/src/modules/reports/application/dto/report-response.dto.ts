@@ -81,7 +81,7 @@ export class RecentTradeDto {
 
 export class RecentPaymentDto {
   id: string;
-  tradeId: string;
+  tradeId: string | null;
   method: string;
   amount: string;
   status: string;
@@ -164,7 +164,7 @@ export class TradeSummaryDto {
 
 export class PaymentReportDto {
   id: string;
-  tradeId: string;
+  tradeId: string | null;
   customerId: string;
   method: string;
   amount: string;

@@ -14,6 +14,7 @@ import { AuditService } from '../../audit/application/audit.service';
 import { CalculatePriceDto } from './dto/calculate-price.dto';
 import { CreatePricingRuleDto } from './dto/create-pricing-rule.dto';
 import { CreatePriceAdjustmentDto } from './dto/create-price-adjustment.dto';
+import { PriceSnapshotEntity } from '../domain/entities/price-snapshot.entity';
 import { NoPriceAvailableError } from '../domain/exceptions/pricing.exceptions';
 
 // ─── Response shape ───────────────────────────────────────────────────────────
@@ -89,6 +90,9 @@ export class PricingResultResponseDto {
 
 @Injectable()
 export class PricingService {
+  /** Shared refresh so concurrent price reads do not each write a snapshot. */
+  private liveRefresh: Promise<PriceSnapshotEntity> | null = null;
+
   constructor(
     private readonly engine: PricingEngineService,
     private readonly snapshotRepo: PriceSnapshotRepository,
@@ -100,10 +104,13 @@ export class PricingService {
 
   // ── UC-06: Get current live price ─────────────────────────────────────────
   async getCurrentPrice() {
-    const snapshot = await this.snapshotRepo.findLatestValid();
+    const ttlSeconds = this.snapshotTtlSeconds();
+    let snapshot = await this.snapshotRepo.findLatestValid();
+    const stale = !snapshot || (ttlSeconds != null && !snapshot.isWithinTtl(ttlSeconds));
+    if (stale) {
+      snapshot = await this.refreshLiveSnapshot(snapshot);
+    }
     if (!snapshot) throw new NoPriceAvailableError();
-    const ttlRaw = Number(this.engine.getSnapshotTtlSeconds());
-    const ttlSeconds = Number.isFinite(ttlRaw) && ttlRaw > 0 ? ttlRaw : null;
     const expiresAt =
       ttlSeconds == null
         ? null
@@ -120,6 +127,31 @@ export class PricingService {
       expiresAt,
       ttlSeconds,
     };
+  }
+
+  /**
+   * Pull a fresh snapshot from the configured provider (currently the temporary
+   * mock price) when the stored snapshot is missing or past its TTL.
+   * Falls back to the previous snapshot if the provider call fails.
+   */
+  private async refreshLiveSnapshot(
+    fallback: PriceSnapshotEntity | null,
+  ): Promise<PriceSnapshotEntity | null> {
+    if (!this.liveRefresh) {
+      this.liveRefresh = this.engine.fetchAndSnapshot().finally(() => {
+        this.liveRefresh = null;
+      });
+    }
+    try {
+      return await this.liveRefresh;
+    } catch {
+      return fallback;
+    }
+  }
+
+  private snapshotTtlSeconds(): number | null {
+    const ttlRaw = Number(this.engine.getSnapshotTtlSeconds());
+    return Number.isFinite(ttlRaw) && ttlRaw > 0 ? ttlRaw : null;
   }
 
   // ── On-demand price refresh ────────────────────────────────────────────────

@@ -4,9 +4,6 @@
  */
 export const TRADING_PURITIES = [
   { value: '0.750000', label: '۷۵۰ (۱۸ عیار)' },
-  { value: '0.585000', label: '۵۸۵ (۱۴ عیار)' },
-  { value: '0.916000', label: '۹۱۶ (۲۲ عیار)' },
-  { value: '0.999000', label: '۹۹۹ (۲۴ عیار)' },
 ] as const;
 
 export const DEFAULT_PURITY = '0.750000';

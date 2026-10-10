@@ -1,6 +1,7 @@
 'use client';
 import useSWR from 'swr';
 import { customerApi, ordersApi, pricingApi, tradesApi } from '@/lib/api';
+import { toPortfolioPosition } from '@/lib/customer-portfolio';
 import { PageSpinner } from '@/components/ui/spinner';
 import { Alert } from '@/components/ui/alert';
 import { GoldPriceCard } from '@/components/portal/gold-price-card';
@@ -28,6 +29,9 @@ export default function DashboardPage() {
   const { data: tradesResp } =
     useSWR('trades/recent', () => tradesApi.list({ limit: 5 }));
 
+  const { data: holding } = useSWR('orders/portfolio', () => ordersApi.portfolio());
+  const position = toPortfolioPosition(holding, price?.normalizedValue);
+
   if ((customerLoading && !customerError) || (accountLoading && !account)) return <PageSpinner />;
 
   return (
@@ -42,7 +46,7 @@ export default function DashboardPage() {
           />
         </div>
         <div className="xl:col-span-4">
-          <PortfolioCard />
+          <PortfolioCard position={position} />
         </div>
         <div className="flex flex-col gap-4 xl:col-span-3">
           {account ? <TradingCreditCard account={account} /> : null}

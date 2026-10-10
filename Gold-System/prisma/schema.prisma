@@ -801,7 +801,7 @@ model PurchaseItem {
 model Payment {
   id                String              @id @default(cuid())
   idempotencyKey    String              @unique @map("idempotency_key")
-  tradeId           String              @map("trade_id")
+  tradeId           String?             @map("trade_id")
   customerId        String              @map("customer_id")
   method            PaymentMethod
   amount            Decimal             @db.Decimal(20, 2)
@@ -821,7 +821,7 @@ model Payment {
   allocations       PaymentAllocation[]
   customer          Customer            @relation(fields: [customerId], references: [id])
   recordedBy        User?               @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
-  trade             Trade               @relation(fields: [tradeId], references: [id])
+  trade             Trade?              @relation(fields: [tradeId], references: [id])
   validatedBy       User?               @relation("PaymentValidatedBy", fields: [validatedByUserId], references: [id])
 
   @@index([tradeId])

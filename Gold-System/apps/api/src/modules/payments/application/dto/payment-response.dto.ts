@@ -12,7 +12,7 @@ import { SettlementEntity } from '../../../settlements/domain/entities/settlemen
 export class PaymentResponseDto {
   id: string;
   idempotencyKey: string;
-  tradeId: string;
+  tradeId: string | null;
   customerId: string;
   method: string;
   amount: string;

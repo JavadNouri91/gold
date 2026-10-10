@@ -122,7 +122,7 @@ export class PaymentController {
   }
 
   /**
-   * Customer uploads a receipt and creates a PENDING payment on their own trade.
+   * Customer uploads a deposit receipt. Credit is granted after accountant validation.
    */
   @Post('receipts')
   @RequireAnyPermission('payment.read', 'customer.payment.read_own')
@@ -130,17 +130,16 @@ export class PaymentController {
   submitReceipt(
     @CurrentUser() user: CurrentUserData,
     @UploadedFile() file: Express.Multer.File | undefined,
-    @Body() body: { tradeId?: string; method?: string; amount?: string; referenceNumber?: string },
+    @Body() body: { method?: string; amount?: string; referenceNumber?: string },
   ) {
     if (!file || file.size <= 0) throw new BadRequestException('فایل رسید انتخاب نشده است.');
-    if (!body.tradeId || !body.method || !body.amount) {
+    if (!body.method || !body.amount) {
       throw new BadRequestException('اطلاعات پرداخت ناقص است.');
     }
     if (!Object.values(PaymentMethod).includes(body.method as PaymentMethod)) {
       throw new BadRequestException('روش پرداخت نامعتبر است.');
     }
     return this.paymentService.submitOwnReceipt(user.userId, {
-      tradeId: body.tradeId,
       method: body.method as PaymentMethod,
       amount: body.amount,
       referenceNumber: body.referenceNumber,

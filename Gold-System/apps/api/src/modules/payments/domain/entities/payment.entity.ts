@@ -18,7 +18,7 @@ import {
 export class PaymentEntity {
   readonly id: string;
   readonly idempotencyKey: string;
-  readonly tradeId: string;
+  readonly tradeId: string | null;
   readonly customerId: string;
   readonly method: PaymentMethod;
   readonly amount: Decimal;
@@ -39,7 +39,7 @@ export class PaymentEntity {
   constructor(data: {
     id: string;
     idempotencyKey: string;
-    tradeId: string;
+    tradeId: string | null;
     customerId: string;
     method: PaymentMethod;
     amount: Decimal;

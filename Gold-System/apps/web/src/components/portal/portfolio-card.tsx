@@ -2,54 +2,51 @@
 
 import Link from 'next/link';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { formatRial, formatWeight, toPersianDigits } from '@/lib/utils';
-import { DEMO_PORTFOLIO } from '@/lib/portal-demo';
+import { formatRial, formatWeight } from '@/lib/utils';
+import { isRegisteredHolding, type PortfolioPosition } from '@/lib/customer-portfolio';
 
-export function PortfolioCard({ demo = true }: { demo?: boolean }) {
-  const data = DEMO_PORTFOLIO;
-  const positive = !data.unrealizedPnlRial.startsWith('-');
+export function PortfolioCard({ position }: { position?: PortfolioPosition | null }) {
+  const holding = isRegisteredHolding(position ?? null) ? position : null;
 
   return (
     <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between gap-3">
         <div>
           <h2 className="text-base font-bold text-slate-800">دارایی من</h2>
-          {demo ? (
-            <p className="mt-1 text-[11px] text-amber-700">نمونه نمایشی — موجودی طلا هنوز از سرور خوانده نمی‌شود</p>
-          ) : null}
         </div>
         <GoldBars />
       </div>
 
-      <div className="mt-4 flex items-end justify-between gap-4">
-        <div>
-          <p className="text-xs text-muted-foreground">موجودی طلای آبشده</p>
-          <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">{formatWeight(data.weightGrams)}</p>
-        </div>
-      </div>
+      {holding ? (
+        <>
+          <div className="mt-4 flex items-end justify-between gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground">موجودی طلای آبشده</p>
+              <p className="mt-1 text-3xl font-bold text-slate-900">{formatWeight(holding.weightGrams)}</p>
+            </div>
+          </div>
 
-      <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3">
-        <p className="text-xs text-muted-foreground">ارزش روز دارایی</p>
-        <p className="mt-1 text-lg font-bold tabular-nums text-slate-800">{formatRial(data.marketValueRial)}</p>
-      </div>
+          <div className="mt-4 rounded-xl bg-slate-50 px-3 py-3">
+            <p className="text-xs text-muted-foreground">ارزش روز دارایی</p>
+            <p className="mt-1 text-lg font-bold text-slate-800">{formatRial(holding.marketValueRial)}</p>
+          </div>
 
-      <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div>
-          <dt className="text-xs text-muted-foreground">میانگین قیمت خرید</dt>
-          <dd className="mt-1 text-sm font-semibold tabular-nums">{formatRial(data.avgBuyPriceRial)}</dd>
+          <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div>
+              <dt className="text-xs text-muted-foreground">میانگین قیمت خرید</dt>
+              <dd className="mt-1 text-sm font-semibold">{formatRial(holding.averageBuyPriceRial)}</dd>
+            </div>
+            <div>
+              <dt className="text-xs text-muted-foreground">عیار</dt>
+              <dd className="mt-1 text-sm font-semibold">{holding.purityLabel ?? '—'}</dd>
+            </div>
+          </dl>
+        </>
+      ) : (
+        <div className="mt-4 rounded-xl bg-slate-50 px-3 py-4">
+          <p className="text-sm leading-7 text-slate-700">هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است.</p>
         </div>
-        <div>
-          <dt className="text-xs text-muted-foreground">سود/زیان تحقق‌نیافته</dt>
-          <dd className={`mt-1 text-sm font-semibold tabular-nums ${positive ? 'text-emerald-700' : 'text-red-700'}`}>
-            {positive ? '+' : ''}
-            {formatRial(data.unrealizedPnlRial)}
-            <span className="mr-1 text-xs">
-              ({positive ? '+' : ''}
-              {toPersianDigits(data.unrealizedPnlPercent)}٪)
-            </span>
-          </dd>
-        </div>
-      </dl>
+      )}
 
       <div className="mt-5 grid grid-cols-2 gap-2">
         <Link

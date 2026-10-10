@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { randomUUID } from 'crypto';
 import { PaginationMeta } from '@gold/shared-types';
 import { StorageService } from '../../../common/storage/storage.service';
+import { CustomerAccountRepository } from '../../customer-accounts/infrastructure/repositories/customer-account.repository';
 
 import { PrismaService } from '../../../database/prisma.service';
 import {
@@ -29,6 +30,7 @@ import {
   InvalidPaymentTransitionException,
   MissingPaymentReferenceException,
   PaymentNotValidatedException,
+  DepositCannotBeAllocatedException,
 } from '../domain/exceptions/payment.exceptions';
 import { assertReceiptFile } from '../domain/receipt-file';
 import {
@@ -121,6 +123,7 @@ export class PaymentService {
     private readonly audit: AuditService,
     private readonly notificationService: NotificationService,
     private readonly storage: StorageService,
+    private readonly customerAccounts: CustomerAccountRepository,
   ) {}
 
   // ─── Record Payment ────────────────────────────────────────────────────────
@@ -275,12 +278,34 @@ export class PaymentService {
       );
     }
 
-    const updated = await this.prisma.$transaction((tx) =>
-      this.paymentRepo.updateStatusInTx(tx, paymentId, PaymentStatus.VALIDATED, {
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await this.paymentRepo.updateStatusInTx(tx, paymentId, PaymentStatus.VALIDATED, {
         validatedAt: new Date(),
         validatedByUserId: actorUserId,
-      }),
-    );
+      });
+
+      if (!payment.tradeId) {
+        let account = await tx.customerAccount.findUnique({
+          where: { customerId: payment.customerId },
+        });
+        if (!account) {
+          account = await tx.customerAccount.create({
+            data: { customerId: payment.customerId },
+          });
+        }
+        await this.customerAccounts.grantCreditInTx(tx, {
+          accountId: account.id,
+          pool: 'RIAL',
+          amount: payment.amount,
+          reason: 'افزایش اعتبار پس از تأیید رسید واریز',
+          actorId: actorUserId,
+          sourceType: 'PAYMENT',
+          sourceId: paymentId,
+        });
+      }
+
+      return next;
+    });
 
     await this.audit.log({
       actorId: actorUserId,
@@ -289,7 +314,11 @@ export class PaymentService {
       entityType: 'Payment',
       entityId: paymentId,
       before: { status: payment.status },
-      after: { status: PaymentStatus.VALIDATED, validatedAt: updated.validatedAt?.toISOString() },
+      after: {
+        status: PaymentStatus.VALIDATED,
+        validatedAt: updated.validatedAt?.toISOString(),
+        creditGranted: !payment.tradeId,
+      },
     });
 
     return PaymentResponseDto.from(updated);
@@ -328,6 +357,9 @@ export class PaymentService {
 
     if (payment.status !== PaymentStatus.VALIDATED) {
       throw new PaymentNotValidatedException(paymentId, payment.status);
+    }
+    if (!payment.tradeId) {
+      throw new DepositCannotBeAllocatedException(paymentId);
     }
 
     // ── Parse amount ──────────────────────────────────────────────────────
@@ -618,14 +650,13 @@ export class PaymentService {
   }
 
   /**
-   * Customer submits the receipt for a confirmed trade they own.
-   * The payment stays PENDING until an accountant validates it.
+   * Customer submits a deposit receipt. The money is not tied to an order or trade.
+   * After accountant validation, RIAL credit is granted on the customer account.
    * customerId is taken from the session, never from the request.
    */
   async submitOwnReceipt(
     actorUserId: string,
     input: {
-      tradeId: string;
       method: PaymentMethod;
       amount: string;
       referenceNumber?: string;
@@ -634,7 +665,7 @@ export class PaymentService {
   ): Promise<LedgerPaymentDto> {
     const mime = assertReceiptFile(input.file);
     const customerId = await this.resolveCustomerId(actorUserId);
-    if (!customerId) throw new TradeNotFoundForPaymentException(input.tradeId);
+    if (!customerId) throw new ForbiddenException('حساب مشتری برای ثبت رسید پیدا نشد.');
 
     let amount: Decimal;
     try {
@@ -651,14 +682,6 @@ export class PaymentService {
       throw new MissingPaymentReferenceException(input.method);
     }
 
-    const trade = await this.prisma.trade.findUnique({ where: { id: input.tradeId } });
-    if (!trade || trade.customerId !== customerId) {
-      throw new TradeNotFoundForPaymentException(input.tradeId);
-    }
-    if (trade.status !== 'CONFIRMED') {
-      throw new TradeNotPayableException(input.tradeId, trade.status);
-    }
-
     const stored = await this.storage.upload({
       buffer: input.file.buffer,
       originalName: input.file.originalname,
@@ -671,13 +694,13 @@ export class PaymentService {
       const payment = await this.prisma.$transaction((tx) =>
         this.paymentRepo.createPaymentInTx(tx, {
           idempotencyKey: randomUUID(),
-          tradeId: trade.id,
+          tradeId: null,
           customerId,
           method: input.method,
           amount,
           currency: 'IRR',
           referenceNumber: reference ?? null,
-          notes: 'رسید توسط مشتری بارگذاری شد',
+          notes: 'واریز افزایش اعتبار — رسید توسط مشتری بارگذاری شد',
           receivedAt: new Date(),
           recordedByUserId: actorUserId,
           receiptKey: stored.key,
@@ -693,7 +716,7 @@ export class PaymentService {
         entityType: 'Payment',
         entityId: payment.id,
         after: {
-          tradeId: payment.tradeId,
+          tradeId: null,
           method: payment.method,
           amount: payment.amount.toFixed(2),
           hasReceipt: true,
@@ -704,7 +727,7 @@ export class PaymentService {
         payment,
         orderId: null,
         orderNumber: null,
-        tradeNumber: trade.tradeNumber,
+        tradeNumber: null,
         relatedSide: null,
       });
     } catch (error) {

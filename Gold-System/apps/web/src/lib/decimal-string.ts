@@ -41,6 +41,65 @@ export function subtractDecimal(a: string, b: string): string {
   return fromScaled(toScaled(a) - toScaled(b));
 }
 
+export function multiplyDecimal(a: string, b: string): string {
+  return fromScaled((toScaled(a) * toScaled(b)) / BASE);
+}
+
+export function divideDecimal(a: string, b: string): string | null {
+  let num: bigint;
+  let den: bigint;
+  try {
+    num = toScaled(a);
+    den = toScaled(b);
+  } catch {
+    return null;
+  }
+  if (den === ZERO) return null;
+  return fromScaled((num * BASE) / den);
+}
+
+/** One-decimal percent of `part / whole`, or null when the whole is zero. */
+export function ratioPercent(part: string, whole: string): string | null {
+  let portion: bigint;
+  let total: bigint;
+  try {
+    portion = toScaled(part);
+    total = toScaled(whole);
+  } catch {
+    return null;
+  }
+  if (total === ZERO) return null;
+  const negative = portion < ZERO !== total < ZERO && portion !== ZERO;
+  const absPortion = portion < ZERO ? -portion : portion;
+  const absTotal = total < ZERO ? -total : total;
+  const tenths = (absPortion * BigInt(1000) + absTotal / BigInt(2)) / absTotal;
+  const body = `${(tenths / BigInt(10)).toString()}.${(tenths % BigInt(10)).toString()}`;
+  return negative ? `-${body}` : body;
+}
+
+/**
+ * Floor of numerator / denominator, with at most `decimalPlaces` fraction digits.
+ * Returns null when the quotient is not a positive finite number.
+ */
+export function floorDivide(numerator: string, denominator: string, decimalPlaces: number): string | null {
+  if (decimalPlaces < 0 || decimalPlaces > SCALE) return null;
+  let num: bigint;
+  let den: bigint;
+  try {
+    num = toScaled(numerator);
+    den = toScaled(denominator);
+  } catch {
+    return null;
+  }
+  if (den <= ZERO || num <= ZERO) return null;
+  const factor = BigInt(10) ** BigInt(decimalPlaces);
+  const units = (num * factor) / den;
+  if (units <= ZERO) return null;
+  const whole = units / factor;
+  const frac = (units % factor).toString().padStart(decimalPlaces, '0').replace(/0+$/, '');
+  return frac ? `${whole.toString()}.${frac}` : whole.toString();
+}
+
 /**
  * Nearest integer percent for display.
  * This is not a ledger posting and does not change a balance.

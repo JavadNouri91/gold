@@ -1,5 +1,10 @@
-import { compareDecimal, isZeroDecimal, subtractDecimal } from '../lib/decimal-string';
-import { canonicalWeight, isPositiveWeight, normalizeWeightInput } from '../components/portal/buy-gold/weight-input';
+import { compareDecimal, floorDivide, isZeroDecimal, subtractDecimal } from '../lib/decimal-string';
+import {
+  canonicalWeight,
+  decreaseWeightByMilli,
+  isPositiveWeight,
+  normalizeWeightInput,
+} from '../components/portal/buy-gold/weight-input';
 
 describe('decimal strings', () => {
   it('compares without binary floating point', () => {
@@ -21,10 +26,21 @@ describe('decimal strings', () => {
 });
 
 describe('weight input', () => {
-  it('accepts Persian digits and limits precision to 6 places', () => {
+  it('accepts Persian digits and limits precision to 3 places', () => {
     expect(normalizeWeightInput('۵٫۲۵')).toBe('5.25');
-    expect(normalizeWeightInput('10.1234567')).toBe('10.123456');
+    expect(normalizeWeightInput('10.1234567')).toBe('10.123');
+    expect(normalizeWeightInput('1.2')).toBe('1.2');
     expect(canonicalWeight('5.')).toBe('5');
+    expect(isPositiveWeight('1.234')).toBe(true);
+    expect(isPositiveWeight('1.2345')).toBe(false);
+  });
+
+  it('floors the heaviest 3-decimal weight a rial balance can buy', () => {
+    expect(floorDivide('1750000000', '265290000', 3)).toBe('6.596');
+    expect(floorDivide('500000000', '12350000', 3)).toBe('40.485');
+    expect(floorDivide('100', '265290000', 3)).toBeNull();
+    expect(decreaseWeightByMilli('6.596')).toBe('6.595');
+    expect(decreaseWeightByMilli('0.001')).toBeNull();
   });
 
   it('rejects zero and empty weights', () => {

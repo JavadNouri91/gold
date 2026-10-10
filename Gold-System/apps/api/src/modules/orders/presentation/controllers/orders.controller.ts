@@ -185,6 +185,15 @@ export class OrdersController {
    * Booked buy/sell/volume for the authenticated customer.
    * Customer id is resolved from the session. Query customerId is not accepted.
    */
+  /**
+   * GET /orders/portfolio
+   * Net booked gold holding for the signed-in customer.
+   */
+  @Get('portfolio')
+  async portfolio(@CurrentUser() user: CurrentUserData) {
+    return this.activityService.portfolio(user.userId);
+  }
+
   @Get('activity/summary')
   async activitySummary(
     @CurrentUser() user: CurrentUserData,

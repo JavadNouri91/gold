@@ -602,6 +602,14 @@ export interface Order {
   createdAt: string;
 }
 
+export interface CustomerHolding {
+  weightGrams: string;
+  purityRatio: string | null;
+  averageBuyPriceRial: string | null;
+  totalBuyValueRial: string | null;
+  totalSellValueRial: string | null;
+}
+
 export interface CreateOrderInput {
   weightGrams: string;
   purityRatio: string;
@@ -745,6 +753,10 @@ export const ordersApi = {
     return request(`/orders/${id}/quotations`);
   },
 
+  portfolio(): Promise<CustomerHolding> {
+    return request('/orders/portfolio');
+  },
+
   activitySummary(params: ActivityParams): Promise<ActivitySummary> {
     return request(`/orders/activity/summary?${activityQuery(params)}`);
   },
@@ -826,7 +838,7 @@ export const tradesApi = {
 
 export interface Payment {
   id: string;
-  tradeId: string;
+  tradeId: string | null;
   customerId: string;
   method: string;
   amount: string;
@@ -898,13 +910,8 @@ export const paymentsApi = {
     return request(`/payments/${id}`);
   },
 
-  payableTrades(): Promise<Array<{ id: string; tradeNumber: string; orderNumber: string | null; totalAmountRial: string }>> {
-    return request('/payments/receipts/trades');
-  },
-
-  submitReceipt(input: { tradeId: string; method: string; amount: string; referenceNumber?: string; file: File }): Promise<Payment> {
+  submitReceipt(input: { method: string; amount: string; referenceNumber?: string; file: File }): Promise<Payment> {
     const body = new FormData();
-    body.set('tradeId', input.tradeId);
     body.set('method', input.method);
     body.set('amount', input.amount);
     if (input.referenceNumber) body.set('referenceNumber', input.referenceNumber);

@@ -24,7 +24,8 @@ import {
  * the mock reports unit = "IRR_PER_GRAM" and purityReference = "MOCK".
  * The mock normalizer returns rawValue unchanged.
  *
- * Default mock price: 70,000,000 IRR/gram (70 million Toman/gram)
+ * Temporary stand-in until a live gold-price API is connected.
+ * Default: 265,290,000 IRR per gram.
  * Override via MOCK_PRICE_IRR_PER_GRAM env var.
  */
 @Injectable()
@@ -39,7 +40,7 @@ export class MockPriceProviderAdapter implements PriceProviderPort {
   constructor(private readonly config: ConfigService) {
     this.simulateFailure = this.config.get<string>('MOCK_PRICE_PROVIDER_FAIL', 'false') === 'true';
     this.mockPriceIrrPerGram = new Decimal(
-      this.config.get<string>('MOCK_PRICE_IRR_PER_GRAM', '70000000'),
+      this.config.get<string>('MOCK_PRICE_IRR_PER_GRAM', '265290000'),
     );
   }
 

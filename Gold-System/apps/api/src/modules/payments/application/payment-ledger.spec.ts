@@ -57,6 +57,11 @@ describe('payment ledger', () => {
     expect(serialized).toContain('ORD-9');
   });
 
+  it('treats deposits without a trade as OTHER', () => {
+    const where = customerLedgerWhere('cust-real', { ...bounds, type: 'OTHER' });
+    expect(JSON.stringify(where)).toContain('"tradeId":null');
+  });
+
   it('reads only BUY and SELL sides', () => {
     expect(readPaymentSide({ side: 'BUY' })).toBe('BUY');
     expect(readPaymentSide({ side: 'SELL' })).toBe('SELL');

@@ -180,7 +180,7 @@ export class PaymentRepository {
     tx: Prisma.TransactionClient,
     input: {
       idempotencyKey: string;
-      tradeId: string;
+      tradeId: string | null;
       customerId: string;
       method: PaymentMethod;
       amount: Decimal;
@@ -293,7 +293,7 @@ export class PaymentRepository {
   mapRaceRow(row: {
     id: string;
     idempotencyKey: string;
-    tradeId: string;
+    tradeId: string | null;
     customerId: string;
     method: string;
     amount: Decimal | string | number | { toString(): string };
@@ -325,7 +325,7 @@ export class PaymentRepository {
   private mapRow(row: {
     id: string;
     idempotencyKey: string;
-    tradeId: string;
+    tradeId: string | null;
     customerId: string;
     method: string;
     amount: Decimal | string | number | { toString(): string };

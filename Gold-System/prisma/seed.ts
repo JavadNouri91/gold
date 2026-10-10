@@ -5,7 +5,7 @@
  * Usage: pnpm db:seed
  */
 
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, TradingWeekday } from '@prisma/client';
 import * as argon2 from 'argon2';
 
 const prisma = new PrismaClient();
@@ -233,6 +233,36 @@ async function main() {
       },
     });
     console.log('  ✓ Default store created.');
+  }
+
+  // ─── Default trading hours (Sat–Thu 09:00–21:00 Tehran) ────
+  await prisma.tradingSchedule.upsert({
+    where: { id: 'global' },
+    update: {},
+    create: { id: 'global', timezone: 'Asia/Tehran', enabled: true },
+  });
+  const sessionCount = await prisma.tradingSession.count({ where: { dayOverrideId: null } });
+  if (sessionCount === 0) {
+    const weekdays: TradingWeekday[] = [
+      'SATURDAY',
+      'SUNDAY',
+      'MONDAY',
+      'TUESDAY',
+      'WEDNESDAY',
+      'THURSDAY',
+    ];
+    await prisma.tradingSession.createMany({
+      data: weekdays.map((weekday, sortOrder) => ({
+        scheduleId: 'global',
+        weekday,
+        title: 'بازار روزانه',
+        startMinute: 9 * 60,
+        endMinute: 21 * 60,
+        enabled: true,
+        sortOrder,
+      })),
+    });
+    console.log('  ✓ Default trading sessions created (شنبه تا پنجشنبه، ۹ تا ۲۱).');
   }
 
   console.log('✅ Seed complete.');

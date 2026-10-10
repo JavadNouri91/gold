@@ -14,7 +14,7 @@ export class CreateOrderDto {
    * Must be a positive decimal number string, e.g. "100.5" or "0.5".
    */
   @IsNumberString({}, { message: 'weightGrams must be a valid decimal number string' })
-  @Matches(/^\d+(\.\d{1,6})?$/, { message: 'weightGrams supports up to 6 decimal places' })
+  @Matches(/^\d+(\.\d{1,3})?$/, { message: 'weightGrams supports up to 3 decimal places' })
   weightGrams: string;
 
   /**

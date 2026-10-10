@@ -22,6 +22,9 @@ export function purchaseErrorMessage(err: unknown, fallback: string): string {
       return 'احراز هویت شما تکمیل نشده است.';
     }
     default:
+      if (err.code.startsWith('TRADING_') && err.message.trim()) {
+        return err.message;
+      }
       return fallback;
   }
 }

@@ -147,6 +147,21 @@ export class DuplicatePaymentException extends HttpException {
 }
 
 /**
+ * 422 — Unallocated customer deposits grant credit and cannot be assigned to a trade.
+ */
+export class DepositCannotBeAllocatedException extends HttpException {
+  constructor(paymentId: string) {
+    super(
+      {
+        code: 'DEPOSIT_CANNOT_BE_ALLOCATED',
+        message: `Payment "${paymentId}" is a credit deposit and cannot be allocated to a trade.`,
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+}
+
+/**
  * 422 — Payment is not in the VALIDATED status required for allocation.
  */
 export class PaymentNotValidatedException extends HttpException {

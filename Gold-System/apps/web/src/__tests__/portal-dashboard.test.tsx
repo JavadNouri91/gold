@@ -64,9 +64,9 @@ describe('QuickActions', () => {
 });
 
 describe('PortfolioCard', () => {
-  it('marks holdings as demo data', () => {
+  it('shows the empty holding state until a booked position exists', () => {
     render(<PortfolioCard />);
-    expect(screen.getByText(/نمونه نمایشی/)).toBeInTheDocument();
+    expect(screen.getByText('هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است.')).toBeInTheDocument();
     expect(screen.getByText('خرید طلا')).toBeInTheDocument();
     expect(screen.getByText('فروش طلا')).toBeInTheDocument();
   });

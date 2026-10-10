@@ -1,18 +1,26 @@
 /**
- * Customer melted-gold position, as the portal is allowed to know it.
+ * Customer melted-gold position shown on دارایی من.
  *
- * The gold ledger (GA-01 store position, GA-02 customer obligation, GA-03
- * adjustment) is a store book. It is not a per-customer holding, and staff
- * report endpoints are not available to the signed-in customer.
- *
- * Trades have weight and price, but no buy/sell side, so a personal balance,
- * average acquisition price, or profit/loss cannot be derived here without
- * inventing a financial engine. Until a customer portfolio endpoint exists,
- * `position` stays null and the page shows the empty-holding state.
- *
- * Historical charts are not part of this module. They live in
- * `portfolio-history-preview.ts` and must stay labeled as a preview.
+ * Net grams come from booked buy minus booked sell (`GET /orders/portfolio`).
+ * Live market value is the current snapshot price times that net weight.
+ * Unclassified orders are not treated as inventory.
  */
+
+import {
+  divideDecimal,
+  isZeroDecimal,
+  multiplyDecimal,
+  ratioPercent,
+  subtractDecimal,
+} from './decimal-string';
+
+export interface CustomerHolding {
+  weightGrams: string;
+  purityRatio: string | null;
+  averageBuyPriceRial: string | null;
+  totalBuyValueRial: string | null;
+  totalSellValueRial: string | null;
+}
 
 export interface PortfolioAssetSlice {
   id: string;
@@ -36,9 +44,53 @@ export interface PortfolioPosition {
   assets: PortfolioAssetSlice[];
 }
 
-/** No customer-scoped gold position is available from the current API. */
-export function loadCustomerPosition(): PortfolioPosition | null {
-  return null;
+export function purityMillisLabel(ratio: string | null | undefined): string | null {
+  if (!ratio) return null;
+  const value = Number(ratio);
+  if (!Number.isFinite(value) || value <= 0) return null;
+  return String(Math.round(value * 1000));
+}
+
+export function remainingCostRial(holding: CustomerHolding): string | null {
+  if (!holding.averageBuyPriceRial || isZeroDecimal(holding.weightGrams)) return null;
+  return multiplyDecimal(holding.averageBuyPriceRial, holding.weightGrams);
+}
+
+export function toPortfolioPosition(
+  holding: CustomerHolding | null | undefined,
+  livePricePerGram?: string | null,
+): PortfolioPosition | null {
+  if (!holding) return null;
+  const marketValueRial =
+    livePricePerGram && !isZeroDecimal(holding.weightGrams)
+      ? multiplyDecimal(holding.weightGrams, livePricePerGram)
+      : null;
+  const cost = remainingCostRial(holding);
+  const changeRial =
+    marketValueRial != null && cost != null ? subtractDecimal(marketValueRial, cost) : null;
+  const changePercent =
+    changeRial != null && cost != null && !isZeroDecimal(cost) ? ratioPercent(changeRial, cost) : null;
+
+  return {
+    weightGrams: holding.weightGrams,
+    purityLabel: purityMillisLabel(holding.purityRatio),
+    averageBuyPriceRial: holding.averageBuyPriceRial,
+    marketValueRial,
+    changeRial,
+    changePercent,
+    realizedPnlRial: null,
+    unrealizedPnlRial: changeRial,
+    totalBuyValueRial: holding.totalBuyValueRial,
+    totalSellValueRial: holding.totalSellValueRial,
+    assets: [
+      {
+        id: 'melted',
+        label: 'طلای آبشده',
+        weightGrams: holding.weightGrams,
+        share: 100,
+      },
+    ],
+  };
 }
 
 export function isRegisteredHolding(position: PortfolioPosition | null): position is PortfolioPosition {
@@ -46,4 +98,8 @@ export function isRegisteredHolding(position: PortfolioPosition | null): positio
   const weight = position.weightGrams.trim();
   if (!weight || weight.startsWith('-')) return false;
   return !/^0+(\.0+)?$/.test(weight);
+}
+
+export function loadCustomerPosition(): PortfolioPosition | null {
+  return null;
 }

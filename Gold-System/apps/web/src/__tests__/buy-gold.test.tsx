@@ -33,6 +33,14 @@ jest.mock('@/lib/api', () => {
     ordersApi: {
       create: (...args: unknown[]) => mockCreate(...args),
       submit: (...args: unknown[]) => mockSubmit(...args),
+      portfolio: () =>
+        Promise.resolve({
+          weightGrams: '0.000000',
+          purityRatio: null,
+          averageBuyPriceRial: null,
+          totalBuyValueRial: null,
+          totalSellValueRial: null,
+        }),
     },
   };
 });
@@ -205,7 +213,8 @@ describe('BuyGoldPage', () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     await calculateFiveGrams();
-    expect(screen.getByText('اعتبار کافی نیست')).toBeInTheDocument();
+    expect(screen.queryByText('روش پرداخت')).not.toBeInTheDocument();
+    expect(screen.getByText('ارزش این وزن از دارایی ریالی شما بیشتر است.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox'));
     expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
   });
@@ -230,11 +239,29 @@ describe('BuyGoldPage', () => {
     expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
   });
 
+  it('prices the opposite panel while the weight is typed', async () => {
+    renderPage();
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    fireEvent.change(screen.getByLabelText('وزن طلا'), { target: { value: '۲' } });
+    expect(await screen.findByText('مبلغ قابل پرداخت')).toBeInTheDocument();
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
+    expect(screen.queryByRole('button', { name: 'محاسبه قیمت' })).not.toBeInTheDocument();
+  });
+
+  it('fills the weight that spends the whole rial balance', async () => {
+    renderPage();
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    fireEvent.click(screen.getByRole('button', { name: 'خرید با همه دارایی ریالی' }));
+    expect(await screen.findByDisplayValue('۸.۰۹۷')).toBeInTheDocument();
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '8.097' }));
+    expect(await screen.findByText('مبلغ قابل پرداخت')).toBeInTheDocument();
+  });
+
   it('rejects a zero weight before calling the pricing API', async () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     fireEvent.change(screen.getByLabelText('وزن طلا'), { target: { value: '۰' } });
-    fireEvent.click(screen.getByRole('button', { name: 'محاسبه قیمت' }));
     expect(await screen.findByText('وزن باید عددی بزرگ‌تر از صفر باشد.')).toBeInTheDocument();
     expect(mockCalculate).not.toHaveBeenCalled();
   });
@@ -258,5 +285,16 @@ describe('BuyGoldPage', () => {
     await calculateFiveGrams();
     fireEvent.click(await openConfirm());
     expect(await screen.findByRole('alert')).toHaveTextContent('اعتبار کافی برای ثبت این سفارش ندارید.');
+  });
+
+  it('shows the trading-hours message when the market is closed', async () => {
+    mockCreate.mockRejectedValue(
+      new ApiClientError('TRADING_CLOSED', 'زمان معاملات در حال حاضر فعال نیست.', 422),
+    );
+    renderPage();
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    await calculateFiveGrams();
+    fireEvent.click(await openConfirm());
+    expect(await screen.findByRole('alert')).toHaveTextContent('زمان معاملات در حال حاضر فعال نیست.');
   });
 });

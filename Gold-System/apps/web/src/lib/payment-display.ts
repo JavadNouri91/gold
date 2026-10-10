@@ -25,7 +25,7 @@ export function paymentStatusLabel(status: string): string {
 export function paymentTypeLabel(side: 'BUY' | 'SELL' | null | undefined): string {
   if (side === 'BUY') return 'پرداخت سفارش خرید';
   if (side === 'SELL') return 'پرداخت سفارش فروش';
-  return 'سایر';
+  return 'افزایش اعتبار';
 }
 
 export const PAYMENT_STATUS_FILTERS: { id: '' | PaymentStatusGroup; label: string }[] = [
@@ -48,7 +48,7 @@ export const PAYMENT_TYPE_FILTERS: { id: '' | PaymentLedgerType; label: string }
   { id: '', label: 'همه انواع' },
   { id: 'BUY', label: 'پرداخت سفارش خرید' },
   { id: 'SELL', label: 'پرداخت سفارش فروش' },
-  { id: 'OTHER', label: 'سایر' },
+  { id: 'OTHER', label: 'افزایش اعتبار' },
 ];
 
 export function paymentStamp(iso: string | null | undefined): string {
@@ -64,5 +64,5 @@ export function relatedPaymentLabel(payment: {
   orderNumber?: string | null;
   tradeNumber?: string | null;
 }): string {
-  return payment.orderNumber || payment.tradeNumber || '—';
+  return payment.orderNumber || payment.tradeNumber || 'افزایش اعتبار';
 }

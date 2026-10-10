@@ -4,7 +4,12 @@ import userEvent from '@testing-library/user-event';
 import { AssetsPage } from '../components/portal/assets/assets-page';
 import { PortfolioValueChart } from '../components/portal/assets/portfolio-value-chart';
 import { MobileBottomNavigation } from '../components/portal/mobile-bottom-navigation';
-import { isRegisteredHolding, loadCustomerPosition, type PortfolioPosition } from '../lib/customer-portfolio';
+import {
+  isRegisteredHolding,
+  loadCustomerPosition,
+  toPortfolioPosition,
+  type PortfolioPosition,
+} from '../lib/customer-portfolio';
 import { previewPortfolioHistory, summarizePreviewRial } from '../lib/portfolio-history-preview';
 import { moneyTone } from '../lib/portfolio-display';
 import { formatRial, formatWeight } from '../lib/utils';
@@ -50,6 +55,23 @@ describe('customer portfolio availability', () => {
     expect(loadCustomerPosition()).toBeNull();
     expect(isRegisteredHolding(null)).toBe(false);
     expect(isRegisteredHolding({ ...position, weightGrams: '0.000' })).toBe(false);
+  });
+
+  it('values a booked holding with the live gram price', () => {
+    const valued = toPortfolioPosition(
+      {
+        weightGrams: '10',
+        purityRatio: '0.750000',
+        averageBuyPriceRial: '50000000',
+        totalBuyValueRial: '500000000',
+        totalSellValueRial: null,
+      },
+      '60000000',
+    );
+    expect(isRegisteredHolding(valued)).toBe(true);
+    expect(valued?.purityLabel).toBe('750');
+    expect(valued?.marketValueRial).toBe('600000000');
+    expect(valued?.changeRial).toBe('100000000');
   });
 
   it('classifies profit and loss signs without reparsing money', () => {

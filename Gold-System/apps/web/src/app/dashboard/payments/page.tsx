@@ -72,7 +72,8 @@ export default function PaymentsPage() {
     {
       key: 'trade',
       header: 'معامله',
-      render: (row) => <Link href={`/dashboard/trades/${row.tradeId}`}>معامله</Link>,
+      render: (row) =>
+        row.tradeId ? <Link href={`/dashboard/trades/${row.tradeId}`}>معامله</Link> : <span>افزایش اعتبار</span>,
     },
     { key: 'amount', header: 'مبلغ', render: (row) => formatMoney(row.amount) },
     { key: 'method', header: 'روش', render: (row) => statusLabel(PAYMENT_METHOD_LABELS, row.method) },

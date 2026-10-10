@@ -301,11 +301,11 @@ export class NotificationRepository {
         },
       });
       if (!payment) return null;
-      const ownsTrade = payment.trade.customerId === customer.id;
+      const ownsTrade = payment.trade?.customerId === customer.id;
       return {
         kind: 'payment',
-        href: ownsTrade ? `/portal/trades/${payment.trade.id}` : '/portal/payments',
-        number: ownsTrade ? payment.trade.tradeNumber : null,
+        href: ownsTrade && payment.trade ? `/portal/trades/${payment.trade.id}` : `/portal/payments/${entityId}`,
+        number: ownsTrade && payment.trade ? payment.trade.tradeNumber : null,
         amountRial: payment.amount.toFixed(2),
         weightGrams: null,
         status: String(payment.status),

@@ -2,12 +2,12 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import useSWR from 'swr';
-import { CheckCircle2, RefreshCw, ShieldAlert } from 'lucide-react';
+import useSWR, { useSWRConfig } from 'swr';
+import { CheckCircle2, RefreshCw, ShieldAlert, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { customerApi, ordersApi, pricingApi, type Order } from '@/lib/api';
-import { compareDecimal, isZeroDecimal, subtractDecimal } from '@/lib/decimal-string';
-import { toPricingView, type PricingView, basePriceDiffers } from '@/lib/pricing-view';
+import { compareDecimal, floorDivide, isZeroDecimal, subtractDecimal } from '@/lib/decimal-string';
+import { toPricingView, type PricingView } from '@/lib/pricing-view';
 import {
   ORDER_STATUS_LABELS,
   cn,
@@ -19,9 +19,10 @@ import {
   toPersianDigits,
 } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { readAvailableCredit } from '@/lib/credit-view';
 import { purchaseErrorMessage } from './purchase-errors';
 import { DEFAULT_PURITY, QUICK_WEIGHTS, TRADING_PURITIES, purityLabel } from './trading-purities';
-import { canonicalWeight, isPositiveWeight, normalizeWeightInput } from './weight-input';
+import { canonicalWeight, decreaseWeightByMilli, isPositiveWeight, normalizeWeightInput } from './weight-input';
 
 interface HeldQuote {
   view: PricingView;
@@ -39,8 +40,9 @@ interface DraftOrder {
 
 export function BuyGoldPage() {
   const router = useRouter();
+  const { mutate } = useSWRConfig();
   const [weight, setWeight] = useState('');
-  const [purity, setPurity] = useState(DEFAULT_PURITY);
+  const purity = DEFAULT_PURITY;
   const [quote, setQuote] = useState<HeldQuote | null>(null);
   const [accepted, setAccepted] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -51,6 +53,10 @@ export function BuyGoldPage() {
   const [now, setNow] = useState(() => Date.now());
   const submitLock = useRef(false);
   const draftRef = useRef<DraftOrder | null>(null);
+  const calcSeq = useRef(0);
+  const skipAuto = useRef<string | null>(null);
+  const [allInWeight, setAllInWeight] = useState<string | null>(null);
+  const [pricingAll, setPricingAll] = useState(false);
 
   const price = useSWR('pricing/current-price', () => pricingApi.getCurrentPrice(), {
     refreshInterval: 15_000,
@@ -80,14 +86,10 @@ export function BuyGoldPage() {
   const kycBlocked = customer.data != null && !tradingReady;
   const accountBlocked = tradingReady && account.data != null && account.data.status !== 'ACTIVE';
 
-  const available = account.data?.availableCreditRial;
+  const available = account.data ? (readAvailableCredit(account.data) ?? undefined) : undefined;
   const finalPrice = inputsMatch ? quote?.view.finalPrice : undefined;
   const creditShort =
     available != null && finalPrice != null && compareDecimal(available, finalPrice) < 0;
-  const remaining =
-    available != null && finalPrice != null && !creditShort
-      ? subtractDecimal(available, finalPrice)
-      : null;
   const shortfall =
     available != null && finalPrice != null && creditShort
       ? subtractDecimal(finalPrice, available)
@@ -109,41 +111,121 @@ export function BuyGoldPage() {
   async function runCalculate(nextWeight: string, nextPurity: string) {
     const nextGrams = canonicalWeight(nextWeight);
     if (!isPositiveWeight(nextGrams)) {
-      setError(nextGrams === '' ? 'وزن باید عددی بزرگ‌تر از صفر باشد.' : null);
+      setQuote(null);
       return;
     }
     if (!TRADING_PURITIES.some((item) => item.value === nextPurity)) {
       setError('عیار انتخاب‌شده معتبر نیست.');
       return;
     }
+    const seq = ++calcSeq.current;
     setCalculating(true);
     setError(null);
     setAccepted(false);
     setConfirmOpen(false);
     draftRef.current = null;
     try {
-      const result = await pricingApi.calculate({
-        weightGrams: nextGrams,
-        purityRatio: nextPurity,
-        ...(customer.data?.type ? { customerType: customer.data.type } : {}),
-        ...(price.data?.snapshotId ? { priceSnapshotId: price.data.snapshotId } : {}),
-      });
-      const view = toPricingView(result);
-      const expiresAt =
-        price.data?.snapshotId && price.data.snapshotId === view.snapshotId
-          ? (price.data.expiresAt ?? null)
-          : null;
+      const view = await requestPrice(nextGrams, nextPurity);
+      if (seq !== calcSeq.current) return;
       setQuote({
         view,
-        expiresAt,
+        expiresAt: quoteExpiry(view.snapshotId),
         weightGrams: nextGrams,
         purityRatio: nextPurity,
       });
     } catch (err) {
+      if (seq !== calcSeq.current) return;
       setQuote(null);
       setError(purchaseErrorMessage(err, 'محاسبه قیمت انجام نشد. لطفاً دوباره تلاش کنید.'));
     } finally {
+      if (seq === calcSeq.current) setCalculating(false);
+    }
+  }
+
+  function quoteExpiry(snapshotId: string): string | null {
+    return price.data?.snapshotId && price.data.snapshotId === snapshotId
+      ? (price.data.expiresAt ?? null)
+      : null;
+  }
+
+  async function requestPrice(nextGrams: string, nextPurity: string) {
+    const result = await pricingApi.calculate({
+      weightGrams: nextGrams,
+      purityRatio: nextPurity,
+      ...(customer.data?.type ? { customerType: customer.data.type } : {}),
+      ...(price.data?.snapshotId ? { priceSnapshotId: price.data.snapshotId } : {}),
+    });
+    return toPricingView(result);
+  }
+
+  useEffect(() => {
+    if (customer.isLoading) return;
+    if (skipAuto.current === grams) {
+      skipAuto.current = null;
+      return;
+    }
+    if (!isPositiveWeight(grams)) {
+      calcSeq.current += 1;
+      setQuote(null);
       setCalculating(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      void runCalculate(grams, purity);
+    }, 350);
+    return () => window.clearTimeout(timer);
+    // Recalculate when the typed weight or the live price snapshot changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [grams, purity, liveSnapshot, customer.isLoading, customer.data?.type]);
+
+  async function spendAllRial() {
+    if (!available || isZeroDecimal(available) || kycBlocked || accountBlocked) return;
+    const seq = ++calcSeq.current;
+    setPricingAll(true);
+    setCalculating(true);
+    setError(null);
+    setAccepted(false);
+    setConfirmOpen(false);
+    draftRef.current = null;
+    try {
+      const oneGram = await requestPrice('1', purity);
+      if (seq !== calcSeq.current) return;
+      let nextGrams = floorDivide(available, oneGram.finalPrice, 3);
+      if (!nextGrams) {
+        setError('دارایی ریالی برای خرید حداقل ۰٫۰۰۱ گرم کافی نیست.');
+        setQuote(null);
+        return;
+      }
+      let view = await requestPrice(nextGrams, purity);
+      for (let step = 0; step < 4 && compareDecimal(view.finalPrice, available) > 0; step += 1) {
+        const lower = decreaseWeightByMilli(nextGrams);
+        if (!lower) {
+          setError('دارایی ریالی برای خرید حداقل ۰٫۰۰۱ گرم کافی نیست.');
+          setQuote(null);
+          return;
+        }
+        nextGrams = lower;
+        view = await requestPrice(nextGrams, purity);
+      }
+      if (seq !== calcSeq.current) return;
+      skipAuto.current = nextGrams;
+      setAllInWeight(nextGrams);
+      setWeight(nextGrams);
+      setQuote({
+        view,
+        expiresAt: quoteExpiry(view.snapshotId),
+        weightGrams: nextGrams,
+        purityRatio: purity,
+      });
+    } catch (err) {
+      if (seq !== calcSeq.current) return;
+      setQuote(null);
+      setError(purchaseErrorMessage(err, 'محاسبه قیمت انجام نشد. لطفاً دوباره تلاش کنید.'));
+    } finally {
+      if (seq === calcSeq.current) {
+        setCalculating(false);
+        setPricingAll(false);
+      }
     }
   }
 
@@ -177,6 +259,13 @@ export function BuyGoldPage() {
       }
       const submitted = await ordersApi.submit(order.id);
       draftRef.current = null;
+      await Promise.all([
+        mutate('customer/me/account'),
+        mutate('orders/portfolio'),
+        mutate('assets/trades'),
+        mutate('orders/recent'),
+        mutate('trades/recent'),
+      ]);
       setCreated(submitted);
       setConfirmOpen(false);
     } catch (err) {
@@ -199,6 +288,7 @@ export function BuyGoldPage() {
   }
 
   const activeQuote = inputsMatch ? quote : null;
+  const pricePending = isPositiveWeight(grams) && !inputsMatch;
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl pb-44 lg:pb-0">
@@ -226,19 +316,12 @@ export function BuyGoldPage() {
           <h2 className="text-base font-bold text-[#202124]">مشخصات خرید</h2>
           <p className="mt-1 text-xs leading-6 text-[#6B7280]">طلای آبشده — وزن و عیار را وارد کنید.</p>
 
-          <form
-            className="mt-5 space-y-5"
-            noValidate
-            onSubmit={(event) => {
-              event.preventDefault();
-              void runCalculate(weight, purity);
-            }}
-          >
+          <div className="mt-5 space-y-5">
             <div>
               <label htmlFor="buy-weight" className="text-sm font-medium text-[#202124]">
                 وزن طلا
               </label>
-              <div className="mt-2 flex items-center gap-2">
+              <div className="mt-1.5 flex h-11 w-40 items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 focus-within:ring-2 focus-within:ring-[#F59E0B]">
                 <input
                   id="buy-weight"
                   inputMode="decimal"
@@ -248,16 +331,38 @@ export function BuyGoldPage() {
                   value={weight ? toPersianDigits(weight) : ''}
                   placeholder="مثال: ۵"
                   onChange={(event) => {
+                    setAllInWeight(null);
                     setWeight(normalizeWeightInput(event.target.value));
                     setAccepted(false);
                   }}
-                  className="h-12 min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-lg tabular-nums text-[#202124] outline-none focus-visible:ring-2 focus-visible:ring-[#F59E0B]"
+                  className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-[#202124] outline-none"
                 />
                 <span className="shrink-0 text-sm text-[#6B7280]">گرم</span>
               </div>
               {weight && !isPositiveWeight(weight) ? (
                 <p className="mt-1 text-xs text-[#DC2626]">وزن باید عددی بزرگ‌تر از صفر باشد.</p>
               ) : null}
+              <button
+                type="button"
+                aria-pressed={allInWeight != null && grams === allInWeight}
+                disabled={
+                  pricingAll ||
+                  !available ||
+                  isZeroDecimal(available) ||
+                  kycBlocked ||
+                  accountBlocked
+                }
+                onClick={() => void spendAllRial()}
+                className={cn(
+                  'mt-3 inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
+                  allInWeight != null && grams === allInWeight
+                    ? 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
+                    : 'border-[#E5E7EB] bg-white text-[#202124]',
+                )}
+              >
+                <Wallet className="h-4 w-4 shrink-0" aria-hidden />
+                {pricingAll ? 'در حال محاسبه وزن...' : 'خرید با همه دارایی ریالی'}
+              </button>
             </div>
 
             <div className="min-w-0">
@@ -271,9 +376,9 @@ export function BuyGoldPage() {
                       type="button"
                       aria-pressed={selected}
                       onClick={() => {
+                        setAllInWeight(null);
                         setWeight(value);
                         setAccepted(false);
-                        void runCalculate(value, purity);
                       }}
                       className={cn(
                         'h-11 shrink-0 rounded-xl border px-4 text-sm font-medium',
@@ -290,66 +395,41 @@ export function BuyGoldPage() {
             </div>
 
             <div>
-              <label htmlFor="buy-purity" className="text-sm font-medium text-[#202124]">
-                عیار
-              </label>
-              <select
-                id="buy-purity"
-                value={purity}
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setPurity(next);
-                  setAccepted(false);
-                  if (isPositiveWeight(weight)) void runCalculate(weight, next);
-                }}
-                className="mt-2 h-12 min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#202124] outline-none focus-visible:ring-2 focus-visible:ring-[#F59E0B]"
-              >
-                {TRADING_PURITIES.map((item) => (
-                  <option key={item.value} value={item.value}>
-                    {item.label}
-                  </option>
-                ))}
-              </select>
+              <p className="text-sm font-medium text-[#202124]">عیار</p>
+              <p className="mt-2 flex h-12 min-h-11 items-center rounded-xl border border-[#E5E7EB] bg-[#F9FAFB] px-3 text-sm text-[#202124]">
+                {purityLabel(DEFAULT_PURITY)}
+              </p>
             </div>
-
-            <Button type="submit" className="h-12 w-full" disabled={calculating}>
-              {calculating ? 'در حال محاسبه...' : 'محاسبه قیمت'}
-            </Button>
-          </form>
+          </div>
         </section>
 
         <aside className="min-w-0 space-y-4">
           <PriceStatus
-            hasQuote={Boolean(activeQuote)}
-            unitPrice={activeQuote?.view.unitPricePerGram}
             calculating={calculating}
             priceMoved={priceMoved}
             expired={expired}
-            countdown={countdown}
             onRefresh={() => void runCalculate(weight, purity)}
           />
 
-          {calculating ? <BreakdownSkeleton /> : null}
+          {calculating || pricePending ? <BreakdownSkeleton /> : null}
 
           {activeQuote && !calculating ? (
             <>
-              <Breakdown view={activeQuote.view} purity={purity} />
-              <TotalCard amount={activeQuote.view.finalPrice} />
-              <CreditCard
-                loading={account.isLoading && !account.data}
-                error={Boolean(account.error)}
-                onRetry={() => void account.mutate()}
-                available={available}
-                orderAmount={activeQuote.view.finalPrice}
-                remaining={remaining}
-                shortfall={shortfall}
-                insufficient={creditShort}
-              />
               <OrderSummary view={activeQuote.view} purity={purity} />
+              <TotalCard amount={activeQuote.view.finalPrice} />
+              {creditShort && shortfall ? (
+                <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-[#DC2626] shadow-sm">
+                  <p className="font-medium">ارزش این وزن از دارایی ریالی شما بیشتر است.</p>
+                  <p className="mt-1">کمبود: {formatMoney(shortfall)}</p>
+                  <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
+                    مشاهده دارایی ریالی
+                  </Link>
+                </div>
+              ) : null}
             </>
-          ) : !calculating ? (
+          ) : !calculating && !pricePending ? (
             <section className="rounded-2xl border border-dashed border-[#E5E7EB] bg-white px-4 py-8 text-center text-sm text-[#6B7280]">
-              وزن و عیار را وارد کنید تا مبلغ نهایی از سامانه محاسبه شود.
+              وزن را وارد کنید تا مبلغ همین‌جا محاسبه شود.
             </section>
           ) : null}
 
@@ -357,7 +437,7 @@ export function BuyGoldPage() {
             {activeQuote ? (
               <p className="mb-2 flex items-baseline justify-between gap-3 lg:hidden">
                 <span className="text-xs text-[#6B7280]">مبلغ نهایی</span>
-                <span className="text-base font-bold tabular-nums text-[#202124]">
+                <span className="text-base font-bold text-[#202124]">
                   {formatMoney(activeQuote.view.finalPrice)}
                 </span>
               </p>
@@ -385,8 +465,6 @@ export function BuyGoldPage() {
           </div>
         </aside>
       </div>
-
-      <HowOrderingWorks />
 
       <ConfirmPurchase
         open={confirmOpen}
@@ -430,7 +508,7 @@ function LivePriceCard({
           ) : error || !value ? (
             <p className="mt-3 text-sm text-[#202124]">قیمت لحظه‌ای در دسترس نیست.</p>
           ) : (
-            <p className="mt-2 text-2xl font-bold tabular-nums text-[#202124] md:text-3xl">
+            <p className="mt-2 text-2xl font-bold text-[#202124] md:text-3xl">
               {formatMoney(value)}
               <span className="mr-1 text-sm font-medium text-[#6B7280]">/ گرم</span>
             </p>
@@ -461,20 +539,14 @@ function LivePriceCard({
 }
 
 function PriceStatus({
-  hasQuote,
-  unitPrice,
   calculating,
   priceMoved,
   expired,
-  countdown,
   onRefresh,
 }: {
-  hasQuote: boolean;
-  unitPrice?: string;
   calculating: boolean;
   priceMoved: boolean;
   expired: boolean;
-  countdown: string | null;
   onRefresh: () => void;
 }) {
   if (calculating) return null;
@@ -498,29 +570,7 @@ function PriceStatus({
       />
     );
   }
-  if (hasQuote && unitPrice) {
-    return (
-      <section className="rounded-2xl border border-[#E5E7EB] bg-white px-4 py-3 text-sm text-[#202124] shadow-sm">
-        <p>
-          قیمت محاسبه شده:{' '}
-          <span className="font-bold tabular-nums">{formatMoney(unitPrice)} / گرم</span>
-        </p>
-        {countdown ? (
-          <p className="mt-2 text-[#6B7280]">
-            این قیمت تا پایان اعتبار نرخ لحظه‌ای معتبر است.
-            <span className="mr-2 font-bold tabular-nums text-[#C8922E]" dir="ltr">
-              {countdown}
-            </span>
-          </p>
-        ) : null}
-      </section>
-    );
-  }
-  return (
-    <p className="rounded-2xl bg-white px-4 py-3 text-sm text-[#6B7280] shadow-sm">
-      نمایش قیمت فعلی پس از محاسبه انجام می‌شود.
-    </p>
-  );
+  return null;
 }
 
 function StatusBanner({
@@ -550,89 +600,14 @@ function StatusBanner({
   );
 }
 
-function Breakdown({ view, purity }: { view: PricingView; purity: string }) {
-  return (
-    <section className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-5">
-      <h2 className="text-base font-bold text-[#202124]">جزئیات قیمت</h2>
-      <dl className="mt-3 divide-y divide-[#E5E7EB] text-sm">
-        <Row label="وزن" value={formatWeight(view.weightGrams)} />
-        <Row label="عیار" value={purityLabel(purity) || formatPurity(view.purityRatio)} />
-        {basePriceDiffers(view) ? <Row label="قیمت پایه" value={formatMoney(view.basePricePerGram)} /> : null}
-        <Row label="قیمت هر گرم" value={formatMoney(view.unitPricePerGram)} />
-        <Row label="ارزش طلا" value={formatMoney(view.goldValue)} />
-        {!isZeroDecimal(view.groupAdjustment) ? (
-          <Row label="تعدیل گروهی" value={formatMoney(view.groupAdjustment)} />
-        ) : null}
-        {view.wageAmount ? <Row label="اجرت" value={formatMoney(view.wageAmount)} /> : null}
-        {view.profitAmount ? <Row label="سود" value={formatMoney(view.profitAmount)} /> : null}
-        {view.taxAmount ? <Row label="مالیات" value={formatMoney(view.taxAmount)} /> : null}
-        {view.discountAmount ? <Row label="تخفیف" value={formatMoney(view.discountAmount)} /> : null}
-        {view.roundingAmount ? <Row label="گرد کردن" value={formatMoney(view.roundingAmount)} /> : null}
-        <Row label="مبلغ نهایی" value={formatMoney(view.finalPrice)} strong />
-      </dl>
-    </section>
-  );
-}
-
 function TotalCard({ amount }: { amount: string }) {
   return (
     <section className="rounded-2xl border border-[#F3E2B8] bg-[#FFF8EB] p-5 shadow-sm">
       <p className="text-sm text-[#6B7280]">مبلغ قابل پرداخت</p>
-      <p className="mt-1 text-3xl font-bold tabular-nums text-[#202124]">{formatMoney(amount)}</p>
+      <p className="mt-1 text-left text-3xl font-bold text-[#202124]" dir="ltr">
+        {formatMoney(amount)}
+      </p>
       <p className="mt-2 text-xs text-[#6B7280]">شامل تمام هزینه‌های محاسبه‌شده</p>
-    </section>
-  );
-}
-
-function CreditCard({
-  loading,
-  error,
-  onRetry,
-  available,
-  orderAmount,
-  remaining,
-  shortfall,
-  insufficient,
-}: {
-  loading: boolean;
-  error: boolean;
-  onRetry: () => void;
-  available?: string;
-  orderAmount: string;
-  remaining: string | null;
-  shortfall: string | null;
-  insufficient: boolean;
-}) {
-  return (
-    <section className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-5">
-      <h2 className="text-base font-bold text-[#202124]">روش پرداخت</h2>
-      <p className="mt-2 text-sm text-[#202124]">اعتبار حساب</p>
-      {loading ? <div className="mt-3 h-16 animate-pulse rounded-xl bg-[#F3F4F6]" /> : null}
-      {error ? (
-        <div className="mt-3">
-          <p className="text-sm text-[#DC2626]">موجودی اعتبار دریافت نشد.</p>
-          <button type="button" onClick={onRetry} className="mt-2 h-11 text-sm font-medium text-[#C8922E]">
-            تلاش مجدد
-          </button>
-        </div>
-      ) : null}
-      {!loading && !error && available ? (
-        <dl className="mt-3 space-y-2 text-sm">
-          <Row label="اعتبار در دسترس" value={formatMoney(available)} />
-          <Row label="مبلغ سفارش" value={formatMoney(orderAmount)} />
-          {remaining != null ? <Row label="اعتبار باقی‌مانده" value={formatMoney(remaining)} /> : null}
-        </dl>
-      ) : null}
-      {insufficient && shortfall ? (
-        <div className="mt-3 rounded-xl bg-red-50 px-3 py-3 text-sm text-[#DC2626]">
-          <p className="font-medium">اعتبار کافی نیست</p>
-          <p className="mt-1">اعتبار کافی برای ثبت این سفارش ندارید.</p>
-          <p className="mt-1">کسری اعتبار: {formatMoney(shortfall)}</p>
-          <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
-            مشاهده اعتبار
-          </Link>
-        </div>
-      ) : null}
     </section>
   );
 }
@@ -649,7 +624,6 @@ function OrderSummary({ view, purity }: { view: PricingView; purity: string }) {
         {view.wageAmount ? <Row label="اجرت" value={formatMoney(view.wageAmount)} /> : null}
         {view.taxAmount ? <Row label="مالیات" value={formatMoney(view.taxAmount)} /> : null}
         <Row label="مبلغ نهایی" value={formatMoney(view.finalPrice)} strong />
-        <Row label="روش پرداخت" value="اعتبار حساب" />
       </dl>
     </section>
   );
@@ -682,28 +656,6 @@ function AccountBlock() {
       <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
         مشاهده اعتبار
       </Link>
-    </section>
-  );
-}
-
-function HowOrderingWorks() {
-  const steps = [
-    'وزن طلای آبشده و عیار را مشخص می‌کنید.',
-    'مبلغ با موتور قیمت سامانه محاسبه می‌شود.',
-    'با ثبت سفارش، قیمت همان لحظه را می‌پذیرید و پیش‌فاکتور صادر می‌شود.',
-    'فاکتور نهایی پس از تأیید طلافروش صادر می‌شود.',
-  ];
-  return (
-    <section className="mt-4 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-6">
-      <h2 className="text-base font-bold text-[#202124]">نحوه ثبت سفارش</h2>
-      <ol className="mt-3 space-y-2 text-sm leading-7 text-[#6B7280]">
-        {steps.map((step, index) => (
-          <li key={step} className="flex gap-2">
-            <span className="font-bold text-[#C8922E]">{toPersianDigits(String(index + 1))}.</span>
-            <span>{step}</span>
-          </li>
-        ))}
-      </ol>
     </section>
   );
 }
@@ -823,7 +775,7 @@ function Row({
   return (
     <div className={cn('flex items-center justify-between gap-3 py-2', strong && 'font-bold')}>
       <dt className={strong ? 'text-[#202124]' : 'text-[#6B7280]'}>{label}</dt>
-      <dd className="tabular-nums text-[#202124]" dir={ltr ? 'ltr' : undefined}>
+      <dd className="text-[#202124]" dir={ltr ? 'ltr' : undefined}>
         {value}
       </dd>
     </div>
