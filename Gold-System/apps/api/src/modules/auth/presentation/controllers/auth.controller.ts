@@ -7,6 +7,8 @@ import {
   InitiateLoginDto,
   LogoutDto,
   RefreshTokenDto,
+  RequestPasswordResetDto,
+  ResetPasswordDto,
   VerifyOtpDto,
 } from '../../application/dto/login.dto';
 import {
@@ -41,6 +43,24 @@ export class AuthController {
   @ApiOperation({ summary: 'Step 1: Submit credentials and receive OTP via SMS' })
   initiateLogin(@Body() dto: InitiateLoginDto) {
     return this.authService.initiateLogin(dto.mobile, dto.password);
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('password/forgot')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send a password-reset code to a registered mobile' })
+  requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
+    return this.authService.requestPasswordReset(dto.mobile);
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('password/reset')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set a new password after verifying the mobile code' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto.mobile, dto.otp, dto.password);
   }
 
   @Public()

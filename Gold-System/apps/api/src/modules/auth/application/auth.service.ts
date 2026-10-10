@@ -21,6 +21,12 @@ import { BusinessRuleException } from '../../../common/exceptions/business-rule.
 const UNKNOWN_USER_PASSWORD_HASH =
   '$argon2id$v=19$m=65536,t=3,p=4$+0lL24FCc0jVx48PdodfSw$cn3Ee1ijOK5tdjNvbbLlI3McBxzjRroOs2h2qp9Ftes';
 
+const PASSWORD_RESET_REQUEST_MESSAGE =
+  'اگر شماره موبایل در سامانه ثبت شده باشد، کد بازیابی پیامک می‌شود.';
+
+const PASSWORD_RESET_CODE_MESSAGE =
+  'کد تأیید اشتباه است یا منقضی شده. لطفاً دوباره تلاش کنید.';
+
 /**
  * Auth Service
  *
@@ -101,6 +107,89 @@ export class AuthService {
     }
 
     return { message: 'OTP sent to your registered mobile number' };
+  }
+
+  /**
+   * Ask for a password-reset code by mobile.
+   * The response is the same whether or not the number is registered.
+   */
+  async requestPasswordReset(mobile: string): Promise<{ message: string }> {
+    const result = await this.usersService.findByMobileWithPassword(mobile);
+
+    if (!result?.user.isActive()) {
+      await argon2.verify(UNKNOWN_USER_PASSWORD_HASH, 'password-reset');
+      return { message: PASSWORD_RESET_REQUEST_MESSAGE };
+    }
+
+    const otpConfig = this.configService.get('otp');
+    const otp = generateNumericOtp(otpConfig.length);
+    const expiresAt = new Date(Date.now() + otpConfig.expiresInSeconds * 1000);
+
+    await this.otpRepository.createOrReplace({
+      userId: result.user.id,
+      mobile,
+      code: otp,
+      purpose: 'PASSWORD_RESET',
+      expiresAt,
+    });
+
+    try {
+      await this.notificationService.sendOtp(result.user.id, mobile, otp);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.logger.error(`[AuthService] Password reset SMS failed for mobile=${mobile}: ${msg}`);
+    }
+
+    return { message: PASSWORD_RESET_REQUEST_MESSAGE };
+  }
+
+  /**
+   * Set a new password after the mobile verification code is accepted.
+   * Existing sessions are revoked so the old password cannot stay signed in.
+   */
+  async resetPassword(
+    mobile: string,
+    otp: string,
+    password: string,
+  ): Promise<{ message: string }> {
+    const otpRecord = await this.otpRepository.findActive(mobile, 'PASSWORD_RESET');
+
+    if (!otpRecord) {
+      throw new UnauthorizedException(PASSWORD_RESET_CODE_MESSAGE);
+    }
+
+    const otpConfig = this.configService.get('otp');
+    if (otpRecord.attempts >= otpConfig.maxAttempts) {
+      throw new BusinessRuleException(
+        'OTP_MAX_ATTEMPTS',
+        'تعداد تلاش برای کد تأیید بیش از حد مجاز است. لطفاً کد جدید بگیرید.',
+      );
+    }
+
+    await this.otpRepository.incrementAttempts(otpRecord.id);
+
+    const isValid = await this.otpRepository.verifyCode(otpRecord, otp);
+    if (!isValid) {
+      throw new UnauthorizedException(PASSWORD_RESET_CODE_MESSAGE);
+    }
+
+    const user = await this.usersService.findByMobile(mobile);
+    if (!user?.isActive()) {
+      throw new UnauthorizedException(PASSWORD_RESET_CODE_MESSAGE);
+    }
+
+    await this.usersService.replacePassword(user.id, password);
+    await this.otpRepository.markUsed(otpRecord.id);
+    await this.refreshTokenRepository.revokeAllForUser(user.id);
+
+    await this.auditService.log({
+      actorId: user.id,
+      action: 'PASSWORD_RESET',
+      entityType: 'User',
+      entityId: user.id,
+    });
+
+    return { message: 'رمز عبور با موفقیت تغییر کرد. اکنون با رمز جدید وارد شوید.' };
   }
 
   /**

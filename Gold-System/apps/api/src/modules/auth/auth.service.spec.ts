@@ -16,6 +16,7 @@ describe('AuthService security', () => {
     findByMobile: jest.fn(),
     findById: jest.fn(),
     updateLastLogin: jest.fn(),
+    replacePassword: jest.fn(),
   };
   const jwt = { sign: jest.fn().mockReturnValue('access-token') };
   const config = {
@@ -42,6 +43,7 @@ describe('AuthService security', () => {
     create: jest.fn(),
     findByTokenHash: jest.fn(),
     revoke: jest.fn(),
+    revokeAllForUser: jest.fn(),
     listActiveForUser: jest.fn(),
   };
   const sessions = {
@@ -138,6 +140,66 @@ describe('AuthService security', () => {
     );
     expect(rotated.refreshToken).toBe('rotated-refresh');
     expect(rotated.refreshToken).not.toBe(issued.refreshToken);
+  });
+
+  it('sends a reset code only for an active account and hides unknown mobiles', async () => {
+    users.findByMobileWithPassword.mockResolvedValue(null);
+
+    await expect(service.requestPasswordReset('09120000000')).resolves.toEqual({
+      message: 'اگر شماره موبایل در سامانه ثبت شده باشد، کد بازیابی پیامک می‌شود.',
+    });
+    expect(otpRepo.createOrReplace).not.toHaveBeenCalled();
+    expect(notifications.sendOtp).not.toHaveBeenCalled();
+
+    users.findByMobileWithPassword.mockResolvedValue({
+      user: { id: 'u1', isActive: () => false },
+      passwordHash: 'hash',
+    });
+    await service.requestPasswordReset('09120000000');
+    expect(otpRepo.createOrReplace).not.toHaveBeenCalled();
+
+    users.findByMobileWithPassword.mockResolvedValue({
+      user: { id: 'u1', isActive: () => true },
+      passwordHash: 'hash',
+    });
+    notifications.sendOtp.mockResolvedValue(undefined);
+    await service.requestPasswordReset('09120000000');
+    expect(otpRepo.createOrReplace).toHaveBeenCalledWith(
+      expect.objectContaining({
+        purpose: 'PASSWORD_RESET',
+        userId: 'u1',
+        mobile: '09120000000',
+      }),
+    );
+    expect(notifications.sendOtp).toHaveBeenCalledWith('u1', '09120000000', expect.any(String));
+  });
+
+  it('replaces the password after a valid reset code and revokes sessions', async () => {
+    otpRepo.findActive.mockResolvedValue({ id: 'otp-1', attempts: 0 });
+    otpRepo.verifyCode.mockResolvedValue(true);
+    users.findByMobile.mockResolvedValue({ id: 'u1', isActive: () => true });
+
+    await expect(service.resetPassword('09120000000', '123456', 'new-password-1')).resolves.toEqual({
+      message: 'رمز عبور با موفقیت تغییر کرد. اکنون با رمز جدید وارد شوید.',
+    });
+
+    expect(users.replacePassword).toHaveBeenCalledWith('u1', 'new-password-1');
+    expect(otpRepo.markUsed).toHaveBeenCalledWith('otp-1');
+    expect(refreshRepo.revokeAllForUser).toHaveBeenCalledWith('u1');
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'PASSWORD_RESET', entityId: 'u1' }),
+    );
+  });
+
+  it('rejects a password reset when the code does not match', async () => {
+    otpRepo.findActive.mockResolvedValue({ id: 'otp-1', attempts: 0 });
+    otpRepo.verifyCode.mockResolvedValue(false);
+
+    await expect(service.resetPassword('09120000000', '000000', 'new-password-1')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(users.replacePassword).not.toHaveBeenCalled();
+    expect(refreshRepo.revokeAllForUser).not.toHaveBeenCalled();
   });
 
   it('revokes a refresh token on logout using the stored hash', async () => {

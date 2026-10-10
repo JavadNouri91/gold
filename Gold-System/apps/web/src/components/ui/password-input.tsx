@@ -37,7 +37,7 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
             aria-invalid={!!error}
             aria-describedby={error ? `${inputId}-err` : hint ? `${inputId}-hint` : undefined}
             className={cn(
-              'flex h-10 w-full rounded-md border bg-background pe-3 ps-10 py-2 text-sm',
+              'flex h-10 w-full rounded-md border bg-background py-2 pl-3 pr-10 text-sm',
               'placeholder:text-muted-foreground',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
               'disabled:cursor-not-allowed disabled:opacity-50',
@@ -47,17 +47,16 @@ export const PasswordInput = forwardRef<HTMLInputElement, PasswordInputProps>(
             {...props}
           />
 
-          {/* Toggle button — eye icon on the right */}
           <button
             type="button"
-            tabIndex={-1}
             aria-label={visible ? 'مخفی کردن رمز عبور' : 'نمایش رمز عبور'}
+            aria-pressed={visible}
             onClick={() => setVisible((v) => !v)}
             className={cn(
-              'absolute inset-y-0 start-0 flex w-10 items-center justify-center',
+              'absolute inset-y-0 right-0 flex w-10 items-center justify-center',
               'text-muted-foreground transition-colors hover:text-foreground',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-gold-500',
-              'rounded-s-md',
+              'rounded-r-md',
             )}
           >
             {visible ? (

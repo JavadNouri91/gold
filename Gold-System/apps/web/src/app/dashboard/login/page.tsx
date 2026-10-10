@@ -7,9 +7,10 @@ import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
 import { isValidMobile, latinMobile } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { MobileInput } from '@/components/ui/mobile-input';
 import { Alert } from '@/components/ui/alert';
+import { PasswordRecoveryForm } from '@/components/auth/password-recovery-form';
 
 interface LoginForm {
   mobile: string;
@@ -21,6 +22,7 @@ export default function StaffLoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [mode, setMode] = useState<'login' | 'recover'>('login');
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<LoginForm>({
     defaultValues: { mobile: '', password: '' },
   });
@@ -47,31 +49,49 @@ export default function StaffLoginPage() {
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-sm rounded-xl border bg-white p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-gold-800">ورود کارکنان</h1>
+        <h1 className="text-xl font-bold text-gold-800">
+          {mode === 'login' ? 'ورود کارکنان' : 'بازیابی رمز عبور'}
+        </h1>
         <p className="mb-4 mt-1 text-sm text-muted-foreground">داشبورد داخلی سامانه طلا</p>
-        {error ? <Alert variant="error">{error}</Alert> : null}
-        <form className="mt-4 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
-          <MobileInput
-            label="شماره موبایل"
-            error={errors.mobile?.message}
-            value={watch('mobile')}
-            onValueChange={(mobile) => setValue('mobile', mobile, { shouldValidate: true })}
-          />
-          <Input
-            label="رمز عبور"
-            dir="ltr"
-            type="password"
-            autoComplete="current-password"
-            error={errors.password?.message}
-            {...register('password', {
-              required: 'رمز عبور الزامی است',
-              minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
-            })}
-          />
-          <Button className="w-full" type="submit" isLoading={isLoading}>
-            دریافت کد تأیید
-          </Button>
-        </form>
+        {mode === 'login' ? (
+          <>
+            {error ? <Alert variant="error">{error}</Alert> : null}
+            <form className="mt-4 space-y-4" onSubmit={handleSubmit(onSubmit)} noValidate>
+              <MobileInput
+                label="شماره موبایل"
+                error={errors.mobile?.message}
+                value={watch('mobile')}
+                onValueChange={(mobile) => setValue('mobile', mobile, { shouldValidate: true })}
+              />
+              <PasswordInput
+                label="رمز عبور"
+                autoComplete="current-password"
+                error={errors.password?.message}
+                {...register('password', {
+                  required: 'رمز عبور الزامی است',
+                  minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
+                })}
+              />
+              <div className="flex justify-start">
+                <button
+                  type="button"
+                  className="text-sm text-gold-700 hover:underline"
+                  onClick={() => {
+                    setError(null);
+                    setMode('recover');
+                  }}
+                >
+                  فراموشی رمز عبور
+                </button>
+              </div>
+              <Button className="w-full" type="submit" isLoading={isLoading}>
+                دریافت کد تأیید
+              </Button>
+            </form>
+          </>
+        ) : (
+          <PasswordRecoveryForm onBack={() => setMode('login')} />
+        )}
       </div>
     </div>
   );

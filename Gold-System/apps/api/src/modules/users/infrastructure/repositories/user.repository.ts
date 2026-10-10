@@ -125,6 +125,13 @@ export class UserRepository {
     });
   }
 
+  async updatePasswordHash(id: string, passwordHash: string): Promise<void> {
+    await this.prisma.user.update({
+      where: { id },
+      data: { passwordHash },
+    });
+  }
+
   private toDomain(record: {
     id: string;
     name: string;

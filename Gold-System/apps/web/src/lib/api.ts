@@ -219,6 +219,20 @@ export const authApi = {
     });
   },
 
+  requestPasswordReset(mobile: string): Promise<{ message: string }> {
+    return rawRequest('/auth/password/forgot', {
+      method: 'POST',
+      body: JSON.stringify({ mobile }),
+    });
+  },
+
+  resetPassword(mobile: string, otp: string, password: string): Promise<{ message: string }> {
+    return rawRequest('/auth/password/reset', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, otp, password }),
+    });
+  },
+
   verifyOtp(mobile: string, code: string): Promise<OtpResponse> {
     return rawRequest('/auth/otp', {
       method: 'POST',

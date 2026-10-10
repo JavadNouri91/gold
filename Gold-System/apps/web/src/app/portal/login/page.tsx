@@ -6,9 +6,10 @@ import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
 import { isValidMobile, latinMobile, MOBILE_PLACEHOLDER } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { MobileInput } from '@/components/ui/mobile-input';
 import { Alert } from '@/components/ui/alert';
+import { PasswordRecoveryForm } from '@/components/auth/password-recovery-form';
 
 interface LoginForm {
   mobile: string;
@@ -20,6 +21,7 @@ export default function LoginPage() {
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [mode, setMode] = useState<'login' | 'recover'>('login');
 
   const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<LoginForm>({
     defaultValues: { mobile: '', password: '' },
@@ -60,39 +62,59 @@ export default function LoginPage() {
 
         {/* Form */}
         <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-          <h2 className="font-semibold text-lg">ورود با شماره موبایل</h2>
+          <h2 className="font-semibold text-lg">
+            {mode === 'login' ? 'ورود با شماره موبایل' : 'بازیابی رمز عبور'}
+          </h2>
 
-          {error && <Alert variant="error">{error}</Alert>}
+          {mode === 'login' ? (
+            <>
+              {error && <Alert variant="error">{error}</Alert>}
 
-          <form onSubmit={handleSubmit(onSubmit)} noValidate>
-            <div className="space-y-4">
-              <MobileInput
-                label="شماره موبایل"
-                error={errors.mobile?.message}
-                value={watch('mobile')}
-                onValueChange={(mobile) => setValue('mobile', mobile, { shouldValidate: true })}
-              />
-              <Input
-                label="رمز عبور"
-                dir="ltr"
-                type="password"
-                autoComplete="current-password"
-                error={errors.password?.message}
-                {...register('password', {
-                  required: 'رمز عبور الزامی است',
-                  minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
-                })}
-              />
-              <Button type="submit" className="w-full" isLoading={isLoading}>
-                دریافت کد تأیید
-              </Button>
-            </div>
-          </form>
+              <form onSubmit={handleSubmit(onSubmit)} noValidate>
+                <div className="space-y-4">
+                  <MobileInput
+                    label="شماره موبایل"
+                    error={errors.mobile?.message}
+                    value={watch('mobile')}
+                    onValueChange={(mobile) => setValue('mobile', mobile, { shouldValidate: true })}
+                  />
+                  <PasswordInput
+                    label="رمز عبور"
+                    autoComplete="current-password"
+                    error={errors.password?.message}
+                    {...register('password', {
+                      required: 'رمز عبور الزامی است',
+                      minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
+                    })}
+                  />
+                  <div className="flex justify-start">
+                    <button
+                      type="button"
+                      className="text-sm text-gold-700 hover:underline"
+                      onClick={() => {
+                        setError(null);
+                        setMode('recover');
+                      }}
+                    >
+                      فراموشی رمز عبور
+                    </button>
+                  </div>
+                  <Button type="submit" className="w-full" isLoading={isLoading}>
+                    دریافت کد تأیید
+                  </Button>
+                </div>
+              </form>
+            </>
+          ) : (
+            <PasswordRecoveryForm onBack={() => setMode('login')} />
+          )}
         </div>
 
-        <p className="text-center text-xs text-muted-foreground mt-6">
-          پس از وارد کردن شماره موبایل و رمز عبور، کد تأیید برای شما ارسال می‌شود.
-        </p>
+        {mode === 'login' ? (
+          <p className="text-center text-xs text-muted-foreground mt-6">
+            پس از وارد کردن شماره موبایل و رمز عبور، کد تأیید برای شما ارسال می‌شود.
+          </p>
+        ) : null}
       </div>
     </div>
   );

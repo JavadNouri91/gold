@@ -83,6 +83,12 @@ export class UsersService {
     await this.userRepository.updateLastLogin(id);
   }
 
+  /** Replace the login password. Caller is responsible for the audit record. */
+  async replacePassword(id: string, password: string): Promise<void> {
+    const passwordHash = await argon2.hash(password);
+    await this.userRepository.updatePasswordHash(id, passwordHash);
+  }
+
   /**
    * Create a user record for a customer registration — called inside a Prisma transaction.
    * The caller owns the transaction context so that User + Customer creation is atomic.
