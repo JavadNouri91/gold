@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR, { useSWRConfig } from 'swr';
-import { CheckCircle2, RefreshCw, ShieldAlert, Wallet } from 'lucide-react';
+import { CheckCircle2, Coins, RefreshCw, ShieldAlert, Wallet } from 'lucide-react';
 import Link from 'next/link';
 import { customerApi, ordersApi, pricingApi, type Order } from '@/lib/api';
 import { compareDecimal, floorDivide, isZeroDecimal, subtractDecimal } from '@/lib/decimal-string';
@@ -22,7 +22,15 @@ import { Button } from '@/components/ui/button';
 import { readAvailableCredit } from '@/lib/credit-view';
 import { purchaseErrorMessage } from './purchase-errors';
 import { DEFAULT_PURITY, QUICK_WEIGHTS, TRADING_PURITIES, purityLabel } from './trading-purities';
-import { canonicalWeight, decreaseWeightByMilli, isPositiveWeight, normalizeWeightInput } from './weight-input';
+import {
+  canonicalWeight,
+  capWeightToAvailable,
+  decreaseWeightByMilli,
+  isPositiveWeight,
+  normalizeWeightInput,
+} from './weight-input';
+
+export type TradeSide = 'buy' | 'sell';
 
 interface HeldQuote {
   view: PricingView;
@@ -38,9 +46,10 @@ interface DraftOrder {
   purityRatio: string;
 }
 
-export function BuyGoldPage() {
+export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
+  const selling = side === 'sell';
   const [weight, setWeight] = useState('');
   const purity = DEFAULT_PURITY;
   const [quote, setQuote] = useState<HeldQuote | null>(null);
@@ -64,6 +73,7 @@ export function BuyGoldPage() {
   });
   const account = useSWR('customer/me/account', () => customerApi.getMyAccount());
   const customer = useSWR('customer/me', () => customerApi.getMe());
+  const holding = useSWR('orders/portfolio', () => ordersApi.portfolio());
 
   const countdownActive = Boolean(quote?.expiresAt);
   useEffect(() => {
@@ -87,13 +97,21 @@ export function BuyGoldPage() {
   const accountBlocked = tradingReady && account.data != null && account.data.status !== 'ACTIVE';
 
   const available = account.data ? (readAvailableCredit(account.data) ?? undefined) : undefined;
+  const availableGold = holding.data?.weightGrams;
   const finalPrice = inputsMatch ? quote?.view.finalPrice : undefined;
   const creditShort =
-    available != null && finalPrice != null && compareDecimal(available, finalPrice) < 0;
+    !selling && available != null && finalPrice != null && compareDecimal(available, finalPrice) < 0;
   const shortfall =
     available != null && finalPrice != null && creditShort
       ? subtractDecimal(finalPrice, available)
       : null;
+  const goldShort =
+    selling &&
+    availableGold != null &&
+    isPositiveWeight(grams) &&
+    compareDecimal(availableGold, grams) < 0;
+  const goldShortfall =
+    goldShort && availableGold != null ? subtractDecimal(grams, availableGold) : null;
 
   const canConfirm =
     Boolean(quote) &&
@@ -105,6 +123,7 @@ export function BuyGoldPage() {
     !accountBlocked &&
     Boolean(account.data) &&
     !creditShort &&
+    !goldShort &&
     !calculating &&
     !submitting;
 
@@ -229,6 +248,18 @@ export function BuyGoldPage() {
     }
   }
 
+  function sellAllGold() {
+    if (!availableGold || isZeroDecimal(availableGold) || kycBlocked || accountBlocked) return;
+    const nextGrams = capWeightToAvailable(availableGold, availableGold);
+    if (!nextGrams) {
+      setError('موجودی طلا برای فروش حداقل ۰٫۰۰۱ گرم کافی نیست.');
+      return;
+    }
+    setAllInWeight(nextGrams);
+    setWeight(nextGrams);
+    setAccepted(false);
+  }
+
   async function submitOrder() {
     if (!quote || !canConfirm || submitLock.current) return;
     submitLock.current = true;
@@ -247,7 +278,7 @@ export function BuyGoldPage() {
             weightGrams: grams,
             purityRatio: purity,
             priceSnapshotId: quote.view.snapshotId,
-            side: 'BUY',
+            side: selling ? 'SELL' : 'BUY',
           });
       if (!reusable) {
         draftRef.current = {
@@ -281,6 +312,7 @@ export function BuyGoldPage() {
     return (
       <PurchaseSuccess
         order={created}
+        selling={selling}
         onView={() => router.push(`/portal/orders/${created.id}`)}
         onDashboard={() => router.push('/portal/dashboard')}
       />
@@ -292,6 +324,7 @@ export function BuyGoldPage() {
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-6xl pb-44 lg:pb-0">
+      <TradeSideTabs side={side} />
       <LivePriceCard
         loading={price.isLoading && !price.data}
         error={Boolean(price.error) || (price.data != null && price.data.validityStatus !== 'VALID')}
@@ -313,7 +346,7 @@ export function BuyGoldPage() {
 
       <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <section className="min-w-0 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-6">
-          <h2 className="text-base font-bold text-[#202124]">مشخصات خرید</h2>
+          <h2 className="text-base font-bold text-[#202124]">{selling ? 'مشخصات فروش' : 'مشخصات خرید'}</h2>
           <p className="mt-1 text-xs leading-6 text-[#6B7280]">طلای آبشده — وزن و عیار را وارد کنید.</p>
 
           <div className="mt-5 space-y-5">
@@ -342,27 +375,45 @@ export function BuyGoldPage() {
               {weight && !isPositiveWeight(weight) ? (
                 <p className="mt-1 text-xs text-[#DC2626]">وزن باید عددی بزرگ‌تر از صفر باشد.</p>
               ) : null}
-              <button
-                type="button"
-                aria-pressed={allInWeight != null && grams === allInWeight}
-                disabled={
-                  pricingAll ||
-                  !available ||
-                  isZeroDecimal(available) ||
-                  kycBlocked ||
-                  accountBlocked
-                }
-                onClick={() => void spendAllRial()}
-                className={cn(
-                  'mt-3 inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
-                  allInWeight != null && grams === allInWeight
-                    ? 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
-                    : 'border-[#E5E7EB] bg-white text-[#202124]',
-                )}
-              >
-                <Wallet className="h-4 w-4 shrink-0" aria-hidden />
-                {pricingAll ? 'در حال محاسبه وزن...' : 'خرید با همه دارایی ریالی'}
-              </button>
+              {selling ? (
+                <button
+                  type="button"
+                  aria-pressed={allInWeight != null && grams === allInWeight}
+                  disabled={!availableGold || isZeroDecimal(availableGold) || kycBlocked || accountBlocked}
+                  onClick={sellAllGold}
+                  className={cn(
+                    'mt-3 inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
+                    allInWeight != null && grams === allInWeight
+                      ? 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
+                      : 'border-[#E5E7EB] bg-white text-[#202124]',
+                  )}
+                >
+                  <Coins className="h-4 w-4 shrink-0" aria-hidden />
+                  فروش همه طلای آبشده
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  aria-pressed={allInWeight != null && grams === allInWeight}
+                  disabled={
+                    pricingAll ||
+                    !available ||
+                    isZeroDecimal(available) ||
+                    kycBlocked ||
+                    accountBlocked
+                  }
+                  onClick={() => void spendAllRial()}
+                  className={cn(
+                    'mt-3 inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
+                    allInWeight != null && grams === allInWeight
+                      ? 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
+                      : 'border-[#E5E7EB] bg-white text-[#202124]',
+                  )}
+                >
+                  <Wallet className="h-4 w-4 shrink-0" aria-hidden />
+                  {pricingAll ? 'در حال محاسبه وزن...' : 'خرید با همه دارایی ریالی'}
+                </button>
+              )}
             </div>
 
             <div className="min-w-0">
@@ -416,13 +467,22 @@ export function BuyGoldPage() {
           {activeQuote && !calculating ? (
             <>
               <OrderSummary view={activeQuote.view} purity={purity} />
-              <TotalCard amount={activeQuote.view.finalPrice} />
+              <TotalCard amount={activeQuote.view.finalPrice} selling={selling} />
               {creditShort && shortfall ? (
                 <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-[#DC2626] shadow-sm">
                   <p className="font-medium">ارزش این وزن از دارایی ریالی شما بیشتر است.</p>
                   <p className="mt-1">کمبود: {formatMoney(shortfall)}</p>
                   <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
                     مشاهده دارایی ریالی
+                  </Link>
+                </div>
+              ) : null}
+              {goldShort && goldShortfall ? (
+                <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-[#DC2626] shadow-sm">
+                  <p className="font-medium">وزن انتخاب‌شده از موجودی طلای شما بیشتر است.</p>
+                  <p className="mt-1">کمبود: {formatWeight(goldShortfall)}</p>
+                  <Link href="/portal/assets" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
+                    مشاهده دارایی طلا
                   </Link>
                 </div>
               ) : null}
@@ -470,6 +530,7 @@ export function BuyGoldPage() {
         open={confirmOpen}
         submitting={submitting}
         blocked={quoteBlocked}
+        selling={selling}
         view={activeQuote?.view ?? null}
         purity={purity}
         onClose={() => {
@@ -477,6 +538,39 @@ export function BuyGoldPage() {
         }}
         onConfirm={() => void submitOrder()}
       />
+    </div>
+  );
+}
+
+function TradeSideTabs({ side }: { side: TradeSide }) {
+  return (
+    <div className="mb-4 grid grid-cols-2 gap-2" role="tablist" aria-label="نوع معامله">
+      <Link
+        href="/portal/orders/new?side=buy"
+        role="tab"
+        aria-selected={side === 'buy'}
+        className={cn(
+          'inline-flex h-12 items-center justify-center rounded-xl border text-sm font-semibold',
+          side === 'buy'
+            ? 'border-emerald-600 bg-emerald-600 text-white'
+            : 'border-emerald-200 bg-emerald-50 text-emerald-800',
+        )}
+      >
+        خرید طلا
+      </Link>
+      <Link
+        href="/portal/orders/new?side=sell"
+        role="tab"
+        aria-selected={side === 'sell'}
+        className={cn(
+          'inline-flex h-12 items-center justify-center rounded-xl border text-sm font-semibold',
+          side === 'sell'
+            ? 'border-red-600 bg-red-600 text-white'
+            : 'border-red-200 bg-red-50 text-red-800',
+        )}
+      >
+        فروش طلا
+      </Link>
     </div>
   );
 }
@@ -600,10 +694,10 @@ function StatusBanner({
   );
 }
 
-function TotalCard({ amount }: { amount: string }) {
+function TotalCard({ amount, selling }: { amount: string; selling?: boolean }) {
   return (
     <section className="rounded-2xl border border-[#F3E2B8] bg-[#FFF8EB] p-5 shadow-sm">
-      <p className="text-sm text-[#6B7280]">مبلغ قابل پرداخت</p>
+      <p className="text-sm text-[#6B7280]">{selling ? 'مبلغ قابل دریافت' : 'مبلغ قابل پرداخت'}</p>
       <p className="mt-1 text-left text-3xl font-bold text-[#202124]" dir="ltr">
         {formatMoney(amount)}
       </p>
@@ -636,7 +730,7 @@ function KycBlock() {
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#F59E0B]" />
         <div>
           <p className="font-bold">احراز هویت تکمیل نشده است.</p>
-          <p className="mt-1 leading-6">برای خرید طلا ابتدا احراز هویت خود را تکمیل کنید.</p>
+          <p className="mt-1 leading-6">برای معامله طلا ابتدا احراز هویت خود را تکمیل کنید.</p>
           <Link
             href="/portal/kyc"
             className="mt-3 inline-flex h-11 items-center justify-center rounded-xl bg-[#F59E0B] px-4 text-sm font-semibold text-white"
@@ -652,7 +746,7 @@ function KycBlock() {
 function AccountBlock() {
   return (
     <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#202124]">
-      <p className="font-bold">حساب اعتباری شما برای خرید فعال نیست.</p>
+      <p className="font-bold">حساب اعتباری شما برای معامله فعال نیست.</p>
       <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
         مشاهده اعتبار
       </Link>
@@ -662,10 +756,12 @@ function AccountBlock() {
 
 function PurchaseSuccess({
   order,
+  selling,
   onView,
   onDashboard,
 }: {
   order: Order;
+  selling?: boolean;
   onView: () => void;
   onDashboard: () => void;
 }) {
@@ -674,7 +770,9 @@ function PurchaseSuccess({
     <div className="mx-auto w-full max-w-lg">
       <section className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center shadow-sm" role="status">
         <CheckCircle2 className="mx-auto h-12 w-12 text-[#16A34A]" />
-        <h1 className="mt-3 text-xl font-bold text-[#202124]">سفارش خرید ثبت شد</h1>
+        <h1 className="mt-3 text-xl font-bold text-[#202124]">
+          {selling ? 'سفارش فروش ثبت شد' : 'سفارش خرید ثبت شد'}
+        </h1>
         <p className="mt-2 text-sm text-[#6B7280]">سفارش شما با موفقیت ثبت شد.</p>
         <dl className="mt-6 space-y-3 text-right text-sm">
           <Row label="شماره سفارش" value={order.orderNumber} ltr />
@@ -703,6 +801,7 @@ function ConfirmPurchase({
   open,
   submitting,
   blocked,
+  selling,
   view,
   purity,
   onClose,
@@ -711,6 +810,7 @@ function ConfirmPurchase({
   open: boolean;
   submitting: boolean;
   blocked: boolean;
+  selling?: boolean;
   view: PricingView | null;
   purity: string;
   onClose: () => void;
@@ -732,7 +832,7 @@ function ConfirmPurchase({
       <button type="button" className="absolute inset-0 bg-black/50" aria-label="بستن" onClick={onClose} disabled={submitting} />
       <div className="relative z-10 w-full rounded-t-2xl bg-white p-5 shadow-xl lg:max-w-md lg:rounded-2xl">
         <h2 id="confirm-purchase-title" className="text-lg font-bold text-[#202124]">
-          ثبت سفارش خرید
+          {selling ? 'ثبت سفارش فروش' : 'ثبت سفارش خرید'}
         </h2>
         <p className="mt-3 text-sm font-medium text-[#202124]">
           {formatWeight(view.weightGrams)} طلای آبشده

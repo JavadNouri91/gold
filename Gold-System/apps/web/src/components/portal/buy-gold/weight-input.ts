@@ -1,3 +1,4 @@
+import { compareDecimal } from '@/lib/decimal-string';
 import { toLatinDigits } from '@/lib/utils';
 
 /** Latin decimal string, at most 3 fractional digits for a buy request. */
@@ -36,4 +37,17 @@ export function decreaseWeightByMilli(value: string): string | null {
   const whole = Math.floor(next / 1000);
   const rem = String(next % 1000).padStart(3, '0').replace(/0+$/, '');
   return rem ? `${whole}.${rem}` : String(whole);
+}
+
+/** Largest 3-decimal weight that does not exceed `available`. */
+export function capWeightToAvailable(weight: string, available: string): string | null {
+  let next = canonicalWeight(normalizeWeightInput(weight));
+  if (!isPositiveWeight(next)) return null;
+  for (let step = 0; step < 8 && compareDecimal(next, available) > 0; step += 1) {
+    const lower = decreaseWeightByMilli(next);
+    if (!lower) return null;
+    next = lower;
+  }
+  if (compareDecimal(next, available) > 0) return null;
+  return next;
 }

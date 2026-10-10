@@ -80,7 +80,7 @@ describe('RialBalanceCard', () => {
   it('shows the server available Rial balance in Persian digits and links to the account page', async () => {
     renderCard();
 
-    const link = await screen.findByRole('link', { name: /موجودی ریال من/ });
+    const link = await screen.findByRole('link', { name: /توان خرید/ });
     expect(link).toHaveAttribute('href', '/portal/credit');
     expect(link).toHaveTextContent('۱,۷۵۰,۰۰۰,۰۰۰ ریال');
     expect(link).not.toHaveTextContent('۱,۵۰۰,۰۰۰,۰۰۰');
@@ -94,7 +94,7 @@ describe('RialBalanceCard', () => {
     mockGetAccount.mockReturnValue(new Promise(() => undefined));
     renderCard();
 
-    const link = screen.getByRole('link', { name: /موجودی ریال من/ });
+    const link = screen.getByRole('link', { name: /توان خرید/ });
     expect(link).toHaveAttribute('aria-busy', 'true');
     expect(link).not.toHaveTextContent('۰');
   });
@@ -103,7 +103,7 @@ describe('RialBalanceCard', () => {
     mockGetAccount.mockRejectedValue(new ApiClientError('SERVER', 'fail', 500));
     renderCard();
 
-    const link = await screen.findByRole('link', { name: /موجودی ریال من/ });
+    const link = await screen.findByRole('link', { name: /توان خرید/ });
     expect(link).toHaveTextContent('خطا در دریافت');
     expect(link).not.toHaveTextContent('۰ ریال');
     expect(link).toHaveAttribute('href', '/portal/credit');
@@ -113,7 +113,7 @@ describe('RialBalanceCard', () => {
     mockGetAccount.mockRejectedValue(new ApiClientError('NOT_FOUND', 'missing', 404));
     renderCard();
 
-    const link = await screen.findByRole('link', { name: /موجودی ریال من/ });
+    const link = await screen.findByRole('link', { name: /توان خرید/ });
     expect(link).toHaveTextContent('—');
     expect(link).not.toHaveTextContent('۰');
   });
@@ -124,7 +124,7 @@ describe('RialBalanceCard', () => {
     );
     renderCard();
 
-    const link = await screen.findByRole('link', { name: /موجودی ریال من/ });
+    const link = await screen.findByRole('link', { name: /توان خرید/ });
     expect(link).toHaveTextContent('—');
     expect(link).not.toHaveTextContent('۵,۰۰۰,۰۰۰,۰۰۰');
   });
@@ -139,7 +139,7 @@ describe('DashboardHeader', () => {
     );
 
     expect(await screen.findByText('سلام علی رضایی 👋')).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /موجودی ریال من/ });
+    const link = screen.getByRole('link', { name: /توان خرید/ });
     expect(link).toHaveTextContent('۱,۷۵۰,۰۰۰,۰۰۰ ریال');
     expect(link).toHaveAttribute('href', '/portal/credit');
   });

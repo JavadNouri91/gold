@@ -29,7 +29,6 @@ export function NotificationBell() {
           </span>
         ) : null}
       </span>
-      <span className="hidden sm:inline">اعلان‌ها</span>
     </Link>
   );
 }

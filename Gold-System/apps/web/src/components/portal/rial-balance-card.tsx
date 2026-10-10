@@ -11,7 +11,7 @@ import { formatAuthoritativeDecimal } from '@/lib/utils';
 const ACCOUNT_KEY = 'customer/me/account';
 
 /**
- * Compact header card for the signed-in customer's available Rial balance.
+ * Compact header card for the signed-in customer's remaining Rial purchasing power.
  * The amount is the server `availableRial` field. Gold, reserved, and consumed
  * buckets are not shown and are not recomputed here.
  */
@@ -37,7 +37,7 @@ export function RialBalanceCard() {
       <Wallet className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
       <span className="min-w-0 flex-1 text-start">
         <span className="block truncate text-[10px] font-medium leading-none text-emerald-700 sm:text-[11px]">
-          موجودی ریال من
+          توان خرید
         </span>
         {loading ? (
           <span className="mt-1 block h-3 w-14 animate-pulse rounded bg-emerald-200/80" />

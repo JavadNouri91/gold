@@ -1,6 +1,7 @@
 import { compareDecimal, floorDivide, isZeroDecimal, subtractDecimal } from '../lib/decimal-string';
 import {
   canonicalWeight,
+  capWeightToAvailable,
   decreaseWeightByMilli,
   isPositiveWeight,
   normalizeWeightInput,
@@ -41,6 +42,8 @@ describe('weight input', () => {
     expect(floorDivide('100', '265290000', 3)).toBeNull();
     expect(decreaseWeightByMilli('6.596')).toBe('6.595');
     expect(decreaseWeightByMilli('0.001')).toBeNull();
+    expect(capWeightToAvailable('2.123456', '2.123456')).toBe('2.123');
+    expect(capWeightToAvailable('0.0004', '0.0004')).toBeNull();
   });
 
   it('rejects zero and empty weights', () => {

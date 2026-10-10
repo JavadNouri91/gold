@@ -11,6 +11,7 @@ const mockGetPrice = jest.fn();
 const mockCalculate = jest.fn();
 const mockCreate = jest.fn();
 const mockSubmit = jest.fn();
+const mockPortfolio = jest.fn();
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -33,14 +34,7 @@ jest.mock('@/lib/api', () => {
     ordersApi: {
       create: (...args: unknown[]) => mockCreate(...args),
       submit: (...args: unknown[]) => mockSubmit(...args),
-      portfolio: () =>
-        Promise.resolve({
-          weightGrams: '0.000000',
-          purityRatio: null,
-          averageBuyPriceRial: null,
-          totalBuyValueRial: null,
-          totalSellValueRial: null,
-        }),
+      portfolio: (...args: unknown[]) => mockPortfolio(...args),
     },
   };
 });
@@ -126,10 +120,10 @@ const submitted: Order = {
   createdAt: '2026-09-29T12:00:00.000Z',
 };
 
-function renderPage() {
+function renderPage(side: 'buy' | 'sell' = 'buy') {
   return render(
     <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-      <BuyGoldPage />
+      <BuyGoldPage side={side} />
     </SWRConfig>,
   );
 }
@@ -156,17 +150,26 @@ beforeEach(() => {
   mockCalculate.mockReset();
   mockCreate.mockReset();
   mockSubmit.mockReset();
+  mockPortfolio.mockReset();
   mockGetMe.mockResolvedValue(customer);
   mockGetAccount.mockResolvedValue(account());
   mockGetPrice.mockResolvedValue(price());
   mockCalculate.mockResolvedValue(calculation());
   mockCreate.mockResolvedValue({ ...submitted, status: 'DRAFT' });
   mockSubmit.mockResolvedValue(submitted);
+  mockPortfolio.mockResolvedValue({
+    weightGrams: '2.000000',
+    purityRatio: '0.750000',
+    averageBuyPriceRial: '12350000',
+    totalBuyValueRial: '24700000',
+    totalSellValueRial: null,
+  });
 });
 
 describe('BuyGoldPage', () => {
   it('calculates from the pricing API and creates an order without sending a client total', async () => {
     renderPage();
+    expect(await screen.findByRole('tab', { name: 'خرید طلا' })).toHaveAttribute('aria-selected', 'true');
     expect(await screen.findByText('قیمت لحظه‌ای طلای آبشده')).toBeInTheDocument();
     await calculateFiveGrams();
 
@@ -296,5 +299,25 @@ describe('BuyGoldPage', () => {
     await calculateFiveGrams();
     fireEvent.click(await openConfirm());
     expect(await screen.findByRole('alert')).toHaveTextContent('زمان معاملات در حال حاضر فعال نیست.');
+  });
+
+  it('blocks a sell when the weight exceeds gold holdings', async () => {
+    renderPage('sell');
+    expect(await screen.findByRole('tab', { name: 'فروش طلا' })).toHaveAttribute('aria-selected', 'true');
+    fireEvent.click(screen.getByRole('button', { name: '۵ گرم' }));
+    expect(await screen.findByText('وزن انتخاب‌شده از موجودی طلای شما بیشتر است.')).toBeInTheDocument();
+    expect(screen.getByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('checkbox'));
+    expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
+  });
+
+  it('creates a sell order inside the gold holding', async () => {
+    renderPage('sell');
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    fireEvent.click(screen.getByRole('button', { name: '۲ گرم' }));
+    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    fireEvent.click(await openConfirm());
+    expect(await screen.findByText('سفارش فروش ثبت شد')).toBeInTheDocument();
+    expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ side: 'SELL', weightGrams: '2' }));
   });
 });

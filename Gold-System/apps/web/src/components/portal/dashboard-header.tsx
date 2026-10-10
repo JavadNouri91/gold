@@ -1,8 +1,8 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { Bell, Headphones, Menu, ShieldCheck, UserRound } from 'lucide-react';
 import useSWR from 'swr';
 import { customerApi, fetchBlob, type CustomerProfile } from '@/lib/api';
@@ -52,13 +52,7 @@ export function DashboardHeader({ onMenu }: { onMenu: () => void }) {
             ) : isCredit ? (
               <CreditHeader />
             ) : isNewOrder ? (
-              <Suspense
-                fallback={
-                  <h1 className="truncate text-base font-bold text-[#202124] md:text-lg">خرید طلا</h1>
-                }
-              >
-                <NewOrderHeading customer={customer} fullName={fullName} />
-              </Suspense>
+              <NewOrderHeading />
             ) : isProfile ? (
               <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
                 <div className="min-w-0">
@@ -159,7 +153,6 @@ export function DashboardHeader({ onMenu }: { onMenu: () => void }) {
             className="inline-flex min-h-11 min-w-11 items-center justify-center gap-1.5 rounded-xl px-2.5 text-sm text-slate-600 hover:bg-slate-50"
           >
             <Headphones className="h-4 w-4" />
-            <span className="hidden sm:inline">پشتیبانی</span>
           </button>
           <ProfileMenu customer={customer} />
         </div>
@@ -316,33 +309,12 @@ function ProfileAvatar({
   );
 }
 
-function NewOrderHeading({
-  customer,
-  fullName,
-}: {
-  customer?: CustomerProfile;
-  fullName: string;
-}) {
-  const side = useSearchParams().get('side');
-  if (side === 'sell') {
-    return (
-      <>
-        <h1 className="truncate text-base font-bold text-slate-800 md:text-lg">سلام {fullName} 👋</h1>
-        <p className="mt-0.5 text-xs text-muted-foreground md:text-sm">
-          خوش آمدید، امروز فرصت خوبی برای معامله است.
-        </p>
-        <div className="mt-2">
-          <UserStatusBadge type={customer?.type} status={customer?.status} />
-        </div>
-      </>
-    );
-  }
-
+function NewOrderHeading() {
   return (
     <div className="min-w-0">
-      <h1 className="truncate text-base font-bold text-[#202124] md:text-lg">خرید طلا</h1>
+      <h1 className="truncate text-base font-bold text-[#202124] md:text-lg">خرید و فروش طلا</h1>
       <p className="mt-0.5 hidden text-xs text-[#6B7280] lg:block lg:text-sm">
-        خرید طلای آبشده با قیمت لحظه‌ای
+        خرید و فروش طلای آبشده با قیمت لحظه‌ای
       </p>
     </div>
   );
