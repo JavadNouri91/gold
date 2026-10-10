@@ -1,23 +1,17 @@
 import Link from 'next/link';
-import type { Trade } from '@/lib/api';
-import { StatusBadge } from '@/components/portal/status-badge';
-import { TRADE_STATUS_LABELS, cn, formatDate, formatRial, formatWeight } from '@/lib/utils';
-import { AssetSkeleton, assetCardClass } from './assets-ui';
-
-type TradeSide = 'BUY' | 'SELL';
-
-export type AssetTradeRow = Pick<
-  Trade,
-  'id' | 'tradeNumber' | 'weightGrams' | 'unitPriceRial' | 'totalAmountRial' | 'status' | 'createdAt'
-> & { side?: TradeSide };
+import { Clock3 } from 'lucide-react';
+import type { ActivityTransaction } from '@/lib/api';
+import { SideBadge, TransactionStatus } from '@/components/portal/trades/activity-transactions';
+import { formatRial, formatWeight } from '@/lib/utils';
+import { AssetSkeleton, CardHeading, assetCardClass } from './assets-ui';
 
 export function RecentGoldTransactions({
-  trades,
+  rows,
   loading,
   error,
   onRetry,
 }: {
-  trades: AssetTradeRow[];
+  rows: ActivityTransaction[];
   loading?: boolean;
   error?: boolean;
   onRetry?: () => void;
@@ -25,84 +19,101 @@ export function RecentGoldTransactions({
   return (
     <section aria-labelledby="recent-trades-title" className={assetCardClass}>
       <div className="flex items-center justify-between gap-3">
-        <h2 id="recent-trades-title" className="text-base font-bold text-[#202124]">
-          آخرین معاملات طلا
-        </h2>
-        <Link href="/portal/trades" className="inline-flex min-h-11 items-center text-xs font-semibold text-[#C8922E]">
+        <CardHeading id="recent-trades-title" title="آخرین معاملات" icon={Clock3} />
+        <Link href="/portal/trades" className="inline-flex min-h-11 shrink-0 items-center text-xs font-semibold text-[#C8922E]">
           مشاهده همه
         </Link>
       </div>
 
       {loading ? (
-        <div className="mt-4 space-y-3" aria-hidden>
-          <AssetSkeleton className="h-24 w-full" />
-          <AssetSkeleton className="h-24 w-full" />
-        </div>
+        <AssetSkeleton className="mt-4 h-28 w-full" />
       ) : error ? (
-        <div className="mt-4 rounded-xl bg-red-50 px-3 py-4">
+        <div className="mt-4">
           <p className="text-sm text-[#202124]">اطلاعات معاملات در حال حاضر قابل دریافت نیست.</p>
           <button
             type="button"
             onClick={onRetry}
-            className="mt-3 inline-flex min-h-11 items-center rounded-xl border border-[#E5E7EB] bg-white px-4 text-sm font-semibold"
+            className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[#C8922E]"
           >
             تلاش مجدد
           </button>
         </div>
-      ) : trades.length === 0 ? (
-        <div className="mt-4 rounded-xl bg-[#F8F9FA] px-3 py-4">
+      ) : rows.length === 0 ? (
+        <div className="mt-4">
           <p className="text-sm leading-7 text-[#202124]">هنوز معامله‌ای ثبت نشده است.</p>
-          <Link
-            href="/portal/orders/new"
-            className="mt-3 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#C8922E] px-4 text-sm font-semibold text-white"
-          >
+          <Link href="/portal/orders/new" className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-[#C8922E]">
             شروع معامله
           </Link>
         </div>
       ) : (
-        <ul className="mt-4 space-y-3">
-          {trades.map((trade) => (
-            <li key={trade.id}>
-              <TradeCard trade={trade} />
-            </li>
-          ))}
-        </ul>
+        <>
+          <ul className="mt-4 space-y-3 md:hidden">
+            {rows.map((row) => (
+              <li key={row.id}>
+                <Link href={`/portal/orders/${row.id}`} className="block rounded-xl border border-[#E5E7EB] px-3 py-3">
+                  <TransactionBody row={row} />
+                </Link>
+              </li>
+            ))}
+          </ul>
+          <div className="mt-4 hidden overflow-x-auto md:block">
+            <table className="w-full min-w-[36rem] text-right text-sm">
+              <thead className="text-xs text-[#6B7280]">
+                <tr className="border-b border-[#E5E7EB]">
+                  <th className="px-2 py-2 font-medium">تاریخ</th>
+                  <th className="px-2 py-2 font-medium">نوع</th>
+                  <th className="px-2 py-2 font-medium">وزن</th>
+                  <th className="px-2 py-2 font-medium">قیمت هر گرم</th>
+                  <th className="px-2 py-2 font-medium">مبلغ کل</th>
+                  <th className="px-2 py-2 font-medium">وضعیت</th>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => (
+                  <tr key={row.id} className="border-b border-[#F3F4F6] last:border-0">
+                    <td className="px-2 py-3">
+                      <Link href={`/portal/orders/${row.id}`} className="font-medium text-[#202124]">
+                        {shortDate(row.confirmedAt ?? row.createdAt)}
+                      </Link>
+                    </td>
+                    <td className="px-2 py-3">
+                      <SideBadge side={row.side} />
+                    </td>
+                    <td className="px-2 py-3 tabular-nums">{formatWeight(row.weightGrams)}</td>
+                    <td className="px-2 py-3 tabular-nums">{formatRial(row.unitPriceRial)}</td>
+                    <td className="px-2 py-3 font-semibold tabular-nums">{formatRial(row.totalAmountRial)}</td>
+                    <td className="px-2 py-3">
+                      <TransactionStatus status={row.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </section>
   );
 }
 
-function TradeCard({ trade }: { trade: AssetTradeRow }) {
-  const tone = tradeTone(trade);
+function TransactionBody({ row }: { row: ActivityTransaction }) {
   return (
-    <Link
-      href={`/portal/trades/${trade.id}`}
-      className="block rounded-xl border border-[#E5E7EB] bg-[#F8F9FA] px-3 py-3"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className={cn('text-sm font-bold', tone.className)}>{tone.label}</p>
-          <p className="mt-1 text-sm font-semibold tabular-nums text-[#202124]">{formatWeight(trade.weightGrams)}</p>
-        </div>
-        <StatusBadge status={trade.status} label={TRADE_STATUS_LABELS[trade.status] ?? trade.status} />
+    <>
+      <div className="flex items-center justify-between gap-3">
+        <SideBadge side={row.side} />
+        <TransactionStatus status={row.status} />
       </div>
-      <p className="mt-2 text-xs tabular-nums text-[#6B7280]">{formatRial(trade.unitPriceRial)} / گرم</p>
-      <div className="mt-1 flex items-end justify-between gap-3">
-        <p className="text-sm font-bold tabular-nums text-[#202124]">{formatRial(trade.totalAmountRial)}</p>
-        <p className="text-xs text-[#6B7280]">{formatDate(trade.createdAt)}</p>
-      </div>
-    </Link>
+      <p className="mt-2 text-xs text-[#6B7280]">{shortDate(row.confirmedAt ?? row.createdAt)}</p>
+      <p className="mt-2 text-sm font-semibold tabular-nums">{formatWeight(row.weightGrams)}</p>
+      <p className="mt-1 text-xs tabular-nums text-[#6B7280]">{formatRial(row.unitPriceRial)} / گرم</p>
+      <p className="mt-1 text-sm font-bold tabular-nums">{formatRial(row.totalAmountRial)}</p>
+    </>
   );
 }
 
-function tradeTone(trade: AssetTradeRow): { label: string; className: string } {
-  if (trade.side === 'SELL') return { label: 'فروش', className: 'text-[#DC2626]' };
-  if (trade.side === 'BUY') return { label: 'خرید', className: 'text-[#16A34A]' };
-  if (trade.status === 'SETTLING' || trade.status === 'PENDING_CONFIRMATION') {
-    return { label: 'در انتظار', className: 'text-[#A16207]' };
-  }
-  if (trade.status === 'REJECTED' || trade.status === 'CANCELLED' || trade.status === 'REVERSED') {
-    return { label: 'ناموفق', className: 'text-[#DC2626]' };
-  }
-  return { label: 'معامله', className: 'text-[#1D4ED8]' };
+function shortDate(iso: string | null): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleDateString('fa-IR');
 }

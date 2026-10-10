@@ -6,13 +6,7 @@
  * Unclassified orders are not treated as inventory.
  */
 
-import {
-  divideDecimal,
-  isZeroDecimal,
-  multiplyDecimal,
-  ratioPercent,
-  subtractDecimal,
-} from './decimal-string';
+import { isZeroDecimal, multiplyDecimal, ratioPercent, subtractDecimal } from './decimal-string';
 
 export interface CustomerHolding {
   weightGrams: string;

@@ -4,16 +4,11 @@ import userEvent from '@testing-library/user-event';
 import { AssetsPage } from '../components/portal/assets/assets-page';
 import { PortfolioValueChart } from '../components/portal/assets/portfolio-value-chart';
 import { MobileBottomNavigation } from '../components/portal/mobile-bottom-navigation';
-import {
-  isRegisteredHolding,
-  loadCustomerPosition,
-  toPortfolioPosition,
-  type PortfolioPosition,
-} from '../lib/customer-portfolio';
-import { previewPortfolioHistory, summarizePreviewRial } from '../lib/portfolio-history-preview';
-import { moneyTone } from '../lib/portfolio-display';
-import { formatRial, formatWeight } from '../lib/utils';
-import type { Trade } from '../lib/api';
+import { isRegisteredHolding, toPortfolioPosition, type PortfolioPosition } from '../lib/customer-portfolio';
+import { netBookedGrams, seriesPointLabel } from '../lib/asset-chart-range';
+import { formatRial, formatWeight, toPersianDigits } from '../lib/utils';
+import { formatSignedRial as signed } from '../lib/portfolio-display';
+import type { ActivityTransaction, CurrentPrice } from '../lib/api';
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/portal/assets',
@@ -26,38 +21,37 @@ const position: PortfolioPosition = {
   marketValueRial: '5875000000',
   changeRial: '236000000',
   changePercent: '4.7',
-  realizedPnlRial: '0',
+  realizedPnlRial: null,
   unrealizedPnlRial: '236000000',
   totalBuyValueRial: '1400000000',
   totalSellValueRial: null,
   assets: [{ id: 'melted', label: 'طلای آبشده', weightGrams: '24.750', share: 100 }],
 };
 
+const price: CurrentPrice = {
+  id: 'price-1',
+  rawValue: '58420000',
+  normalizedValue: '58420000',
+  unit: 'RIAL_PER_GRAM',
+  capturedAt: '2026-10-10T08:30:00.000Z',
+  validityStatus: 'VALID',
+};
+
 function renderAssets(overrides: Partial<React.ComponentProps<typeof AssetsPage>> = {}) {
-  const series = previewPortfolioHistory('1m');
   return render(
     <AssetsPage
       position={null}
-      chartSeries={series}
-      chartPeriod="1m"
-      onChartPeriod={() => undefined}
-      performanceSeries={series}
-      performancePeriod="1m"
-      onPerformancePeriod={() => undefined}
-      trades={[]}
+      range="all"
+      onRangeChange={() => undefined}
+      weightPoints={[]}
+      transactions={[]}
       {...overrides}
     />,
   );
 }
 
-describe('customer portfolio availability', () => {
-  it('does not invent a personal gold balance', () => {
-    expect(loadCustomerPosition()).toBeNull();
-    expect(isRegisteredHolding(null)).toBe(false);
-    expect(isRegisteredHolding({ ...position, weightGrams: '0.000' })).toBe(false);
-  });
-
-  it('values a booked holding with the live gram price', () => {
+describe('customer portfolio valuation', () => {
+  it('prices booked grams with the live price and keeps unrealized separate from realized', () => {
     const valued = toPortfolioPosition(
       {
         weightGrams: '10',
@@ -69,105 +63,120 @@ describe('customer portfolio availability', () => {
       '60000000',
     );
     expect(isRegisteredHolding(valued)).toBe(true);
-    expect(valued?.purityLabel).toBe('750');
     expect(valued?.marketValueRial).toBe('600000000');
-    expect(valued?.changeRial).toBe('100000000');
+    expect(valued?.unrealizedPnlRial).toBe('100000000');
+    expect(valued?.realizedPnlRial).toBeNull();
+    expect(valued?.purityLabel).toBe('750');
   });
 
-  it('classifies profit and loss signs without reparsing money', () => {
-    expect(moneyTone('236000000')).toBe('positive');
-    expect(moneyTone('-10')).toBe('negative');
-    expect(moneyTone('0')).toBe('neutral');
+  it('labels activity buckets and nets booked grams only', () => {
+    expect(seriesPointLabel('M:1404-07')).toBe('مهر');
+    expect(
+      netBookedGrams({ key: 'M:1404-07', buyGrams: '10.000000', sellGrams: '4.000000', unclassifiedGrams: '2' }),
+    ).toBe('6');
   });
 });
 
 describe('AssetsPage', () => {
-  it('shows the empty holding state instead of a sample balance', () => {
+  it('shows an empty holding without a fabricated balance or chart', () => {
     renderAssets();
-    const balance = screen.getByRole('region', { name: 'موجودی طلای آبشده' });
-    expect(within(balance).getByText(/هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است/)).toBeInTheDocument();
-    expect(within(balance).getByRole('link', { name: 'خرید طلا' })).toHaveAttribute(
-      'href',
-      '/portal/orders/new?side=buy',
-    );
-    expect(within(balance).queryByText(formatWeight('24.75'))).not.toBeInTheDocument();
-    expect(screen.getByText(/ارزش روز پس از ثبت موجودی/)).toBeInTheDocument();
+    expect(screen.getByText(/هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'خرید طلا' })).toHaveAttribute('href', '/portal/orders/new?side=buy');
+    expect(screen.getByText(/تاریخچه ارزش دارایی ثبت نشده است/)).toBeInTheDocument();
+    expect(screen.queryByText(/نمونه نمایشی/)).not.toBeInTheDocument();
+    expect(screen.queryByText('۳۰ مهر')).not.toBeInTheDocument();
   });
 
-  it('renders a provided position without dropping server figures', () => {
-    renderAssets({ position });
+  it('shows live value, weight, unrealized profit, and the spot price', () => {
+    renderAssets({ position, price });
+    const value = screen.getByRole('region', { name: 'ارزش روز دارایی' });
+    expect(within(value).getByText(formatRial(position.marketValueRial))).toBeInTheDocument();
+    expect(within(value).getByText(/مقایسه با ماه گذشته در دسترس نیست/)).toBeInTheDocument();
+    expect(value).not.toHaveTextContent(signed(position.unrealizedPnlRial));
+
     const balance = screen.getByRole('region', { name: 'موجودی طلای آبشده' });
     expect(within(balance).getByText(formatWeight(position.weightGrams))).toBeInTheDocument();
-    expect(within(balance).getByText('750')).toBeInTheDocument();
-    expect(within(balance).getByText(formatRial(position.marketValueRial))).toBeInTheDocument();
-    expect(screen.getByText('ارزش خرید کل')).toBeInTheDocument();
-    expect(screen.queryByText('ارزش فروش کل')).not.toBeInTheDocument();
+    expect(within(balance).getByText(`عیار ${toPersianDigits('750')}`)).toBeInTheDocument();
+
+    const unrealized = screen.getByRole('region', { name: 'سود و زیان تحقق‌نیافته' });
+    expect(unrealized).toHaveTextContent(signed(position.unrealizedPnlRial));
+    expect(within(unrealized).getByText(/ارزش روز منهای بهای خرید مانده/)).toBeInTheDocument();
+    expect(within(unrealized).queryByText('سود و زیان تحقق‌یافته')).not.toBeInTheDocument();
+
+    expect(screen.getByText(formatRial(price.normalizedValue))).toBeInTheDocument();
+    expect(screen.getByText('بازار فعال')).toBeInTheDocument();
   });
 
-  it('labels preview charts and keeps weight history distinct from price', () => {
-    renderAssets();
-    expect(screen.getAllByText(/نمونه نمایشی/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/این نمودار قیمت بازار طلا نیست/)).toBeInTheDocument();
-    expect(screen.getByRole('img', { name: /نمودار ارزش دارایی|آخرین ارزش/ })).toBeInTheDocument();
-    expect(screen.getAllByRole('button', { name: 'دانلود گزارش' }).every((button) => button.hasAttribute('disabled'))).toBe(true);
-    expect(screen.getByRole('link', { name: 'مشاهده همه' })).toHaveAttribute('href', '/portal/trades');
+  it('draws weight changes from booked activity and keeps the value chart empty', () => {
+    renderAssets({
+      weightPoints: [
+        { key: 'M:1404-07', buyGrams: '10.000000', sellGrams: '4.000000', unclassifiedGrams: '1.000000' },
+      ],
+    });
+    const weight = screen.getByRole('region', { name: 'تغییرات وزن دارایی' });
+    expect(within(weight).getByText('مهر')).toBeInTheDocument();
+    expect(within(weight).getByText(formatWeight('6'))).toBeInTheDocument();
+    expect(within(weight).getByText(/سفارش‌های بدون نوع خرید یا فروش/)).toBeInTheDocument();
+    expect(screen.getByText(/تاریخچه ارزش دارایی ثبت نشده است/)).toBeInTheDocument();
   });
 
-  it('shows an empty trade state and a real trade card', () => {
-    renderAssets();
-    expect(screen.getByText('هنوز معامله‌ای ثبت نشده است.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'شروع معامله' })).toHaveAttribute('href', '/portal/orders/new');
-  });
-
-  it('lists the customer’s own trades as cards', () => {
-    const trade = {
-      id: 't-1',
-      tradeNumber: 'TR-1',
-      weightGrams: '10',
-      unitPriceRial: '58400000',
-      totalAmountRial: '584000000',
-      status: 'COMPLETED',
-      createdAt: '2026-09-25T08:00:00.000Z',
+  it('lists the customer activity and only links to existing actions', () => {
+    const row: ActivityTransaction = {
+      id: 'ord-1',
+      orderNumber: 'ORD-1',
       side: 'SELL',
-    } satisfies Partial<Trade> & { side: 'SELL' };
-    renderAssets({ trades: [trade] });
-    expect(screen.getByText('فروش')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /فروش/ }).getAttribute('href')).toBe('/portal/trades/t-1');
-    expect(screen.queryByText('هنوز معامله‌ای ثبت نشده است.')).not.toBeInTheDocument();
+      status: 'COMPLETED',
+      weightGrams: '5',
+      purityRatio: '0.750000',
+      unitPriceRial: '58000000',
+      totalAmountRial: '290000000',
+      createdAt: '2026-10-01T08:00:00.000Z',
+      submittedAt: null,
+      confirmedAt: '2026-10-02T08:00:00.000Z',
+      reservedAmountRial: null,
+      countsTowardVolume: true,
+      tradeId: null,
+      tradeNumber: null,
+      quotationId: null,
+      quotationNumber: null,
+      wageAmount: null,
+      taxAmount: null,
+      paymentMethods: [],
+      settlementStatus: null,
+    };
+    renderAssets({ transactions: [row] });
+    expect(screen.getAllByText('فروش').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('link').some((link) => link.getAttribute('href') === '/portal/orders/ord-1')).toBe(
+      true,
+    );
+    expect(screen.getByRole('link', { name: 'مشاهده همه' })).toHaveAttribute('href', '/portal/trades');
+    expect(screen.getByRole('link', { name: /گزارش معاملات/ })).toHaveAttribute('href', '/portal/trades');
+    expect(screen.getByRole('link', { name: /واریز ریال/ })).toHaveAttribute('href', '/portal/payments');
+    expect(screen.queryByRole('button', { name: 'دانلود گزارش' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'برداشت ریال' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'گزارش سود و زیان' })).not.toBeInTheDocument();
   });
 
-  it('shows a retry when asset price data fails', () => {
-    renderAssets({ priceError: true });
-    expect(screen.getByRole('alert')).toHaveTextContent('اطلاعات دارایی در حال حاضر قابل دریافت نیست.');
-    expect(screen.getByRole('button', { name: 'تلاش مجدد' })).toBeInTheDocument();
+  it('asks to retry when the holding request fails', () => {
+    renderAssets({ holdingError: true });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('اطلاعات دارایی در حال حاضر قابل دریافت نیست.');
+    expect(within(alert).getByRole('button', { name: 'تلاش مجدد' })).toBeInTheDocument();
   });
 });
 
 describe('PortfolioValueChart', () => {
-  it('switches the preview window', async () => {
+  it('changes the selected range without drawing a series', async () => {
     const user = userEvent.setup();
     function Harness() {
-      const [period, setPeriod] = useState<'1m' | '3m' | '6m' | '1y'>('1m');
-      const series = previewPortfolioHistory(period);
-      return <PortfolioValueChart series={series} period={period} onPeriodChange={setPeriod} />;
+      const [range, setRange] = useState<'7d' | '30d' | '3m' | '6m' | '1y' | 'all'>('all');
+      return <PortfolioValueChart range={range} onRangeChange={setRange} />;
     }
     render(<Harness />);
-    expect(screen.getByText('۳۰ مهر')).toBeInTheDocument();
+    expect(screen.getByText(/در بازه همه/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: '۳ ماه' }));
-    expect(screen.getByText('مهر')).toBeInTheDocument();
-    expect(screen.queryByText('۳۰ مهر')).not.toBeInTheDocument();
-  });
-});
-
-describe('preview history', () => {
-  it('summarizes the isolated series with integer rials', () => {
-    const series = previewPortfolioHistory('1m');
-    const summary = summarizePreviewRial(series.points);
-    expect(series.source).toBe('preview');
-    expect(series.points).toHaveLength(7);
-    expect(summary?.min).toBe('1000000000');
-    expect(summary?.max).toBe('2500000000');
-    expect(summary?.last).toBe('2475000000');
+    expect(screen.getByText(/در بازه ۳ ماه/)).toBeInTheDocument();
+    expect(screen.queryByRole('img', { name: /آخرین ارزش/ })).not.toBeInTheDocument();
   });
 });
 
@@ -176,8 +185,5 @@ describe('MobileBottomNavigation', () => {
     render(<MobileBottomNavigation />);
     expect(screen.getByRole('link', { name: 'دارایی' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByRole('link', { name: 'خرید/فروش' })).toHaveAttribute('href', '/portal/orders/new');
-    expect(screen.getByRole('link', { name: 'خانه' })).toHaveAttribute('href', '/portal/dashboard');
-    expect(screen.getByRole('link', { name: 'معاملات' })).toHaveAttribute('href', '/portal/trades');
-    expect(screen.getByRole('link', { name: 'پروفایل' })).toHaveAttribute('href', '/portal/profile');
   });
 });
