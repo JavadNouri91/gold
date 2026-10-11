@@ -120,11 +120,57 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 // ─── Number / currency formatting ────────────────────────────────────────────
+// Display currency is Toman; API / DB amounts stay in Rial (1 Toman = 10 Rial).
+
+function normalizeDecimalInput(value: string | number | null | undefined): string | null {
+  if (value == null || value === '') return null;
+  const trimmed = toLatinDigits(String(value).trim()).replace(/,/g, '').replace(/\s/g, '');
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return null;
+  return trimmed;
+}
 
 /**
- * Format a Rial amount with thousands separators.
- * Input is a string from the backend (Decimal.toFixed(2)).
+ * Convert a Rial decimal string to Toman by shifting the radix point one place left.
+ * Does not use floating-point arithmetic.
  */
+export function rialToToman(value: string | number | null | undefined): string | null {
+  const trimmed = normalizeDecimalInput(value);
+  if (trimmed == null) return null;
+  const negative = trimmed.startsWith('-');
+  const unsigned = negative ? trimmed.slice(1) : trimmed;
+  const [intPart = '0', fraction = ''] = unsigned.split('.');
+  const digits = `${intPart}${fraction}`;
+  let point = intPart.length - 1;
+  let padded = digits;
+  if (point < 0) {
+    padded = `${'0'.repeat(-point)}${digits}`;
+    point = 0;
+  }
+  const whole = (padded.slice(0, point) || '0').replace(/^0+(?=\d)/, '') || '0';
+  const frac = padded.slice(point).replace(/0+$/, '');
+  const body = frac ? `${whole}.${frac}` : whole;
+  return negative && body !== '0' ? `-${body}` : body;
+}
+
+/**
+ * Convert a Toman decimal string to Rial by shifting the radix point one place right.
+ * Does not use floating-point arithmetic.
+ */
+export function tomanToRial(value: string | number | null | undefined): string | null {
+  const trimmed = normalizeDecimalInput(value);
+  if (trimmed == null) return null;
+  const negative = trimmed.startsWith('-');
+  const unsigned = negative ? trimmed.slice(1) : trimmed;
+  const [intPart = '0', fraction = ''] = unsigned.split('.');
+  if (!fraction) {
+    const body = `${intPart}0`.replace(/^0+(?=\d)/, '') || '0';
+    return negative && body !== '0' ? `-${body}` : body;
+  }
+  const whole = `${intPart}${fraction[0] ?? '0'}`.replace(/^0+(?=\d)/, '') || '0';
+  const frac = fraction.slice(1).replace(/0+$/, '');
+  const body = frac ? `${whole}.${frac}` : whole;
+  return negative && body !== '0' ? `-${body}` : body;
+}
 
 /**
  * Display a backend decimal string with thousands grouping.
@@ -146,19 +192,23 @@ export function formatAuthoritativeDecimal(
   return `${negative ? '−' : ''}${toPersianDigits(body)} ${suffix}`.trim();
 }
 
+/** Format a Rial amount for UI display in Toman. */
 export function formatMoney(value: string | number | null | undefined): string {
-  return formatAuthoritativeDecimal(value, 'ریال');
+  const toman = rialToToman(value);
+  if (toman == null) {
+    if (value == null || value === '') return '—';
+    return formatAuthoritativeDecimal(value, 'تومان');
+  }
+  return formatAuthoritativeDecimal(toman, 'تومان');
 }
 
 export function formatWeight(value: string | number | null | undefined): string {
   return formatAuthoritativeDecimal(value, 'گرم');
 }
 
+/** Alias of formatMoney — Rial storage, Toman display. */
 export function formatRial(value: string | number | null | undefined): string {
-  if (value == null || value === '') return '—';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(num)) return '—';
-  return num.toLocaleString('fa-IR') + ' ریال';
+  return formatMoney(value);
 }
 
 /**

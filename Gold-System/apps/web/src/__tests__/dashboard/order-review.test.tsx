@@ -9,7 +9,7 @@ jest.mock('@/lib/auth', () => ({
 }));
 
 jest.mock('@/lib/internal-api', () => ({
-  assignmentsApi: { startReview: jest.fn(), assign: jest.fn() },
+  assignmentsApi: { startReview: jest.fn(), assign: jest.fn(), claim: jest.fn() },
   internalOrdersApi: { approve: jest.fn(), reject: jest.fn(), requestRevision: jest.fn() },
   internalTradesApi: { confirm: jest.fn() },
 }));
@@ -71,12 +71,29 @@ describe('order review', () => {
     render(<ReviewContextPanel context={context} onChanged={jest.fn()} />);
     expect(screen.getByText('ORD-9')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'تأیید سفارش' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'شروع بررسی' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'شروع بررسی' })).not.toBeInTheDocument();
+  });
+
+  it('lets a reviewer claim a quoted order', () => {
+    signIn(['trade.review', 'trade.approve']);
+    render(
+      <ReviewContextPanel
+        context={{ ...context, order: { ...context.order, status: 'QUOTED' } }}
+        onChanged={jest.fn()}
+      />,
+    );
+    expect(screen.getByRole('button', { name: 'برداشت برای بررسی' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'تأیید سفارش' })).not.toBeInTheDocument();
   });
 
   it('hides approval from an operator who can only assign', () => {
     signIn(['order.assign']);
-    render(<ReviewContextPanel context={context} onChanged={jest.fn()} />);
+    render(
+      <ReviewContextPanel
+        context={{ ...context, order: { ...context.order, status: 'QUOTED' } }}
+        onChanged={jest.fn()}
+      />,
+    );
     expect(screen.queryByRole('button', { name: 'تأیید سفارش' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'تخصیص بررسی‌کننده' })).toBeInTheDocument();
   });

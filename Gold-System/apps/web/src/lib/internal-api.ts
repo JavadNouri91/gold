@@ -1012,6 +1012,9 @@ export const assignmentsApi = {
       body: JSON.stringify(input),
     });
   },
+  claim(orderId: string): Promise<AssignmentRecord> {
+    return request(`/orders/${orderId}/claim`, { method: 'POST' });
+  },
   startReview(orderId: string): Promise<{ message: string; orderId: string }> {
     return request(`/orders/${orderId}/start-review`, { method: 'POST' });
   },

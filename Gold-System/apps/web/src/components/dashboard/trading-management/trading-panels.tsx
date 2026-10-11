@@ -183,7 +183,7 @@ export function Overview({
         <CardContent>
           {data.currentLimits ? (
             <div className="grid gap-4 md:grid-cols-3">
-              <LimitBlock label="سقف ریالی" meter={data.currentLimits.amount} kind="money" color="#22c55e" />
+              <LimitBlock label="سقف مبلغ" meter={data.currentLimits.amount} kind="money" color="#22c55e" />
               <LimitBlock label="سقف وزن طلا" meter={data.currentLimits.weight} kind="weight" color="#d4a017" />
               <LimitBlock label="سقف تعداد معاملات" meter={data.currentLimits.count} kind="count" color="#3b82f6" />
             </div>
@@ -390,7 +390,7 @@ export function WeeklyPanel({
                     <tr>
                       <th className="px-2 py-2 font-medium">عنوان</th>
                       <th className="px-2 py-2 font-medium">ساعت</th>
-                      <th className="px-2 py-2 font-medium">سقف ریالی</th>
+                      <th className="px-2 py-2 font-medium">سقف مبلغ</th>
                       <th className="px-2 py-2 font-medium">سقف وزن</th>
                       <th className="px-2 py-2 font-medium">وضعیت</th>
                       <th className="px-2 py-2 font-medium">عملیات</th>
@@ -449,7 +449,7 @@ export function LimitsPanel({
         <div className="grid gap-4 md:grid-cols-3">
           <LimitBlock label="سقف تعداد معاملات" meter={data.currentLimits.count} kind="count" color="#3b82f6" />
           <LimitBlock label="سقف وزن طلا" meter={data.currentLimits.weight} kind="weight" color="#d4a017" />
-          <LimitBlock label="سقف ریالی" meter={data.currentLimits.amount} kind="money" color="#22c55e" />
+          <LimitBlock label="سقف مبلغ" meter={data.currentLimits.amount} kind="money" color="#22c55e" />
         </div>
       ) : (
         <p className="text-sm text-muted-foreground">بازه‌ای در حال اجرا نیست. سقف‌ها روی بازه‌های هفتگی تنظیم می‌شوند.</p>

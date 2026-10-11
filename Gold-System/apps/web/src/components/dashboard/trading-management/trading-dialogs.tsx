@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { ApiClientError } from '@/lib/api';
 import type { TradingMarker, TradingSessionBody, TradingSessionView } from '@/lib/internal-api';
-import { toLatinDigits } from '@/lib/utils';
+import { rialToToman, toLatinDigits, tomanToRial } from '@/lib/utils';
 import { WEEKDAYS } from './trading-widgets';
 
 export interface SessionDraft {
@@ -20,6 +20,12 @@ function field(value: string | null | undefined): string {
   return value ?? '';
 }
 
+/** Prefill a money input from a stored Rial amount; UI shows Toman. */
+function tomanField(value: string | null | undefined): string {
+  if (value == null || value === '') return '';
+  return rialToToman(value) ?? '';
+}
+
 function numberOrNull(value: string): string | null {
   const text = toLatinDigits(value).replace(/,/g, '').replace(/\s/g, '').trim();
   if (!text) return null;
@@ -27,6 +33,17 @@ function numberOrNull(value: string): string | null {
     throw new Error('مقدار عددی نامعتبر است.');
   }
   return text;
+}
+
+/** Parse a Toman money field into the Rial amount sent to the API. */
+function rialOrNull(value: string): string | null {
+  const text = toLatinDigits(value).replace(/,/g, '').replace(/\s/g, '').trim();
+  if (!text) return null;
+  const rial = tomanToRial(text);
+  if (rial == null) {
+    throw new Error('مقدار عددی نامعتبر است.');
+  }
+  return rial;
 }
 
 function minutes(value: string): number | null {
@@ -52,11 +69,11 @@ export function SessionDialog({
   const [startTime, setStartTime] = useState(session?.startTime ?? '09:00');
   const [endTime, setEndTime] = useState(session?.endTime ?? '13:00');
   const [enabled, setEnabled] = useState(session?.enabled ?? true);
-  const [maxAmount, setMaxAmount] = useState(field(session?.maxAmountRial));
+  const [maxAmount, setMaxAmount] = useState(tomanField(session?.maxAmountRial));
   const [usedCountCap, setUsedCountCap] = useState(field(session?.maxCount == null ? '' : String(session.maxCount)));
   const [maxWeight, setMaxWeight] = useState(field(session?.maxWeightGrams));
-  const [minAmount, setMinAmount] = useState(field(session?.minAmountRial));
-  const [maxSingleAmount, setMaxSingleAmount] = useState(field(session?.maxSingleAmountRial));
+  const [minAmount, setMinAmount] = useState(tomanField(session?.minAmountRial));
+  const [maxSingleAmount, setMaxSingleAmount] = useState(tomanField(session?.maxSingleAmountRial));
   const [minWeight, setMinWeight] = useState(field(session?.minWeightGrams));
   const [maxSingleWeight, setMaxSingleWeight] = useState(field(session?.maxSingleWeightGrams));
   const [error, setError] = useState<string | null>(null);
@@ -76,11 +93,11 @@ export function SessionDialog({
         if (!title.trim()) throw new Error('عنوان بازه الزامی است.');
       }
       const body: TradingSessionBody = {
-        maxAmountRial: numberOrNull(maxAmount),
+        maxAmountRial: rialOrNull(maxAmount),
         maxCount: usedCountCap.trim() ? Number(numberOrNull(usedCountCap)) : null,
         maxWeightGrams: numberOrNull(maxWeight),
-        minAmountRial: numberOrNull(minAmount),
-        maxSingleAmountRial: numberOrNull(maxSingleAmount),
+        minAmountRial: rialOrNull(minAmount),
+        maxSingleAmountRial: rialOrNull(maxSingleAmount),
         minWeightGrams: numberOrNull(minWeight),
         maxSingleWeightGrams: numberOrNull(maxSingleWeight),
       };
@@ -130,11 +147,11 @@ export function SessionDialog({
             </label>
           </>
         )}
-        <Input label="سقف مبلغ معاملات" dir="ltr" value={maxAmount} onChange={(event) => setMaxAmount(event.target.value)} hint="ریال" />
+        <Input label="سقف مبلغ معاملات" dir="ltr" value={maxAmount} onChange={(event) => setMaxAmount(event.target.value)} hint="تومان" />
         <Input label="سقف وزن طلا" dir="ltr" value={maxWeight} onChange={(event) => setMaxWeight(event.target.value)} hint="گرم" />
         <Input label="سقف تعداد معاملات" dir="ltr" value={usedCountCap} onChange={(event) => setUsedCountCap(event.target.value)} />
-        <Input label="حداقل مبلغ معامله" dir="ltr" value={minAmount} onChange={(event) => setMinAmount(event.target.value)} hint="ریال" />
-        <Input label="حداکثر مبلغ معامله" dir="ltr" value={maxSingleAmount} onChange={(event) => setMaxSingleAmount(event.target.value)} hint="ریال" />
+        <Input label="حداقل مبلغ معامله" dir="ltr" value={minAmount} onChange={(event) => setMinAmount(event.target.value)} hint="تومان" />
+        <Input label="حداکثر مبلغ معامله" dir="ltr" value={maxSingleAmount} onChange={(event) => setMaxSingleAmount(event.target.value)} hint="تومان" />
         <Input label="حداقل وزن" dir="ltr" value={minWeight} onChange={(event) => setMinWeight(event.target.value)} hint="گرم" />
         <Input label="حداکثر وزن" dir="ltr" value={maxSingleWeight} onChange={(event) => setMaxSingleWeight(event.target.value)} hint="گرم" />
         {error ? <p className="text-sm text-red-600 sm:col-span-2">{error}</p> : null}

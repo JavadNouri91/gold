@@ -34,7 +34,7 @@ export function CreditComposition({ figures }: { figures: CreditFigures }) {
           ))}
         </ul>
       </div>
-      <p className="sr-only">ترکیب اعتبار: {summary}. سقف اعتبار {formatCreditAmount(figures.limit)} ریال.</p>
+      <p className="sr-only">ترکیب اعتبار: {summary}. سقف اعتبار {formatCreditAmount(figures.limit)} تومان.</p>
     </CreditSection>
   );
 }
@@ -90,7 +90,7 @@ function Donut({
         <span className="max-w-[5.5rem] break-words text-[11px] font-bold leading-4 tabular-nums text-[#202124]">
           {center}
         </span>
-        <span className="text-[10px] text-[#6B7280]">ریال</span>
+        <span className="text-[10px] text-[#6B7280]">تومان</span>
         <span className="text-[10px] text-[#6B7280]">سقف اعتبار</span>
       </div>
     </div>

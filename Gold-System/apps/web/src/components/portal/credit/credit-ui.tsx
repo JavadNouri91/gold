@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { cn, formatAuthoritativeDecimal, toPersianDigits } from '@/lib/utils';
+import { cn, formatAuthoritativeDecimal, formatMoney, rialToToman, toPersianDigits } from '@/lib/utils';
 import type { CreditStatusView } from '@/lib/credit-view';
 
 export const creditCardClass =
@@ -9,12 +9,14 @@ export function CreditSkeleton({ className }: { className?: string }) {
   return <div className={cn('animate-pulse rounded-xl bg-[#E5E7EB]', className)} aria-hidden />;
 }
 
+/** Format a Rial credit figure for UI (Toman digits, no unit suffix). */
 export function formatCreditAmount(value: string): string {
-  return formatAuthoritativeDecimal(value, '');
+  const toman = rialToToman(value);
+  return formatAuthoritativeDecimal(toman ?? value, '');
 }
 
 export function formatCreditMoney(value: string): string {
-  return formatAuthoritativeDecimal(value, 'ریال');
+  return formatMoney(value);
 }
 
 export function formatShare(percent: number | null): string {

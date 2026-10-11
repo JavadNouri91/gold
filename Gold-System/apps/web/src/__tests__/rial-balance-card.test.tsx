@@ -4,6 +4,7 @@ import { SWRConfig } from 'swr';
 import { ApiClientError, type CustomerAccount, type CustomerProfile } from '@/lib/api';
 import { RialBalanceCard } from '@/components/portal/rial-balance-card';
 import { DashboardHeader } from '@/components/portal/dashboard-header';
+import { ThemeProvider } from '@/components/theme-provider';
 
 const mockGetMe = jest.fn();
 const mockGetAccount = jest.fn();
@@ -82,11 +83,11 @@ describe('RialBalanceCard', () => {
 
     const link = await screen.findByRole('link', { name: /توان خرید/ });
     expect(link).toHaveAttribute('href', '/portal/credit');
-    expect(link).toHaveTextContent('۱,۷۵۰,۰۰۰,۰۰۰ ریال');
+    expect(link).toHaveTextContent('۱۷۵,۰۰۰,۰۰۰ تومان');
     expect(link).not.toHaveTextContent('۱,۵۰۰,۰۰۰,۰۰۰');
     expect(link).not.toHaveTextContent('۵,۰۰۰,۰۰۰,۰۰۰');
     expect(link).not.toHaveTextContent('۸۸۸,۸۸۸,۸۸۸');
-    expect(link).not.toHaveTextContent('۱ ریال');
+    expect(link).not.toHaveTextContent('۱ تومان');
     expect(mockGetAccount).toHaveBeenCalledTimes(1);
   });
 
@@ -105,7 +106,7 @@ describe('RialBalanceCard', () => {
 
     const link = await screen.findByRole('link', { name: /توان خرید/ });
     expect(link).toHaveTextContent('خطا در دریافت');
-    expect(link).not.toHaveTextContent('۰ ریال');
+    expect(link).not.toHaveTextContent('۰ تومان');
     expect(link).toHaveAttribute('href', '/portal/credit');
   });
 
@@ -133,14 +134,16 @@ describe('RialBalanceCard', () => {
 describe('DashboardHeader', () => {
   it('keeps the Rial balance in the header beside the signed-in customer', async () => {
     render(
-      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-        <DashboardHeader onMenu={() => undefined} />
-      </SWRConfig>,
+      <ThemeProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <DashboardHeader onMenu={() => undefined} />
+        </SWRConfig>
+      </ThemeProvider>,
     );
 
     expect(await screen.findByText('سلام علی رضایی 👋')).toBeInTheDocument();
     const link = screen.getByRole('link', { name: /توان خرید/ });
-    expect(link).toHaveTextContent('۱,۷۵۰,۰۰۰,۰۰۰ ریال');
+    expect(link).toHaveTextContent('۱۷۵,۰۰۰,۰۰۰ تومان');
     expect(link).toHaveAttribute('href', '/portal/credit');
   });
 });

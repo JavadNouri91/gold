@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { PageSpinner } from '@/components/ui/spinner';
 import { Alert } from '@/components/ui/alert';
 import { StatusBadge } from '@/components/portal/status-badge';
+import { OrderRemainingSteps } from '@/components/portal/order-remaining-steps';
 import {
   formatRial,
   formatGrams,
@@ -98,6 +99,13 @@ export default function OrderDetailPage() {
           label={ORDER_STATUS_LABELS[order.status] ?? order.status}
         />
       </div>
+
+      <Card>
+        <CardHeader><CardTitle>مراحل باقی‌مانده</CardTitle></CardHeader>
+        <CardContent>
+          <OrderRemainingSteps status={order.status} />
+        </CardContent>
+      </Card>
 
       {/* Details */}
       <Card>

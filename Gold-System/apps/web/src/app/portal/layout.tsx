@@ -42,7 +42,7 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   if (!isAuthenticated) return null;
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden bg-[#F7F8FA]">
+    <div className="flex min-h-screen overflow-x-hidden bg-background">
       <Suspense fallback={null}>
         <DashboardSidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
       </Suspense>

@@ -128,6 +128,18 @@ export class AssignmentsService {
   }
 
   /**
+   * Lets a reviewer pick up an unassigned QUOTED order for themselves.
+   * Same state transition as UC-09 (QUOTED → ASSIGNED), without requiring
+   * a separate operator to type a user id.
+   */
+  async claimOrder(reviewerUserId: string, orderId: string): Promise<AssignmentResponseDto> {
+    return this.createAssignment(reviewerUserId, orderId, {
+      assignedToUserId: reviewerUserId,
+      notes: 'برداشت توسط بررسی‌کننده',
+    });
+  }
+
+  /**
    * Transitions an ASSIGNED Order to UNDER_REVIEW.
    *
    * Called when a Reviewer explicitly starts reviewing an assigned Order.

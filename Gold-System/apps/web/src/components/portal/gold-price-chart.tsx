@@ -1,8 +1,15 @@
 'use client';
 
 import { useId, useMemo } from 'react';
-import { toPersianDigits } from '@/lib/utils';
+import { rialToToman, toPersianDigits } from '@/lib/utils';
 import type { ChartPeriod } from '@/lib/portal-demo';
+
+function tomanAxisLabel(rial: number): string {
+  const toman = rialToToman(String(Math.round(rial)));
+  if (toman == null) return toPersianDigits(String(Math.round(rial / 10)));
+  const whole = toman.split('.')[0] ?? '0';
+  return toPersianDigits(whole.replace(/\B(?=(\d{3})+(?!\d))/g, ','));
+}
 
 export function GoldPriceChart({
   series,
@@ -13,8 +20,9 @@ export function GoldPriceChart({
 }) {
   const gradId = useId().replace(/:/g, '');
   const { path, area, min, max } = useMemo(() => buildPath(series), [series]);
-  const minLabel = toPersianDigits(String(Math.round(min).toLocaleString('en-US')));
-  const maxLabel = toPersianDigits(String(Math.round(max).toLocaleString('en-US')));
+  // Series stays in Rial for shape; axis labels show Toman.
+  const minLabel = tomanAxisLabel(min);
+  const maxLabel = tomanAxisLabel(max);
 
   return (
     <div className="mt-4">

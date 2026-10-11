@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { FileText, Upload } from 'lucide-react';
 import { ApiClientError, paymentsApi } from '@/lib/api';
-import { PAYMENT_METHOD_LABELS, toLatinDigits, toPersianDigits } from '@/lib/utils';
+import { PAYMENT_METHOD_LABELS, toLatinDigits, tomanToRial, toPersianDigits } from '@/lib/utils';
 import { InboxSheet } from '@/components/portal/notifications/inbox-sheet';
 
 const fieldClass =
@@ -56,7 +56,8 @@ export function SubmitReceiptButton({ onSubmitted }: { onSubmitted: () => void }
       setError('فایل رسید را انتخاب کنید.');
       return;
     }
-    const normalizedAmount = toLatinDigits(amount).replace(/[^\d.]/g, '');
+    const tomanAmount = toLatinDigits(amount).replace(/[^\d.]/g, '');
+    const normalizedAmount = tomanAmount ? tomanToRial(tomanAmount) : null;
     if (!normalizedAmount) {
       setError('مبلغ را وارد کنید.');
       return;
@@ -113,7 +114,7 @@ export function SubmitReceiptButton({ onSubmitted }: { onSubmitted: () => void }
         }
       >
         <p className="mb-4 text-sm leading-7 text-[#6B7280]">
-          مبلغ واریزی به حساب فروشنده را با رسید ارسال کنید. پس از تأیید حسابداری، اعتبار ریالی شما افزایش می‌یابد. این واریز به سفارش خاصی متصل نیست.
+          مبلغ واریزی به حساب فروشنده را با رسید ارسال کنید. پس از تأیید حسابداری، اعتبار شما افزایش می‌یابد. این واریز به سفارش خاصی متصل نیست.
         </p>
         {error ? <p className="mb-3 text-sm text-[#DC2626]">{error}</p> : null}
         <label className="mb-3 block text-sm text-[#6B7280]">
@@ -125,7 +126,7 @@ export function SubmitReceiptButton({ onSubmitted }: { onSubmitted: () => void }
           </select>
         </label>
         <label className="mb-3 block text-sm text-[#6B7280]">
-          مبلغ (ریال)
+          مبلغ (تومان)
           <input className={fieldClass} inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="مبلغ" />
         </label>
         <label className="mb-3 block text-sm text-[#6B7280]">

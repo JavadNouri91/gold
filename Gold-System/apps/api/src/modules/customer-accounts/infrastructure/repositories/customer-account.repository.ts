@@ -132,6 +132,23 @@ export class CustomerAccountRepository {
   }
 
   /**
+   * Locks the customer account row so concurrent sell submissions cannot
+   * both pass the gold-weight check before either order is booked.
+   */
+  async lockByCustomerId(tx: Prisma.TransactionClient, customerId: string): Promise<void> {
+    const rows = await tx.$queryRaw<Array<{ id: string }>>`
+      SELECT id
+      FROM customer_accounts
+      WHERE customer_id = ${customerId}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
+      throw new Error(`CustomerAccount for customer ${customerId} not found`);
+    }
+  }
+
+  /**
    * Reserves credit for an Order submission.
    *
    * CONCURRENCY: Uses SELECT FOR UPDATE (PostgreSQL row-level lock) to prevent

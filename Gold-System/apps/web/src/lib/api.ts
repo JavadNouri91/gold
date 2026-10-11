@@ -195,8 +195,11 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 
 export interface LoginResponse {
   message: string;
-  requiresOtp: boolean;
-  userId?: string;
+  requiresOtp?: boolean;
+  accessToken?: string;
+  refreshToken?: string;
+  expiresIn?: number;
+  user?: OtpResponse['user'];
 }
 
 export interface OtpResponse {
@@ -722,12 +725,17 @@ function activityQuery(params: ActivityParams): string {
 }
 
 export const ordersApi = {
-  list(params?: { status?: string; limit?: number; offset?: number }): Promise<ListOrdersResponse> {
+  list(params?: { status?: string; limit?: number; page?: number }): Promise<ListOrdersResponse> {
     const query = new URLSearchParams();
     if (params?.status) query.set('status', params.status);
     if (params?.limit) query.set('limit', String(params.limit));
-    if (params?.offset) query.set('offset', String(params.offset));
-    return request(`/orders?${query.toString()}`);
+    if (params?.page != null) query.set('page', String(params.page));
+    return request<{ orders?: Order[]; data?: Order[]; meta: PaginationMeta }>(
+      `/orders?${query.toString()}`,
+    ).then((payload) => ({
+      data: payload.orders ?? payload.data ?? [],
+      meta: payload.meta,
+    }));
   },
 
   getById(id: string): Promise<Order> {

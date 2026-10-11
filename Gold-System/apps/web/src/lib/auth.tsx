@@ -84,11 +84,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsLoading(false);
   }, []);
 
-  const login = useCallback(async (mobile: string, password: string) => {
-    const result = await authApi.login(mobile, password);
-    return { requiresOtp: result.requiresOtp ?? true };
-  }, []);
-
   const applySession = useCallback((resp: OtpResponse) => {
     tokenStore.setAccess(resp.accessToken);
     tokenStore.setRefresh(resp.refreshToken);
@@ -101,6 +96,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     storeUser(authUser);
     setUser(authUser);
   }, []);
+
+  const login = useCallback(async (mobile: string, password: string) => {
+    const result = await authApi.login(mobile, password);
+    if (result.accessToken && result.refreshToken && result.user) {
+      applySession({
+        accessToken: result.accessToken,
+        refreshToken: result.refreshToken,
+        expiresIn: result.expiresIn ?? 0,
+        user: result.user,
+      });
+      return { requiresOtp: false };
+    }
+    return { requiresOtp: result.requiresOtp ?? true };
+  }, [applySession]);
 
   const verifyOtp = useCallback(async (mobile: string, code: string) => {
     applySession(await authApi.verifyOtp(mobile, code));

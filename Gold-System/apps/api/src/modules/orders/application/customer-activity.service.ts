@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
+import Decimal from 'decimal.js';
 import { IsIn, IsInt, IsISO8601, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { OrderStatus } from '@gold/shared-types';
@@ -158,6 +159,22 @@ export class CustomerActivityService {
       select: orderActivitySelect,
     });
     return computeCustomerHolding(rows.map(mapRow));
+  }
+
+  /**
+   * Booked buy weight minus booked sell weight.
+   * Must run inside the same transaction that locks the customer account,
+   * so a second sell sees the first as already booked.
+   */
+  async sellableWeightGrams(
+    customerId: string,
+    db: Prisma.TransactionClient,
+  ): Promise<Decimal> {
+    const rows = await db.order.findMany({
+      where: { customerId },
+      select: orderActivitySelect,
+    });
+    return new Decimal(computeCustomerHolding(rows.map(mapRow)).weightGrams);
   }
 
   async summary(userId: string, dto: CustomerActivityQueryDto) {

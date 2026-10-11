@@ -19,9 +19,16 @@ import {
   toPersianDigits,
 } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { OrderRemainingSteps } from '@/components/portal/order-remaining-steps';
 import { readAvailableCredit } from '@/lib/credit-view';
 import { purchaseErrorMessage } from './purchase-errors';
-import { DEFAULT_PURITY, QUICK_WEIGHTS, TRADING_PURITIES, purityLabel } from './trading-purities';
+import {
+  DEFAULT_PURITY,
+  QUICK_TOMAN_AMOUNTS,
+  QUICK_WEIGHTS,
+  TRADING_PURITIES,
+  purityLabel,
+} from './trading-purities';
 import {
   canonicalWeight,
   capWeightToAvailable,
@@ -66,6 +73,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   const skipAuto = useRef<string | null>(null);
   const [allInWeight, setAllInWeight] = useState<string | null>(null);
   const [pricingAll, setPricingAll] = useState(false);
+  const [selectedQuickRial, setSelectedQuickRial] = useState<string | null>(null);
 
   const price = useSWR('pricing/current-price', () => pricingApi.getCurrentPrice(), {
     refreshInterval: 15_000,
@@ -98,6 +106,10 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
 
   const available = account.data ? (readAvailableCredit(account.data) ?? undefined) : undefined;
   const availableGold = holding.data?.weightGrams;
+  const sellableGrams =
+    availableGold && !isZeroDecimal(availableGold)
+      ? capWeightToAvailable(availableGold, availableGold)
+      : null;
   const finalPrice = inputsMatch ? quote?.view.finalPrice : undefined;
   const creditShort =
     !selling && available != null && finalPrice != null && compareDecimal(available, finalPrice) < 0;
@@ -197,6 +209,47 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grams, purity, liveSnapshot, customer.isLoading, customer.data?.type]);
 
+  /**
+   * Resolve the largest 3-decimal weight whose final price does not exceed `targetRial`.
+   * Optionally cap the weight to available gold before the final quote.
+   */
+  async function weightForTargetRial(
+    targetRial: string,
+    seq: number,
+    options: { capGold?: string | null; emptyMessage: string },
+  ): Promise<{ grams: string; view: PricingView } | null> {
+    const oneGram = await requestPrice('1', purity);
+    if (seq !== calcSeq.current) return null;
+    let nextGrams = floorDivide(targetRial, oneGram.finalPrice, 3);
+    if (!nextGrams) {
+      setError(options.emptyMessage);
+      setQuote(null);
+      return null;
+    }
+    if (options.capGold) {
+      const capped = capWeightToAvailable(nextGrams, options.capGold);
+      if (!capped) {
+        setError(options.emptyMessage);
+        setQuote(null);
+        return null;
+      }
+      nextGrams = capped;
+    }
+    let view = await requestPrice(nextGrams, purity);
+    for (let step = 0; step < 4 && compareDecimal(view.finalPrice, targetRial) > 0; step += 1) {
+      const lower = decreaseWeightByMilli(nextGrams);
+      if (!lower) {
+        setError(options.emptyMessage);
+        setQuote(null);
+        return null;
+      }
+      nextGrams = lower;
+      view = await requestPrice(nextGrams, purity);
+    }
+    if (seq !== calcSeq.current) return null;
+    return { grams: nextGrams, view };
+  }
+
   async function spendAllRial() {
     if (!available || isZeroDecimal(available) || kycBlocked || accountBlocked) return;
     const seq = ++calcSeq.current;
@@ -207,33 +260,58 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
     setConfirmOpen(false);
     draftRef.current = null;
     try {
-      const oneGram = await requestPrice('1', purity);
-      if (seq !== calcSeq.current) return;
-      let nextGrams = floorDivide(available, oneGram.finalPrice, 3);
-      if (!nextGrams) {
-        setError('دارایی ریالی برای خرید حداقل ۰٫۰۰۱ گرم کافی نیست.');
-        setQuote(null);
-        return;
-      }
-      let view = await requestPrice(nextGrams, purity);
-      for (let step = 0; step < 4 && compareDecimal(view.finalPrice, available) > 0; step += 1) {
-        const lower = decreaseWeightByMilli(nextGrams);
-        if (!lower) {
-          setError('دارایی ریالی برای خرید حداقل ۰٫۰۰۱ گرم کافی نیست.');
-          setQuote(null);
-          return;
-        }
-        nextGrams = lower;
-        view = await requestPrice(nextGrams, purity);
-      }
-      if (seq !== calcSeq.current) return;
-      skipAuto.current = nextGrams;
-      setAllInWeight(nextGrams);
-      setWeight(nextGrams);
+      const priced = await weightForTargetRial(available, seq, {
+        emptyMessage: 'دارایی ریالی برای خرید حداقل ۰٫۰۰۱ گرم کافی نیست.',
+      });
+      if (!priced || seq !== calcSeq.current) return;
+      skipAuto.current = priced.grams;
+      setAllInWeight(priced.grams);
+      setSelectedQuickRial(null);
+      setWeight(priced.grams);
       setQuote({
-        view,
-        expiresAt: quoteExpiry(view.snapshotId),
-        weightGrams: nextGrams,
+        view: priced.view,
+        expiresAt: quoteExpiry(priced.view.snapshotId),
+        weightGrams: priced.grams,
+        purityRatio: purity,
+      });
+    } catch (err) {
+      if (seq !== calcSeq.current) return;
+      setQuote(null);
+      setError(purchaseErrorMessage(err, 'محاسبه قیمت انجام نشد. لطفاً دوباره تلاش کنید.'));
+    } finally {
+      if (seq === calcSeq.current) {
+        setCalculating(false);
+        setPricingAll(false);
+      }
+    }
+  }
+
+  async function applyQuickRial(targetRial: string) {
+    if (kycBlocked || accountBlocked) return;
+    if (selling && !sellableGrams) return;
+    const seq = ++calcSeq.current;
+    setPricingAll(true);
+    setCalculating(true);
+    setError(null);
+    setAccepted(false);
+    setConfirmOpen(false);
+    draftRef.current = null;
+    try {
+      const priced = await weightForTargetRial(targetRial, seq, {
+        capGold: selling ? sellableGrams : undefined,
+        emptyMessage: selling
+          ? 'موجودی طلا برای فروش حداقل ۰٫۰۰۱ گرم کافی نیست.'
+          : 'این مبلغ برای خرید حداقل ۰٫۰۰۱ گرم کافی نیست.',
+      });
+      if (!priced || seq !== calcSeq.current) return;
+      skipAuto.current = priced.grams;
+      setAllInWeight(null);
+      setSelectedQuickRial(targetRial);
+      setWeight(priced.grams);
+      setQuote({
+        view: priced.view,
+        expiresAt: quoteExpiry(priced.view.snapshotId),
+        weightGrams: priced.grams,
         purityRatio: purity,
       });
     } catch (err) {
@@ -256,6 +334,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
       return;
     }
     setAllInWeight(nextGrams);
+    setSelectedQuickRial(null);
     setWeight(nextGrams);
     setAccepted(false);
   }
@@ -347,51 +426,113 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
       <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
         <section className="min-w-0 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-6">
           <h2 className="text-base font-bold text-[#202124]">{selling ? 'مشخصات فروش' : 'مشخصات خرید'}</h2>
-          <p className="mt-1 text-xs leading-6 text-[#6B7280]">طلای آبشده — وزن و عیار را وارد کنید.</p>
+          <p className="mt-1 text-xs leading-6 text-[#6B7280]">
+            {selling
+              ? 'طلای آبشده موجود در دارایی خود را برای فروش انتخاب کنید.'
+              : 'طلای آبشده — وزن و عیار را وارد کنید.'}
+          </p>
 
           <div className="mt-5 space-y-5">
-            <div>
-              <label htmlFor="buy-weight" className="text-sm font-medium text-[#202124]">
-                وزن طلا
-              </label>
-              <div className="mt-1.5 flex h-11 w-40 items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 focus-within:ring-2 focus-within:ring-[#F59E0B]">
-                <input
-                  id="buy-weight"
-                  inputMode="decimal"
-                  autoComplete="off"
-                  enterKeyHint="done"
-                  dir="ltr"
-                  value={weight ? toPersianDigits(weight) : ''}
-                  placeholder="مثال: ۵"
-                  onChange={(event) => {
-                    setAllInWeight(null);
-                    setWeight(normalizeWeightInput(event.target.value));
-                    setAccepted(false);
-                  }}
-                  className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-[#202124] outline-none"
-                />
-                <span className="shrink-0 text-sm text-[#6B7280]">گرم</span>
+            {selling ? (
+              <div>
+                <p className="text-sm font-medium text-[#202124]">موجودی قابل فروش</p>
+                {holding.isLoading && !holding.data ? (
+                  <div className="mt-1.5 h-16 animate-pulse rounded-xl bg-[#F3F4F6]" />
+                ) : sellableGrams ? (
+                  <button
+                    type="button"
+                    aria-pressed={allInWeight != null && grams === allInWeight}
+                    disabled={kycBlocked || accountBlocked}
+                    onClick={sellAllGold}
+                    className={cn(
+                      'mt-1.5 flex w-full items-center justify-between gap-3 rounded-xl border px-4 py-3 text-right disabled:cursor-not-allowed disabled:opacity-50',
+                      allInWeight != null && grams === allInWeight
+                        ? 'border-red-600 bg-red-50 text-red-800'
+                        : 'border-[#E5E7EB] bg-white text-[#202124]',
+                    )}
+                  >
+                    <span className="flex min-w-0 items-center gap-2">
+                      <Coins className="h-4 w-4 shrink-0" aria-hidden />
+                      <span className="text-sm">طلای آبشده</span>
+                    </span>
+                    <span className="shrink-0 text-base font-bold">{formatWeight(sellableGrams)}</span>
+                  </button>
+                ) : (
+                  <div className="mt-1.5 rounded-xl bg-[#F8F9FA] px-4 py-3 text-sm leading-7 text-[#202124]">
+                    <p>طلای آبشده‌ای برای فروش ندارید.</p>
+                    <Link
+                      href="/portal/orders/new?side=buy"
+                      className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]"
+                    >
+                      خرید طلا
+                    </Link>
+                  </div>
+                )}
+                {sellableGrams ? (
+                  <>
+                    <label htmlFor="sell-weight" className="mt-4 block text-sm font-medium text-[#202124]">
+                      وزن فروش
+                    </label>
+                    <div className="mt-1.5 flex h-11 w-40 items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 focus-within:ring-2 focus-within:ring-[#F59E0B]">
+                      <input
+                        id="sell-weight"
+                        inputMode="decimal"
+                        autoComplete="off"
+                        enterKeyHint="done"
+                        dir="ltr"
+                        value={weight ? toPersianDigits(weight) : ''}
+                        placeholder="مثال: ۱"
+                        onChange={(event) => {
+                          const next = normalizeWeightInput(event.target.value);
+                          const nextGrams = canonicalWeight(next);
+                          setAllInWeight(null);
+                          setSelectedQuickRial(null);
+                          if (
+                            sellableGrams &&
+                            isPositiveWeight(nextGrams) &&
+                            compareDecimal(nextGrams, sellableGrams) > 0
+                          ) {
+                            setWeight(sellableGrams);
+                          } else {
+                            setWeight(next);
+                          }
+                          setAccepted(false);
+                        }}
+                        className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-[#202124] outline-none"
+                      />
+                      <span className="shrink-0 text-sm text-[#6B7280]">گرم</span>
+                    </div>
+                    <p className="mt-1 text-xs text-[#6B7280]">حداکثر {formatWeight(sellableGrams)}</p>
+                  </>
+                ) : null}
               </div>
-              {weight && !isPositiveWeight(weight) ? (
-                <p className="mt-1 text-xs text-[#DC2626]">وزن باید عددی بزرگ‌تر از صفر باشد.</p>
-              ) : null}
-              {selling ? (
-                <button
-                  type="button"
-                  aria-pressed={allInWeight != null && grams === allInWeight}
-                  disabled={!availableGold || isZeroDecimal(availableGold) || kycBlocked || accountBlocked}
-                  onClick={sellAllGold}
-                  className={cn(
-                    'mt-3 inline-flex h-11 items-center gap-2 rounded-xl border px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
-                    allInWeight != null && grams === allInWeight
-                      ? 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
-                      : 'border-[#E5E7EB] bg-white text-[#202124]',
-                  )}
-                >
-                  <Coins className="h-4 w-4 shrink-0" aria-hidden />
-                  فروش همه طلای آبشده
-                </button>
-              ) : (
+            ) : (
+              <div>
+                <label htmlFor="buy-weight" className="text-sm font-medium text-[#202124]">
+                  وزن طلا
+                </label>
+                <div className="mt-1.5 flex h-11 w-40 items-center gap-1.5 rounded-xl border border-[#E5E7EB] bg-white px-3 focus-within:ring-2 focus-within:ring-[#F59E0B]">
+                  <input
+                    id="buy-weight"
+                    inputMode="decimal"
+                    autoComplete="off"
+                    enterKeyHint="done"
+                    dir="ltr"
+                    value={weight ? toPersianDigits(weight) : ''}
+                    placeholder="مثال: ۵"
+                    onChange={(event) => {
+                      setAllInWeight(null);
+                      setSelectedQuickRial(null);
+                      setWeight(normalizeWeightInput(event.target.value));
+                      setAccepted(false);
+                    }}
+                    className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-[#202124] outline-none"
+                  />
+                  <span className="shrink-0 text-sm text-[#6B7280]">گرم</span>
+                </div>
+                {weight && !isPositiveWeight(weight) ? (
+                  <p className="mt-1 text-xs text-[#DC2626]">وزن باید عددی بزرگ‌تر از صفر باشد.</p>
+                ) : null}
                 <button
                   type="button"
                   aria-pressed={allInWeight != null && grams === allInWeight}
@@ -413,37 +554,84 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
                   <Wallet className="h-4 w-4 shrink-0" aria-hidden />
                   {pricingAll ? 'در حال محاسبه وزن...' : 'خرید با همه دارایی ریالی'}
                 </button>
-              )}
-            </div>
-
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-[#202124]">مقدار سریع</p>
-              <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                {QUICK_WEIGHTS.map((value) => {
-                  const selected = grams === value;
-                  return (
-                    <button
-                      key={value}
-                      type="button"
-                      aria-pressed={selected}
-                      onClick={() => {
-                        setAllInWeight(null);
-                        setWeight(value);
-                        setAccepted(false);
-                      }}
-                      className={cn(
-                        'h-11 shrink-0 rounded-xl border px-4 text-sm font-medium',
-                        selected
-                          ? 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
-                          : 'border-[#E5E7EB] bg-white text-[#202124]',
-                      )}
-                    >
-                      {toPersianDigits(value)} گرم
-                    </button>
-                  );
-                })}
               </div>
-            </div>
+            )}
+
+            {selling && !sellableGrams ? null : (
+              <div className="min-w-0 space-y-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[#202124]">مقدار سریع</p>
+                  <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                    {QUICK_WEIGHTS.map((value) => {
+                      const selected = grams === value;
+                      const overHolding =
+                        selling &&
+                        sellableGrams != null &&
+                        compareDecimal(value, sellableGrams) > 0;
+                      return (
+                        <button
+                          key={value}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={overHolding || kycBlocked || accountBlocked}
+                          onClick={() => {
+                            setAllInWeight(null);
+                            setSelectedQuickRial(null);
+                            setWeight(value);
+                            setAccepted(false);
+                          }}
+                          className={cn(
+                            'h-11 shrink-0 rounded-xl border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
+                            selected
+                              ? 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
+                              : 'border-[#E5E7EB] bg-white text-[#202124]',
+                          )}
+                        >
+                          {toPersianDigits(value)} گرم
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-[#202124]">مبلغ سریع</p>
+                  <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                    {QUICK_TOMAN_AMOUNTS.map((item) => {
+                      const unitPrice = price.data?.normalizedValue;
+                      const estimable =
+                        unitPrice != null && floorDivide(item.rial, unitPrice, 3) != null;
+                      const selected = selectedQuickRial === item.rial;
+                      return (
+                        <button
+                          key={item.rial}
+                          type="button"
+                          aria-pressed={selected}
+                          disabled={
+                            pricingAll ||
+                            (selling && !sellableGrams) ||
+                            !estimable ||
+                            kycBlocked ||
+                            accountBlocked
+                          }
+                          onClick={() => void applyQuickRial(item.rial)}
+                          className={cn(
+                            'h-11 shrink-0 rounded-xl border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
+                            selected
+                              ? selling
+                                ? 'border-red-600 bg-red-50 text-red-800'
+                                : 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
+                              : 'border-[#E5E7EB] bg-white text-[#202124]',
+                          )}
+                        >
+                          {item.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div>
               <p className="text-sm font-medium text-[#202124]">عیار</p>
@@ -784,6 +972,9 @@ function PurchaseSuccess({
         <p className="mt-5 text-right text-sm leading-7 text-[#202124]">
           پیش‌فاکتور با قیمت پذیرفته‌شده صادر شد. فاکتور نهایی پس از تأیید طلافروش صادر می‌شود.
         </p>
+        <div className="mt-4 text-right">
+          <OrderRemainingSteps status={order.status} />
+        </div>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row">
           <Button type="button" className="h-12 flex-1" onClick={onView}>
             مشاهده سفارش

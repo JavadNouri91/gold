@@ -62,7 +62,7 @@ const COLUMN_LABELS: Record<ColumnKey, string> = {
   type: 'نوع',
   lastPurchase: 'آخرین خرید',
   orders: 'تعداد سفارش',
-  balance: 'مانده حساب (ریال)',
+  balance: 'مانده حساب (تومان)',
   status: 'وضعیت',
   actions: 'عملیات',
 };
@@ -366,7 +366,7 @@ export function CustomerDirectory() {
   if (show('balance')) {
     columns.push({
       key: 'balance',
-      header: 'مانده حساب (ریال)',
+      header: 'مانده حساب (تومان)',
       render: (row) => {
         const tone = balanceTone(row.balanceRial);
         const color = tone === 'neg' ? 'text-red-600' : tone === 'pos' ? 'text-emerald-700' : 'text-muted-foreground';

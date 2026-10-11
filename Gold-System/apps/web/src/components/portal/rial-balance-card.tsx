@@ -5,15 +5,15 @@ import useSWR from 'swr';
 import { ChevronLeft, Wallet } from 'lucide-react';
 import { ApiClientError, customerApi } from '@/lib/api';
 import { readAvailableCredit } from '@/lib/credit-view';
-import { formatAuthoritativeDecimal } from '@/lib/utils';
+import { formatMoney } from '@/lib/utils';
 
 /** Same SWR key as the dashboard and credit page, so the header reuses that response. */
 const ACCOUNT_KEY = 'customer/me/account';
 
 /**
- * Compact header card for the signed-in customer's remaining Rial purchasing power.
- * The amount is the server `availableRial` field. Gold, reserved, and consumed
- * buckets are not shown and are not recomputed here.
+ * Compact header card for the signed-in customer's remaining purchasing power.
+ * The amount is the server `availableRial` field, shown in Toman. Gold, reserved,
+ * and consumed buckets are not shown and are not recomputed here.
  */
 export function RialBalanceCard() {
   const { data, error, isLoading } = useSWR(ACCOUNT_KEY, () => customerApi.getMyAccount());
@@ -21,7 +21,7 @@ export function RialBalanceCard() {
   const unavailable = error instanceof ApiClientError && error.isNotFound;
   const failed = Boolean(error) && !unavailable;
   const available = data ? readAvailableCredit(data) : null;
-  const formatted = available ? formatAuthoritativeDecimal(available, 'ریال') : null;
+  const formatted = available ? formatMoney(available) : null;
   const amount = formatted && formatted !== '—' ? formatted : null;
 
   let value = '—';

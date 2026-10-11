@@ -11,6 +11,8 @@ export function purchaseErrorMessage(err: unknown, fallback: string): string {
       return 'قیمت سفارش منقضی شده است.';
     case 'ORDER_INSUFFICIENT_CREDIT':
       return 'اعتبار کافی برای ثبت این سفارش ندارید.';
+    case 'ORDER_INSUFFICIENT_GOLD':
+      return 'موجودی طلای کافی برای ثبت این سفارش فروش ندارید.';
     case 'INVALID_WEIGHT':
       return 'وزن واردشده معتبر نیست.';
     case 'INVALID_PURITY':

@@ -276,6 +276,26 @@ describe('AssignmentsService', () => {
       expect(result.status).toBe(AssignmentStatus.ACTIVE);
     });
 
+    it('lets a reviewer claim a QUOTED order for themselves', async () => {
+      const quotedOrder = makeOrder({ status: OrderStatus.QUOTED });
+      (orderRepo.findById as jest.Mock).mockResolvedValue(quotedOrder);
+      (quotationRepo.findByOrderId as jest.Mock).mockResolvedValue([makeQuotation()]);
+      (assignmentRepo.findActiveForOrder as jest.Mock).mockResolvedValue(null);
+      (assignmentRepo.createInTx as jest.Mock).mockResolvedValue(makeAssignment({ id: 'claimed-1' }));
+
+      const result = await service.claimOrder(ASSIGNEE_USER_ID, ORDER_ID);
+
+      expect(assignmentRepo.createInTx).toHaveBeenCalledWith(
+        fakeTx,
+        expect.objectContaining({
+          orderId: ORDER_ID,
+          assignedToId: ASSIGNEE_USER_ID,
+          assignedById: ASSIGNEE_USER_ID,
+        }),
+      );
+      expect(result.assignedToId).toBe(ASSIGNEE_USER_ID);
+    });
+
     it('reassigns: cancels previous ACTIVE assignment and creates new one', async () => {
       const quotedOrder = makeOrder({ status: OrderStatus.QUOTED });
       (orderRepo.findById as jest.Mock).mockResolvedValue(quotedOrder);

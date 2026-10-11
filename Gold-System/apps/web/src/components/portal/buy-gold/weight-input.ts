@@ -41,13 +41,10 @@ export function decreaseWeightByMilli(value: string): string | null {
 
 /** Largest 3-decimal weight that does not exceed `available`. */
 export function capWeightToAvailable(weight: string, available: string): string | null {
-  let next = canonicalWeight(normalizeWeightInput(weight));
+  const next = canonicalWeight(normalizeWeightInput(weight));
   if (!isPositiveWeight(next)) return null;
-  for (let step = 0; step < 8 && compareDecimal(next, available) > 0; step += 1) {
-    const lower = decreaseWeightByMilli(next);
-    if (!lower) return null;
-    next = lower;
-  }
-  if (compareDecimal(next, available) > 0) return null;
-  return next;
+  const avail = canonicalWeight(normalizeWeightInput(available));
+  if (!isPositiveWeight(avail)) return null;
+  const capped = compareDecimal(next, avail) > 0 ? avail : next;
+  return capped.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
 }

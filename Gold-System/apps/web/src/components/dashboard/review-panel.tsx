@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { ConfirmDialog } from './confirm-dialog';
 import { PermissionGate } from './permission-gate';
 import { assignmentsApi, internalOrdersApi, internalTradesApi, type ReviewContext } from '@/lib/internal-api';
+import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
 import {
   CUSTOMER_STATUS_LABELS,
@@ -31,6 +32,7 @@ export function ReviewContextPanel({
   context: ReviewContext;
   onChanged: () => void;
 }) {
+  const { user } = useAuth();
   const [action, setAction] = useState<'approve' | 'reject' | 'revision' | 'start' | null>(null);
   const [assignOpen, setAssignOpen] = useState(false);
   const [reviewerId, setReviewerId] = useState('');
@@ -38,6 +40,11 @@ export function ReviewContextPanel({
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const status = context.order.status;
+  const canClaim = status === 'QUOTED';
+  const canStart = status === 'ASSIGNED';
+  const canDecide = status === 'ASSIGNED' || status === 'UNDER_REVIEW';
+  const canCreateTrade = status === 'APPROVED';
 
   const run = async (reason?: string) => {
     setBusy(true);
@@ -67,6 +74,36 @@ export function ReviewContextPanel({
       });
       setAssignOpen(false);
       setFeedback('سفارش تخصیص داده شد.');
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'تخصیص انجام نشد.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const claim = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await assignmentsApi.claim(context.order.id);
+      setFeedback('سفارش برای بررسی شما برداشت شد.');
+      onChanged();
+    } catch (err) {
+      setError(err instanceof ApiClientError ? err.message : 'برداشت سفارش انجام نشد.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const assignToMe = async () => {
+    if (!user?.id) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await assignmentsApi.assign(context.order.id, { assignedToUserId: user.id });
+      setAssignOpen(false);
+      setFeedback('سفارش به شما تخصیص داده شد.');
       onChanged();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'تخصیص انجام نشد.');
@@ -155,20 +192,31 @@ export function ReviewContextPanel({
         <CardHeader><CardTitle>اقدام‌ها</CardTitle></CardHeader>
         <CardContent className="flex flex-wrap gap-2">
           <PermissionGate anyOf="order.assign">
-            <Button variant="outline" onClick={() => setAssignOpen(true)}>تخصیص بررسی‌کننده</Button>
+            {canClaim ? (
+              <Button variant="outline" onClick={() => setAssignOpen(true)}>تخصیص بررسی‌کننده</Button>
+            ) : null}
           </PermissionGate>
           <PermissionGate anyOf="trade.review">
-            <Button variant="outline" onClick={() => setAction('start')}>شروع بررسی</Button>
+            {canClaim ? (
+              <Button onClick={() => void claim()} disabled={busy}>برداشت برای بررسی</Button>
+            ) : null}
+            {canStart ? (
+              <Button variant="outline" onClick={() => setAction('start')}>شروع بررسی</Button>
+            ) : null}
           </PermissionGate>
           <PermissionGate anyOf="trade.approve">
-            <Button onClick={() => setAction('approve')}>تأیید سفارش</Button>
-            <Button onClick={() => void confirmTrade()}>ایجاد معامله</Button>
+            {canDecide ? <Button onClick={() => setAction('approve')}>تأیید سفارش</Button> : null}
+            {canCreateTrade ? <Button onClick={() => void confirmTrade()}>ایجاد معامله</Button> : null}
           </PermissionGate>
           <PermissionGate anyOf="trade.reject">
-            <Button variant="destructive" onClick={() => setAction('reject')}>رد سفارش</Button>
+            {canClaim || canDecide ? (
+              <Button variant="destructive" onClick={() => setAction('reject')}>رد سفارش</Button>
+            ) : null}
           </PermissionGate>
           <PermissionGate anyOf="trade.request_revision">
-            <Button variant="outline" onClick={() => setAction('revision')}>درخواست اصلاح</Button>
+            {canDecide ? (
+              <Button variant="outline" onClick={() => setAction('revision')}>درخواست اصلاح</Button>
+            ) : null}
           </PermissionGate>
         </CardContent>
       </Card>
@@ -191,7 +239,10 @@ export function ReviewContextPanel({
           <Input label="شناسه کاربر بررسی‌کننده" dir="ltr" value={reviewerId} onChange={(event) => setReviewerId(event.target.value)} />
           <Input label="یادداشت" value={notes} onChange={(event) => setNotes(event.target.value)} />
           <p className="text-xs text-muted-foreground">فهرست کاربران داخلی از سرویس ارائه نشده است؛ شناسه کاربر را وارد کنید.</p>
-          <Button disabled={!reviewerId.trim()} isLoading={busy} onClick={() => void assign()}>ثبت تخصیص</Button>
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" isLoading={busy} onClick={() => void assignToMe()}>تخصیص به من</Button>
+            <Button disabled={!reviewerId.trim()} isLoading={busy} onClick={() => void assign()}>ثبت تخصیص</Button>
+          </div>
         </div>
       </Modal>
     </div>

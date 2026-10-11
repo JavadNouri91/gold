@@ -127,8 +127,8 @@ describe('CreditSummary', () => {
 
   it('displays credit values', () => {
     render(<CreditSummary account={mockAccount} />);
-    // Available: 7,000,000
-    const text = screen.getAllByText(/ریال/);
+    // Available: 7,000,000 Rial → 700,000 Toman
+    const text = screen.getAllByText(/تومان/);
     expect(text.length).toBeGreaterThanOrEqual(3);
   });
 });

@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { ApiClientError } from '@/lib/api';
-import { PURCHASE_STATUS_LABELS, formatMoney, formatWeight, statusLabel } from '@/lib/utils';
+import { PURCHASE_STATUS_LABELS, formatMoney, formatWeight, statusLabel, tomanToRial } from '@/lib/utils';
 
 export default function PurchasesPage() {
   const { user } = useAuth();
@@ -68,20 +68,23 @@ export default function PurchasesPage() {
   const create = async () => {
     setFormError(null);
     try {
+      const totalAmountRial = tomanToRial(form.totalAmountRial.trim());
+      const pricePerGramRial = tomanToRial(form.pricePerGramRial.trim());
+      if (!totalAmountRial || !pricePerGramRial) throw new Error('مبالغ نامعتبر است.');
       await purchasesApi.create({
         idempotencyKey: crypto.randomUUID(),
         supplierId: form.supplierId.trim(),
         settlementType: form.settlementType,
         purchaseDate: new Date(form.purchaseDate).toISOString(),
-        totalAmountRial: form.totalAmountRial.trim(),
+        totalAmountRial,
         weightGrams: form.weightGrams.trim(),
         purityRatio: form.purityRatio.trim(),
-        pricePerGramRial: form.pricePerGramRial.trim(),
+        pricePerGramRial,
       });
       setFeedback('پیش‌نویس خرید ثبت شد.');
       void mutate();
     } catch (err) {
-      setFormError(err instanceof ApiClientError ? err.message : 'ثبت خرید انجام نشد.');
+      setFormError(err instanceof ApiClientError || err instanceof Error ? err.message : 'ثبت خرید انجام نشد.');
     }
   };
 
@@ -112,10 +115,10 @@ export default function PurchasesPage() {
             </select>
           </label>
           <Input label="تاریخ" type="date" dir="ltr" value={form.purchaseDate} onChange={(event) => setForm({ ...form, purchaseDate: event.target.value })} />
-          <Input label="مبلغ" dir="ltr" value={form.totalAmountRial} onChange={(event) => setForm({ ...form, totalAmountRial: event.target.value })} />
+          <Input label="مبلغ (تومان)" dir="ltr" value={form.totalAmountRial} onChange={(event) => setForm({ ...form, totalAmountRial: event.target.value })} />
           <Input label="وزن" dir="ltr" value={form.weightGrams} onChange={(event) => setForm({ ...form, weightGrams: event.target.value })} />
           <Input label="خلوص" dir="ltr" value={form.purityRatio} onChange={(event) => setForm({ ...form, purityRatio: event.target.value })} />
-          <Input label="قیمت هر گرم" dir="ltr" value={form.pricePerGramRial} onChange={(event) => setForm({ ...form, pricePerGramRial: event.target.value })} />
+          <Input label="قیمت هر گرم (تومان)" dir="ltr" value={form.pricePerGramRial} onChange={(event) => setForm({ ...form, pricePerGramRial: event.target.value })} />
           <div className="flex items-end"><Button onClick={() => void create()}>ثبت پیش‌نویس</Button></div>
         </div>
       </PermissionGate>

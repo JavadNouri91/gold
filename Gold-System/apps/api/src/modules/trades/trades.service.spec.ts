@@ -159,6 +159,7 @@ function makeQuotation(
 function makeOrder(
   overrides: Partial<{
     status: OrderStatus;
+    reservedAmountRial: Decimal;
   }> = {},
 ): OrderEntity {
   return new OrderEntity({
@@ -169,7 +170,7 @@ function makeOrder(
     pricingCalculationId: PRICING_CALC_ID,
     status: overrides.status ?? OrderStatus.APPROVED,
     totalAmountRial: TOTAL_AMOUNT,
-    reservedAmountRial: RESERVED_AMOUNT,
+    reservedAmountRial: overrides.reservedAmountRial ?? RESERVED_AMOUNT,
     weightGrams: WEIGHT_GRAMS,
     purityRatio: PURITY_RATIO,
     customerType: null,
@@ -560,6 +561,17 @@ describe('TradesService', () => {
       const call = (accountRepo.consumeCredit as jest.Mock).mock.calls[0][0];
       expect(call.amount.toFixed(2)).toBe(RESERVED_AMOUNT.toFixed(2));
     });
+
+    it('does not consume rial credit when the sell order reserved none', async () => {
+      (orderRepo.findById as jest.Mock).mockResolvedValue(
+        makeOrder({ status: OrderStatus.APPROVED, reservedAmountRial: new Decimal(0) }),
+      );
+
+      await service.confirmTrade(ACTOR_USER_ID, dto);
+
+      expect(accountRepo.consumeCredit).not.toHaveBeenCalled();
+      expect(tradeRepo.createInTx).toHaveBeenCalledTimes(1);
+    });
   });
 
   // ─── IMMUTABILITY (BR-T02) ───────────────────────────────────────────────
@@ -739,6 +751,17 @@ describe('TradesService', () => {
           reason: reverseDto.reason,
         }),
       );
+    });
+
+    it('does not restore rial credit when reversing a sell that reserved none', async () => {
+      setupHappyPathReversal();
+      (orderRepo.findById as jest.Mock).mockResolvedValue(
+        makeOrder({ reservedAmountRial: new Decimal(0) }),
+      );
+
+      await service.reverseTrade(REVERSER_USER_ID, TRADE_ID, reverseDto);
+
+      expect(accountRepo.reverseConsumption).not.toHaveBeenCalled();
     });
 
     it('21. audit: TRADE_REVERSED logged with reason and before/after status', async () => {

@@ -13,6 +13,7 @@ import { CreditHeader } from '@/components/portal/credit/credit-header';
 import { NotificationBell } from '@/components/portal/notifications/notification-bell';
 import { PortalSupportModal } from '@/components/portal/portal-support-modal';
 import { RialBalanceCard } from '@/components/portal/rial-balance-card';
+import { ThemeCycleButton } from '@/components/theme-toggle';
 
 export function DashboardHeader({ onMenu }: { onMenu: () => void }) {
   const pathname = usePathname();
@@ -60,7 +61,7 @@ export function DashboardHeader({ onMenu }: { onMenu: () => void }) {
                     پروفایل من
                   </h1>
                   <p className="mt-0.5 text-xs text-muted-foreground md:text-sm">
-                    مدیریت اطلاعات شخصی و حساب کاربری
+                    مدیریت اطلاعات شخصی، امنیت و تنظیمات حساب
                   </p>
                 </div>
                 <UserStatusBadge type={customer?.type} status={customer?.status} />
@@ -145,6 +146,7 @@ export function DashboardHeader({ onMenu }: { onMenu: () => void }) {
 
         <div className="flex shrink-0 items-center gap-1 sm:gap-2">
           <RialBalanceCard />
+          <ThemeCycleButton />
           <NotificationBell />
           <button
             type="button"

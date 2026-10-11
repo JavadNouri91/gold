@@ -13,7 +13,6 @@ import {
   Bell,
   UserRound,
   ShieldCheck,
-  Settings,
   Headset,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -54,7 +53,7 @@ const primaryNav: NavItem[] = [
   {
     href: '/portal/credit',
     label: 'اعتبار',
-    description: 'موجودی ریالی و گردش حساب',
+    description: 'موجودی تومانی و گردش حساب',
     icon: WalletCards,
     iconClassName: 'bg-emerald-50 text-emerald-700',
   },
@@ -100,7 +99,7 @@ const accountNav: NavItem[] = [
   {
     href: '/portal/profile',
     label: 'پروفایل',
-    description: 'اطلاعات شخصی و تماس',
+    description: 'اطلاعات شخصی و تنظیمات حساب',
     icon: UserRound,
     iconClassName: 'bg-sky-50 text-sky-700',
   },
@@ -110,13 +109,6 @@ const accountNav: NavItem[] = [
     description: 'تکمیل و مدیریت مدارک',
     icon: ShieldCheck,
     iconClassName: 'bg-emerald-50 text-emerald-700',
-  },
-  {
-    href: '/portal/settings',
-    label: 'تنظیمات',
-    description: 'تنظیمات حساب و امنیت',
-    icon: Settings,
-    iconClassName: 'bg-slate-100 text-slate-700',
   },
 ];
 

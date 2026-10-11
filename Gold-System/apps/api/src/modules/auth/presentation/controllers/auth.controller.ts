@@ -41,8 +41,13 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Step 1: Submit credentials and receive OTP via SMS' })
-  initiateLogin(@Body() dto: InitiateLoginDto) {
-    return this.authService.initiateLogin(dto.mobile, dto.password);
+  initiateLogin(@Body() dto: InitiateLoginDto, @Req() req: Request) {
+    return this.authService.initiateLogin(
+      dto.mobile,
+      dto.password,
+      req.ip,
+      req.headers['user-agent'],
+    );
   }
 
   @Public()

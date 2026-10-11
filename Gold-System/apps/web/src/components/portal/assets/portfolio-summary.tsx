@@ -23,6 +23,7 @@ export function PortfolioSummary({
   onRefreshPrice?: () => void;
 }) {
   const holding = isRegisteredHolding(position) ? position : null;
+  const figureClass = 'mt-4 text-xl font-bold tracking-tighter text-[#202124] sm:text-2xl';
 
   return (
     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -32,7 +33,7 @@ export function PortfolioSummary({
           <AssetSkeleton className="mt-4 h-10 w-40" />
         ) : (
           <>
-            <p className="mt-4 text-xl font-bold tabular-nums tracking-tight text-[#202124] sm:text-2xl">
+            <p className={figureClass}>
               {holding ? formatRial(holding.marketValueRial) : '—'}
             </p>
             <p className="mt-2 text-xs leading-5 text-[#6B7280]">مقایسه با ماه گذشته در دسترس نیست</p>
@@ -48,7 +49,7 @@ export function PortfolioSummary({
           <p className="mt-4 text-sm leading-7 text-[#6B7280]">موجودی طلا در حال حاضر قابل دریافت نیست.</p>
         ) : holding ? (
           <>
-            <p className="mt-4 text-xl font-bold tabular-nums tracking-tight text-[#202124] sm:text-2xl">
+            <p className={figureClass}>
               {formatWeight(holding.weightGrams)}
             </p>
             <p className="mt-2 text-xs leading-5 text-[#6B7280]">
@@ -77,7 +78,7 @@ export function PortfolioSummary({
             <SignedMoney
               value={holding?.unrealizedPnlRial}
               percent={holding?.unrealizedPnlRial ? holding.changePercent : null}
-              className="mt-4 text-xl sm:text-2xl"
+              className="mt-4 text-xl font-bold tracking-tighter proportional-nums sm:text-2xl"
             />
             <p className="mt-2 text-xs leading-5 text-[#6B7280]">ارزش روز منهای بهای خرید مانده</p>
           </>
@@ -106,7 +107,7 @@ export function PortfolioSummary({
           </>
         ) : (
           <>
-            <p className="mt-4 text-xl font-bold tabular-nums tracking-tight text-[#202124] sm:text-2xl">
+            <p className={figureClass}>
               {formatRial(price.normalizedValue)}
             </p>
             <p className="mt-2 text-xs leading-5 text-[#6B7280]">

@@ -190,16 +190,19 @@ export class TradesService {
         })),
       });
 
-      // §3.3: Move credit from reserved → consumed atomically
-      // Uses SELECT FOR UPDATE inside consumeCredit() to serialize concurrent attempts
-      await this.accountRepo.consumeCredit({
-        tx,
-        customerId: order.customerId,
-        amount: order.reservedAmountRial,
-        tradeId: created.id,
-        orderId,
-        actorId: actorUserId,
-      });
+      // §3.3: Move credit from reserved → consumed atomically.
+      // Sell orders reserve gold weight instead of rial credit, so there is
+      // nothing to consume on the rial balance.
+      if (order.reservedAmountRial.gt(0)) {
+        await this.accountRepo.consumeCredit({
+          tx,
+          customerId: order.customerId,
+          amount: order.reservedAmountRial,
+          tradeId: created.id,
+          orderId,
+          actorId: actorUserId,
+        });
+      }
 
       // Transition Order: APPROVED → TRADE_CREATED
       await tx.order.update({
@@ -299,7 +302,7 @@ export class TradesService {
           recipientMobile: customer?.mobile ?? null,
           type: NotificationType.TRADE_CONFIRMED,
           subject: 'معامله تأیید شد',
-          body: `معامله شماره ${trade.tradeNumber} به مبلغ ${trade.totalAmountRial.toFixed(2)} ریال تأیید شد.`,
+          body: `معامله شماره ${trade.tradeNumber} به مبلغ ${trade.totalAmountRial.div(10).toString()} تومان تأیید شد.`,
           relatedEntityType: 'Trade',
           relatedEntityId: trade.id,
         }),
@@ -373,16 +376,21 @@ export class TradesService {
         },
       });
 
-      // §4.2: Reverse credit consumption — consumedCredit back to available
-      // Financial/Gold Ledger reversal deferred to Phase 4
-      await this.accountRepo.reverseConsumption({
-        tx,
-        customerId: trade.customerId,
-        amount: trade.totalAmountRial,
-        tradeId,
-        actorId: actorUserId,
-        reason: dto.reason,
-      });
+      // §4.2: Reverse credit consumption — consumedCredit back to available.
+      // A sell trade never reserved rial credit, so reversal must not
+      // put the sale proceeds back into the customer's credit balance.
+      const sourceOrder = await this.orderRepo.findById(trade.orderId);
+      const reserved = sourceOrder?.reservedAmountRial ?? trade.totalAmountRial;
+      if (reserved.gt(0)) {
+        await this.accountRepo.reverseConsumption({
+          tx,
+          customerId: trade.customerId,
+          amount: trade.totalAmountRial,
+          tradeId,
+          actorId: actorUserId,
+          reason: dto.reason,
+        });
+      }
 
       // ─── Phase 4: Ledger Reversal Postings ─────────────────────────────────
       // Post reversal entries atomically within this transaction.

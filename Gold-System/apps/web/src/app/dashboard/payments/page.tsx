@@ -23,6 +23,7 @@ import {
   formatDateTime,
   formatMoney,
   statusLabel,
+  tomanToRial,
 } from '@/lib/utils';
 
 const LIMIT = 20;
@@ -90,18 +91,20 @@ export default function PaymentsPage() {
     setBusy(true);
     setFormError(null);
     try {
+      const rialAmount = tomanToRial(form.amount.trim());
+      if (!rialAmount) throw new Error('مبلغ نامعتبر است.');
       await internalPaymentsApi.record({
         idempotencyKey: crypto.randomUUID(),
         tradeId: form.tradeId.trim(),
         method: form.method,
-        amount: form.amount.trim(),
+        amount: rialAmount,
         referenceNumber: form.referenceNumber.trim() || undefined,
         notes: form.notes.trim() || undefined,
       });
       setFeedback('پرداخت ثبت شد.');
       void mutate();
     } catch (err) {
-      setFormError(err instanceof ApiClientError ? err.message : 'ثبت پرداخت انجام نشد.');
+      setFormError(err instanceof ApiClientError || err instanceof Error ? err.message : 'ثبت پرداخت انجام نشد.');
     } finally {
       setBusy(false);
     }
@@ -141,7 +144,7 @@ export default function PaymentsPage() {
               ))}
             </select>
           </label>
-          <Input label="مبلغ" dir="ltr" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
+          <Input label="مبلغ (تومان)" dir="ltr" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
           <Input label="شماره ارجاع" dir="ltr" value={form.referenceNumber} onChange={(event) => setForm({ ...form, referenceNumber: event.target.value })} />
           <Input label="یادداشت" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
           <div className="flex items-end">

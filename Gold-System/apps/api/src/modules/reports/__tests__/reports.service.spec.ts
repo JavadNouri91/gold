@@ -129,6 +129,20 @@ describe('ReportsService', () => {
       expect(result.reversedTrades).toBe(1);
     });
 
+    it('counts quoted and in-review orders as awaiting review', async () => {
+      mockRepo.getDashboardStats.mockResolvedValueOnce({
+        ...dashboardStats,
+        ordersByStatus: [
+          { status: 'QUOTED', _count: { id: 4 } },
+          { status: 'ASSIGNED', _count: { id: 1 } },
+          { status: 'UNDER_REVIEW', _count: { id: 2 } },
+          { status: 'SUBMITTED', _count: { id: 1 } },
+        ],
+      });
+      const result = await service.getDashboard();
+      expect(result.ordersAwaitingReview).toBe(8);
+    });
+
     it('uses Decimal for trade value totals — never Float', async () => {
       const result = await service.getDashboard();
       // Must be formatted as decimal string (2dp)

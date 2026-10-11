@@ -20,8 +20,12 @@ describe('AuthService security', () => {
   };
   const jwt = { sign: jest.fn().mockReturnValue('access-token') };
   const config = {
-    get: jest.fn((key: string) => {
-      if (key === 'otp') return { length: 6, expiresInSeconds: 120, maxAttempts: 5 };
+    get: jest.fn(),
+  };
+
+  function mockConfig(loginBypass = false) {
+    config.get.mockImplementation((key: string) => {
+      if (key === 'otp') return { length: 6, expiresInSeconds: 120, maxAttempts: 5, loginBypass };
       if (key === 'jwt') {
         return {
           accessSecret: 'a'.repeat(32),
@@ -30,8 +34,8 @@ describe('AuthService security', () => {
         };
       }
       return undefined;
-    }),
-  };
+    });
+  }
   const otpRepo = {
     createOrReplace: jest.fn(),
     findActive: jest.fn(),
@@ -61,6 +65,7 @@ describe('AuthService security', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockConfig(false);
     service = new AuthService(
       users as unknown as UsersService,
       jwt as unknown as JwtService,
@@ -90,8 +95,39 @@ describe('AuthService security', () => {
 
     await expect(service.initiateLogin('09120000000', 'password1')).resolves.toEqual({
       message: 'OTP sent to your registered mobile number',
+      requiresOtp: true,
     });
     expect(otpRepo.createOrReplace).toHaveBeenCalled();
+  });
+
+  it('issues a session on login when the development OTP bypass is enabled', async () => {
+    mockConfig(true);
+    users.findByMobileWithPassword.mockResolvedValue({
+      user: { id: 'u1', isActive: () => true },
+      passwordHash: await import('argon2').then((a) => a.hash('password1')),
+    });
+    users.findByMobile.mockResolvedValue({
+      id: 'u1',
+      mobile: '09120000000',
+      roles: ['platform_admin'],
+      permissions: ['order.read'],
+    });
+    sessions.openLoginSession.mockResolvedValue({
+      sessionId: 'rt-1',
+      refreshToken: 'issued-refresh',
+    });
+
+    const result = await service.initiateLogin('09120000000', 'password1');
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        requiresOtp: false,
+        accessToken: 'access-token',
+        refreshToken: 'issued-refresh',
+      }),
+    );
+    expect(otpRepo.createOrReplace).not.toHaveBeenCalled();
+    expect(notifications.sendOtp).not.toHaveBeenCalled();
   });
 
   it('issues a session-bound access token and rotates the refresh secret in place', async () => {

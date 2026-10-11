@@ -129,7 +129,7 @@ function renderPage(side: 'buy' | 'sell' = 'buy') {
 }
 
 async function calculateFiveGrams() {
-  await screen.findByText(/۱۲,۳۵۰,۰۰۰/);
+  await screen.findByText(/۱,۲۳۵,۰۰۰/);
   fireEvent.click(screen.getByRole('button', { name: '۵ گرم' }));
   await screen.findByText('مبلغ قابل پرداخت');
 }
@@ -251,6 +251,20 @@ describe('BuyGoldPage', () => {
     expect(screen.queryByRole('button', { name: 'محاسبه قیمت' })).not.toBeInTheDocument();
   });
 
+  it('fills buy weight from a round toman amount', async () => {
+    renderPage();
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    const chip = await screen.findByRole('button', { name: '۲۰ میلیون تومان' });
+    expect(screen.getByRole('button', { name: '۵۰ میلیون تومان' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '۱۰۰ میلیون تومان' })).toBeInTheDocument();
+    fireEvent.click(chip);
+    expect(await screen.findByDisplayValue('۳.۲۳۸')).toBeInTheDocument();
+    expect(chip).toHaveAttribute('aria-pressed', 'true');
+    expect(await screen.findByText('مبلغ قابل پرداخت')).toBeInTheDocument();
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '3.238' }));
+  });
+
   it('fills the weight that spends the whole rial balance', async () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
@@ -301,23 +315,59 @@ describe('BuyGoldPage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('زمان معاملات در حال حاضر فعال نیست.');
   });
 
-  it('blocks a sell when the weight exceeds gold holdings', async () => {
+  it('lets the seller pick their gold holding and caps typed weight to it', async () => {
     renderPage('sell');
     expect(await screen.findByRole('tab', { name: 'فروش طلا' })).toHaveAttribute('aria-selected', 'true');
-    fireEvent.click(screen.getByRole('button', { name: '۵ گرم' }));
-    expect(await screen.findByText('وزن انتخاب‌شده از موجودی طلای شما بیشتر است.')).toBeInTheDocument();
-    expect(screen.getByText('مبلغ قابل دریافت')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('checkbox'));
-    expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
+    const holding = await screen.findByRole('button', { name: /طلای آبشده/ });
+    expect(holding).toHaveTextContent('۲ گرم');
+    expect(await screen.findByRole('button', { name: '۲ گرم' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: '۵ گرم' })).toBeDisabled();
+    fireEvent.change(screen.getByLabelText('وزن فروش'), { target: { value: '۵' } });
+    expect(screen.getByDisplayValue('۲')).toBeInTheDocument();
+    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
   });
 
-  it('creates a sell order inside the gold holding', async () => {
+  it('fills sell weight from a quick weight chip within the holding', async () => {
     renderPage('sell');
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.click(screen.getByRole('button', { name: '۲ گرم' }));
+    fireEvent.click(await screen.findByRole('button', { name: '۱ گرم' }));
+    expect(screen.getByDisplayValue('۱')).toBeInTheDocument();
+    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
+  });
+
+  it('fills sell weight from a quick toman amount capped to the holding', async () => {
+    renderPage('sell');
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    fireEvent.click(await screen.findByRole('button', { name: '۵۰ میلیون تومان' }));
+    expect(await screen.findByDisplayValue('۲')).toBeInTheDocument();
+    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
+  });
+
+  it('creates a sell order from the selected gold holding', async () => {
+    renderPage('sell');
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    fireEvent.click(await screen.findByRole('button', { name: /طلای آبشده/ }));
     expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
     fireEvent.click(await openConfirm());
     expect(await screen.findByText('سفارش فروش ثبت شد')).toBeInTheDocument();
     expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ side: 'SELL', weightGrams: '2' }));
+  });
+
+  it('maps insufficient gold from the server when a sell is rejected', async () => {
+    mockSubmit.mockRejectedValue(
+      new ApiClientError('ORDER_INSUFFICIENT_GOLD', 'Insufficient gold weight', 422),
+    );
+    renderPage('sell');
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    fireEvent.click(await screen.findByRole('button', { name: /طلای آبشده/ }));
+    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    fireEvent.click(await openConfirm());
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'موجودی طلای کافی برای ثبت این سفارش فروش ندارید.',
+    );
   });
 });

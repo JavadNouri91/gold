@@ -8,6 +8,7 @@ import { useAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { Button } from '@/components/ui/button';
 import { MobileNumber } from '@/components/ui/mobile-input';
+import { ThemeCycleButton } from '@/components/theme-toggle';
 
 const LABELS: Record<string, string> = {
   dashboard: 'داشبورد',
@@ -92,6 +93,7 @@ export function DashboardTopbar({ onMenu }: { onMenu: () => void }) {
         ) : (
           <div className="flex-1" />
         )}
+        <ThemeCycleButton className="h-10 w-10" />
         <Link href="/dashboard/notifications" aria-label="اعلان‌ها" className="rounded-md p-2 hover:bg-muted">
           <Bell className="h-5 w-5" />
         </Link>

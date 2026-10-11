@@ -55,7 +55,19 @@ export class AuthService {
   /**
    * Step 1: Validate credentials and send OTP
    */
-  async initiateLogin(mobile: string, password: string): Promise<{ message: string }> {
+  async initiateLogin(
+    mobile: string,
+    password: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<
+    | { message: string; requiresOtp: true }
+    | (TokenPair & {
+        message: string;
+        requiresOtp: false;
+        user: { id: string; mobile: string; roles: string[]; permissions: string[] };
+      })
+  > {
     const result = await this.usersService.findByMobileWithPassword(mobile);
 
     if (!result) {
@@ -82,6 +94,18 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    if (this.isLoginOtpBypassed()) {
+      this.logger.warn(`[AuthService] Login OTP bypassed for mobile=${mobile}`);
+      const signedIn = await this.usersService.findByMobile(mobile);
+      if (!signedIn) throw new UnauthorizedException('Invalid credentials');
+      const session = await this.completeLogin(signedIn, ipAddress, userAgent);
+      return {
+        ...session,
+        requiresOtp: false,
+        message: 'ورود بدون کد تأیید انجام شد.',
+      };
+    }
+
     // Generate and send OTP
     const otpConfig = this.configService.get('otp');
     const otp = generateNumericOtp(otpConfig.length);
@@ -106,7 +130,7 @@ export class AuthService {
       this.logger.error(`[AuthService] OTP SMS delivery failed for mobile=${mobile}: ${msg}`);
     }
 
-    return { message: 'OTP sent to your registered mobile number' };
+    return { message: 'OTP sent to your registered mobile number', requiresOtp: true };
   }
 
   /**
@@ -205,6 +229,12 @@ export class AuthService {
       user: { id: string; mobile: string; roles: string[]; permissions: string[] };
     }
   > {
+    if (this.isLoginOtpBypassed()) {
+      const user = await this.usersService.findByMobile(mobile);
+      if (!user) throw new UnauthorizedException('User not found');
+      return this.completeLogin(user, ipAddress, userAgent);
+    }
+
     const otpRecord = await this.otpRepository.findActive(mobile, 'LOGIN');
 
     if (!otpRecord) {
@@ -233,42 +263,7 @@ export class AuthService {
     const user = await this.usersService.findByMobile(mobile);
     if (!user) throw new UnauthorizedException('User not found');
 
-    const tokenPair = await this.issueLoginSession(
-      user.id,
-      mobile,
-      user.roles,
-      user.permissions,
-      ipAddress,
-      userAgent,
-    );
-
-    await this.usersService.updateLastLogin(user.id);
-
-    await this.auditService.log({
-      actorId: user.id,
-      action: 'LOGIN',
-      entityType: 'User',
-      entityId: user.id,
-      ipAddress,
-    });
-
-    await this.auditService.log({
-      actorId: user.id,
-      action: 'USER_LOGIN',
-      entityType: 'User',
-      entityId: user.id,
-      ipAddress,
-    });
-
-    return {
-      ...tokenPair,
-      user: {
-        id: user.id,
-        mobile: user.mobile,
-        roles: user.roles,
-        permissions: user.permissions,
-      },
-    };
+    return this.completeLogin(user, ipAddress, userAgent);
   }
 
   /**
@@ -468,6 +463,57 @@ export class AuthService {
   }
 
   // ─── Private helpers ───────────────────────────────────────
+
+  private isLoginOtpBypassed(): boolean {
+    return this.configService.get('otp')?.loginBypass === true;
+  }
+
+  private async completeLogin(
+    user: { id: string; mobile: string; roles: string[]; permissions: string[] },
+    ipAddress?: string,
+    userAgent?: string,
+  ): Promise<
+    TokenPair & {
+      user: { id: string; mobile: string; roles: string[]; permissions: string[] };
+    }
+  > {
+    const tokenPair = await this.issueLoginSession(
+      user.id,
+      user.mobile,
+      user.roles,
+      user.permissions,
+      ipAddress,
+      userAgent,
+    );
+
+    await this.usersService.updateLastLogin(user.id);
+
+    await this.auditService.log({
+      actorId: user.id,
+      action: 'LOGIN',
+      entityType: 'User',
+      entityId: user.id,
+      ipAddress,
+    });
+
+    await this.auditService.log({
+      actorId: user.id,
+      action: 'USER_LOGIN',
+      entityType: 'User',
+      entityId: user.id,
+      ipAddress,
+    });
+
+    return {
+      ...tokenPair,
+      user: {
+        id: user.id,
+        mobile: user.mobile,
+        roles: user.roles,
+        permissions: user.permissions,
+      },
+    };
+  }
 
   private async issueLoginSession(
     userId: string,

@@ -4,19 +4,36 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 20 14.3% 4.1%;
+    --background: 220 14% 96.5%;
+    --foreground: 222 47% 11%;
     --card: 0 0% 100%;
-    --card-foreground: 20 14.3% 4.1%;
-    --primary: 43 96% 56%;       /* gold-500 */
+    --card-foreground: 222 47% 11%;
+    --primary: 43 96% 56%;
     --primary-foreground: 20 14.3% 4.1%;
     --secondary: 60 4.8% 95.9%;
     --secondary-foreground: 24 9.8% 10%;
-    --muted: 60 4.8% 95.9%;
-    --muted-foreground: 25 5.3% 44.7%;
-    --border: 20 5.9% 90%;
-    --input: 20 5.9% 85%;
+    --muted: 220 14% 94%;
+    --muted-foreground: 215 16% 47%;
+    --border: 214 20% 90%;
+    --input: 214 20% 85%;
     --radius: 0.5rem;
+    color-scheme: light;
+  }
+
+  .dark {
+    --background: 222 28% 8%;
+    --foreground: 210 40% 96%;
+    --card: 222 24% 12%;
+    --card-foreground: 210 40% 96%;
+    --primary: 43 96% 56%;
+    --primary-foreground: 20 14.3% 4.1%;
+    --secondary: 217 19% 18%;
+    --secondary-foreground: 210 40% 96%;
+    --muted: 217 19% 16%;
+    --muted-foreground: 215 16% 65%;
+    --border: 217 19% 22%;
+    --input: 217 19% 28%;
+    color-scheme: dark;
   }
 
   * {
@@ -40,4 +57,96 @@
 /* RTL overrides */
 [dir='rtl'] .space-x-4 > :not([hidden]) ~ :not([hidden]) {
   --tw-space-x-reverse: 1;
+}
+
+/*
+ * Most screens still use light-only utility colors. Remap the common ones
+ * when `.dark` is on <html> so cards, chrome, and copy follow the theme.
+ */
+html.dark .bg-white {
+  background-color: hsl(var(--card));
+}
+html.dark .bg-white\/95 {
+  background-color: hsl(var(--card) / 0.95);
+}
+html.dark .bg-white\/80 {
+  background-color: hsl(var(--card) / 0.8);
+}
+html.dark .bg-white\/70 {
+  background-color: hsl(var(--card) / 0.7);
+}
+html.dark .bg-white\/50 {
+  background-color: hsl(var(--card) / 0.5);
+}
+html.dark .to-white {
+  --tw-gradient-to: hsl(var(--background)) var(--tw-gradient-to-position);
+}
+html.dark .from-gold-50 {
+  --tw-gradient-from: hsl(36 30% 12%) var(--tw-gradient-from-position);
+  --tw-gradient-to: hsl(36 30% 12% / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html.dark .bg-gray-50,
+html.dark .bg-slate-50,
+html.dark .bg-\[\#F7F8FA\],
+html.dark .bg-\[\#F8FAFC\],
+html.dark .bg-\[\#F8F9FA\] {
+  background-color: hsl(var(--muted));
+}
+html.dark .hover\:bg-slate-50:hover,
+html.dark .hover\:bg-\[\#F8FAFC\]:hover,
+html.dark .hover\:bg-muted:hover,
+html.dark .focus-visible\:bg-slate-50:focus-visible {
+  background-color: hsl(var(--muted));
+}
+html.dark .bg-\[\#EFF6FF\] {
+  background-color: rgb(37 99 235 / 0.16);
+}
+html.dark .bg-\[\#F5F3FF\] {
+  background-color: rgb(124 58 237 / 0.16);
+}
+html.dark .bg-\[\#FEF2F2\] {
+  background-color: rgb(220 38 38 / 0.16);
+}
+html.dark .bg-\[\#ECFDF3\] {
+  background-color: rgb(22 163 74 / 0.16);
+}
+html.dark .bg-\[\#FFF4D6\],
+html.dark .bg-\[\#FFF9E8\],
+html.dark .bg-\[\#FFF8E7\] {
+  background-color: rgb(217 154 0 / 0.16);
+}
+html.dark .from-\[\#FFFDF7\] {
+  --tw-gradient-from: hsl(40 30% 14%) var(--tw-gradient-from-position);
+  --tw-gradient-to: hsl(40 30% 14% / 0) var(--tw-gradient-to-position);
+  --tw-gradient-stops: var(--tw-gradient-from), var(--tw-gradient-to);
+}
+html.dark .to-\[\#FFF4D6\] {
+  --tw-gradient-to: hsl(40 35% 16%) var(--tw-gradient-to-position);
+}
+html.dark .text-slate-800,
+html.dark .text-slate-700,
+html.dark .text-\[\#172033\],
+html.dark .text-\[\#202124\] {
+  color: hsl(var(--foreground));
+}
+html.dark .text-slate-600,
+html.dark .text-slate-500,
+html.dark .text-\[\#667085\],
+html.dark .text-\[\#6B7280\] {
+  color: hsl(var(--muted-foreground));
+}
+html.dark .border-slate-100,
+html.dark .border-slate-200,
+html.dark .border-\[\#E5E7EB\] {
+  border-color: hsl(var(--border));
+}
+html.dark .divide-slate-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-\[\#E5E7EB\] > :not([hidden]) ~ :not([hidden]) {
+  border-color: hsl(var(--border));
+}
+html.dark .shadow-\[0_2px_8px_rgba\(16\,24\,40\,0\.04\)\],
+html.dark .shadow-\[0_8px_24px_rgba\(15\,23\,42\,0\.12\)\],
+html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
+  --tw-shadow-color: rgb(0 0 0 / 0.35);
 }

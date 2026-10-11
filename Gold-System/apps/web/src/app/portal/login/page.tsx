@@ -10,6 +10,7 @@ import { PasswordInput } from '@/components/ui/password-input';
 import { MobileInput } from '@/components/ui/mobile-input';
 import { Alert } from '@/components/ui/alert';
 import { PasswordRecoveryForm } from '@/components/auth/password-recovery-form';
+import { ThemeCycleButton } from '@/components/theme-toggle';
 
 interface LoginForm {
   mobile: string;
@@ -17,9 +18,10 @@ interface LoginForm {
 }
 
 export default function LoginPage() {
-  const { login } = useAuth();
+  const { login, closeOtherSessions } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
+  const [closeToken, setCloseToken] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [mode, setMode] = useState<'login' | 'recover'>('login');
 
@@ -33,14 +35,23 @@ export default function LoginPage() {
 
   const onSubmit = async (data: LoginForm) => {
     setError(null);
+    setCloseToken(null);
     setIsLoading(true);
     try {
       const mobile = latinMobile(data.mobile);
-      await login(mobile, data.password);
-      sessionStorage.setItem('login_mobile', mobile);
-      router.push('/portal/otp');
+      const result = await login(mobile, data.password);
+      if (result.requiresOtp) {
+        sessionStorage.setItem('login_mobile', mobile);
+        router.push('/portal/otp');
+        return;
+      }
+      router.replace('/portal/dashboard');
     } catch (err) {
-      if (err instanceof ApiClientError) {
+      if (err instanceof ApiClientError && err.code === 'SESSION_LIMIT_REACHED') {
+        const token = (err.details as { confirmationToken?: string } | undefined)?.confirmationToken;
+        if (token) setCloseToken(token);
+        setError(err.message);
+      } else if (err instanceof ApiClientError) {
         setError(err.message);
       } else {
         setError('خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید.');
@@ -51,7 +62,10 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-gold-50 to-white p-4">
+    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-gold-50 to-white p-4">
+      <div className="absolute left-4 top-4">
+        <ThemeCycleButton />
+      </div>
       <div className="w-full max-w-sm">
         {/* Header */}
         <div className="text-center mb-8">
@@ -69,6 +83,28 @@ export default function LoginPage() {
           {mode === 'login' ? (
             <>
               {error && <Alert variant="error">{error}</Alert>}
+              {closeToken ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  isLoading={isLoading}
+                  onClick={async () => {
+                    setIsLoading(true);
+                    setError(null);
+                    try {
+                      await closeOtherSessions(closeToken);
+                      router.replace('/portal/dashboard');
+                    } catch (err) {
+                      setError(err instanceof ApiClientError ? err.message : 'بستن نشست‌ها انجام نشد.');
+                    } finally {
+                      setIsLoading(false);
+                    }
+                  }}
+                >
+                  بستن همه نشست‌های دیگر
+                </Button>
+              ) : null}
 
               <form onSubmit={handleSubmit(onSubmit)} noValidate>
                 <div className="space-y-4">
@@ -100,7 +136,7 @@ export default function LoginPage() {
                     </button>
                   </div>
                   <Button type="submit" className="w-full" isLoading={isLoading}>
-                    دریافت کد تأیید
+                    ورود
                   </Button>
                 </div>
               </form>
@@ -112,7 +148,7 @@ export default function LoginPage() {
 
         {mode === 'login' ? (
           <p className="text-center text-xs text-muted-foreground mt-6">
-            پس از وارد کردن شماره موبایل و رمز عبور، کد تأیید برای شما ارسال می‌شود.
+            با شماره موبایل و رمز عبور وارد شوید.
           </p>
         ) : null}
       </div>

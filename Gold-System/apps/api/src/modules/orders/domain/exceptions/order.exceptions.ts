@@ -23,6 +23,25 @@ export class InsufficientCreditException extends BusinessRuleException {
 }
 
 /**
+ * Thrown when a sell order's weight exceeds the customer's booked gold holding.
+ * Buy orders use rial credit; sell orders use melted-gold weight.
+ */
+export class InsufficientGoldException extends BusinessRuleException {
+  constructor(available: Decimal, required: Decimal) {
+    super(
+      'ORDER_INSUFFICIENT_GOLD',
+      'Insufficient gold weight to submit this sell order. ' +
+        'Reduce the weight or wait until a pending sale is cancelled.',
+      {
+        availableGrams: available.toFixed(6),
+        requiredGrams: required.toFixed(6),
+        shortfallGrams: required.minus(available).toFixed(6),
+      },
+    );
+  }
+}
+
+/**
  * Thrown when a state transition is attempted on an Order that is not in
  * the correct state for that transition.
  */

@@ -7,15 +7,15 @@ import { Alert } from '@/components/ui/alert';
 import { PermissionGate } from './permission-gate';
 import { internalCustomersApi, type StaffAccount } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
-import { formatMoney } from '@/lib/utils';
+import { formatMoney, tomanToRial } from '@/lib/utils';
 
 export function CreditSummary({ account }: { account: StaffAccount }) {
   const rows = [
-    ['سقف اعتبار ریالی', account.creditLimitRial],
+    ['سقف اعتبار نقدی', account.creditLimitRial],
     ['رزرو شده', account.reservedCreditRial],
     ['مصرف‌شده', account.consumedCreditRial],
     ['در دسترس', account.availableRial],
-    ['سقف اعتبار طلایی (ریال)', account.creditLimitGoldRial],
+    ['سقف اعتبار طلایی', account.creditLimitGoldRial],
     ['رزرو اعتبار طلایی', account.reservedCreditGoldRial],
     ['مصرف اعتبار طلایی', account.consumedCreditGoldRial],
     ['در دسترس اعتبار طلایی', account.availableGoldRial],
@@ -51,9 +51,11 @@ export function GrantCreditForm({
     setBusy(true);
     setError(null);
     try {
+      const rialAmount = tomanToRial(amount.trim());
+      if (!rialAmount) throw new Error('مبلغ نامعتبر است.');
       await internalCustomersApi.grantCredit(customerId, {
         pool,
-        amount: amount.trim(),
+        amount: rialAmount,
         reason: reason.trim(),
       });
       setFeedback('اعتبار توسط سرور ثبت شد.');
@@ -61,7 +63,7 @@ export function GrantCreditForm({
       setReason('');
       onGranted();
     } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'ثبت اعتبار انجام نشد.');
+      setError(err instanceof ApiClientError || err instanceof Error ? err.message : 'ثبت اعتبار انجام نشد.');
     } finally {
       setBusy(false);
     }
@@ -84,7 +86,7 @@ export function GrantCreditForm({
             <option value="GOLD_RIAL">اعتبار طلایی</option>
           </select>
         </label>
-        <Input label="مبلغ" dir="ltr" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        <Input label="مبلغ (تومان)" dir="ltr" value={amount} onChange={(event) => setAmount(event.target.value)} />
         <Input label="دلیل" value={reason} onChange={(event) => setReason(event.target.value)} />
         <Button disabled={amount.trim().length === 0 || reason.trim().length < 5} isLoading={busy} onClick={() => void submit()}>
           ثبت

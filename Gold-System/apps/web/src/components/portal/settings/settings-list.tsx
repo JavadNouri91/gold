@@ -139,12 +139,30 @@ export function SettingsValueRow({
   value: string;
 }) {
   return (
-    <div className="flex min-h-16 items-center gap-3 px-3 py-2.5 md:min-h-[68px] md:px-4 md:py-3">
-      <IconWell icon={icon} />
-      <RowCopy title={title} description={description} />
+    <SettingsControlRow icon={icon} title={title} description={description}>
       <span className="inline-flex h-9 shrink-0 items-center rounded-lg border border-[#E5E7EB] bg-white px-3 text-sm font-semibold text-[#172033]">
         {value}
       </span>
+    </SettingsControlRow>
+  );
+}
+
+export function SettingsControlRow({
+  icon,
+  title,
+  description,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-16 items-center gap-3 px-3 py-2.5 md:min-h-[68px] md:px-4 md:py-3">
+      <IconWell icon={icon} />
+      <RowCopy title={title} description={description} />
+      {children}
     </div>
   );
 }

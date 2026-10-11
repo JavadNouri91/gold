@@ -12,7 +12,7 @@ const ACTIONS = [
   },
   {
     href: '/portal/payments',
-    title: 'واریز ریال',
+    title: 'واریز تومان',
     description: 'ثبت رسید افزایش اعتبار',
     icon: ArrowDownToLine,
     className: 'bg-sky-50 text-sky-800',

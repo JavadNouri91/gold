@@ -27,6 +27,7 @@ import Decimal from 'decimal.js';
 import { OrderStatus, CustomerStatus, CustomerType } from '@gold/shared-types';
 
 import { OrdersService } from './application/orders.service';
+import { CustomerActivityService } from './application/customer-activity.service';
 import { OrderRepository } from './infrastructure/repositories/order.repository';
 import { CustomerAccountRepository } from '../customer-accounts/infrastructure/repositories/customer-account.repository';
 import { PricingEngineService } from '../pricing/application/pricing-engine.service';
@@ -46,6 +47,7 @@ import { ListOrdersDto } from './application/dto/list-orders.dto';
 
 import {
   InsufficientCreditException,
+  InsufficientGoldException,
   InvalidOrderStateTransitionException,
   CustomerCancellationDisabledException,
   OrderNotFoundException,
@@ -162,6 +164,7 @@ describe('OrdersService', () => {
   let auditService: jest.Mocked<AuditService>;
   let quotationsService: jest.Mocked<QuotationsService>;
   let tradingPolicy: { assertTradingOpen: jest.Mock; validateTransaction: jest.Mock };
+  let activity: { sellableWeightGrams: jest.Mock };
 
   // Mock $transaction: just execute the callback with a fake tx
   // Phase 3.5: fakeTx needs order.update + order.findUnique + assignment.updateMany
@@ -201,6 +204,7 @@ describe('OrdersService', () => {
             customer: { findUnique: jest.fn().mockResolvedValue(null) },
             store: { findFirst: jest.fn() },
             order: { update: jest.fn() },
+            orderItem: { findFirst: jest.fn().mockResolvedValue(null) },
             // Phase 3.4: needed for Quotation generation in submitOrder
             pricingCalculation: { findUnique: jest.fn() },
           },
@@ -225,6 +229,7 @@ describe('OrdersService', () => {
           useValue: {
             reserveCredit: jest.fn(),
             releaseCredit: jest.fn(),
+            lockByCustomerId: jest.fn(),
           },
         },
         {
@@ -255,6 +260,10 @@ describe('OrdersService', () => {
             validateTransaction: jest.fn().mockResolvedValue(undefined),
           },
         },
+        {
+          provide: CustomerActivityService,
+          useValue: { sellableWeightGrams: jest.fn() },
+        },
       ],
     }).compile();
 
@@ -266,6 +275,7 @@ describe('OrdersService', () => {
     auditService = module.get(AuditService) as jest.Mocked<AuditService>;
     quotationsService = module.get(QuotationsService) as jest.Mocked<QuotationsService>;
     tradingPolicy = module.get(TradingPolicyService);
+    activity = module.get(CustomerActivityService);
 
     // Default: $transaction executes callback immediately with fakeTx
     (prisma.$transaction as jest.Mock).mockImplementation(
@@ -525,6 +535,46 @@ describe('OrdersService', () => {
       expect(orderRepo.submitInTx).not.toHaveBeenCalled();
     });
 
+    it('submits a sell order against gold weight and does not reserve rial credit', async () => {
+      (prisma.customer.findUnique as jest.Mock).mockResolvedValue(activeCustomerRow);
+      (prisma.orderItem.findFirst as jest.Mock).mockResolvedValue({ metadata: { side: 'SELL' } });
+      const draftOrder = makeOrder({ status: OrderStatus.DRAFT, weightGrams: new Decimal('2') });
+      (orderRepo.findByIdForCustomer as jest.Mock).mockResolvedValue(draftOrder);
+      activity.sellableWeightGrams.mockResolvedValue(new Decimal('5.000000'));
+      (orderRepo.submitInTx as jest.Mock).mockResolvedValue(undefined);
+      (orderRepo.findById as jest.Mock).mockResolvedValue(
+        makeOrder({
+          status: OrderStatus.QUOTED,
+          weightGrams: new Decimal('2'),
+          reservedAmountRial: new Decimal(0),
+          submittedAt: new Date(),
+        }),
+      );
+
+      const result = await service.submitOrder(CUSTOMER_USER_ID, ORDER_ID);
+
+      expect(accountRepo.reserveCredit).not.toHaveBeenCalled();
+      expect(accountRepo.lockByCustomerId).toHaveBeenCalledWith(fakeTx, CUSTOMER_ID);
+      expect(activity.sellableWeightGrams).toHaveBeenCalledWith(CUSTOMER_ID, fakeTx);
+      expect(orderRepo.submitInTx).toHaveBeenCalledWith(fakeTx, ORDER_ID, new Decimal(0));
+      expect(result.reservedAmountRial).toBe('0.00');
+    });
+
+    it('rejects a sell order when booked gold weight is short', async () => {
+      (prisma.customer.findUnique as jest.Mock).mockResolvedValue(activeCustomerRow);
+      (prisma.orderItem.findFirst as jest.Mock).mockResolvedValue({ metadata: { side: 'SELL' } });
+      (orderRepo.findByIdForCustomer as jest.Mock).mockResolvedValue(
+        makeOrder({ status: OrderStatus.DRAFT, weightGrams: new Decimal('10') }),
+      );
+      activity.sellableWeightGrams.mockResolvedValue(new Decimal('2.000000'));
+
+      await expect(service.submitOrder(CUSTOMER_USER_ID, ORDER_ID)).rejects.toBeInstanceOf(
+        InsufficientGoldException,
+      );
+      expect(accountRepo.reserveCredit).not.toHaveBeenCalled();
+      expect(orderRepo.submitInTx).not.toHaveBeenCalled();
+    });
+
     /**
      * CONCURRENCY SAFETY (docs/21-business-decisions.md §3.3):
      *
@@ -706,6 +756,26 @@ describe('OrdersService', () => {
         // QUOTED.hasCreditReserved() = true → release credit
         expect(accountRepo.releaseCredit).toHaveBeenCalledTimes(1);
         // QUOTED has an active Quotation → expire it
+        expect(quotationsService.expireForOrderInTx).toHaveBeenCalledTimes(1);
+      });
+
+      it('cancels a quoted sell without releasing rial credit', async () => {
+        (prisma.customer.findUnique as jest.Mock).mockResolvedValue(activeCustomerRow);
+        (orderRepo.findByIdForCustomer as jest.Mock).mockResolvedValue(
+          makeOrder({ status: OrderStatus.QUOTED, reservedAmountRial: new Decimal(0) }),
+        );
+        (prisma.store.findFirst as jest.Mock).mockResolvedValue({
+          allowCustomerCancellation: true,
+        });
+        (orderRepo.cancelInTx as jest.Mock).mockResolvedValue(undefined);
+        (orderRepo.findById as jest.Mock).mockResolvedValue(
+          makeOrder({ status: OrderStatus.CANCELLED }),
+        );
+
+        await service.cancelOrder(CUSTOMER_USER_ID, ORDER_ID, cancelDto, false);
+
+        expect(accountRepo.releaseCredit).not.toHaveBeenCalled();
+        expect(orderRepo.cancelInTx).toHaveBeenCalledTimes(1);
         expect(quotationsService.expireForOrderInTx).toHaveBeenCalledTimes(1);
       });
 

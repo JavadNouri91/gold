@@ -16,8 +16,10 @@ jest.mock('@/lib/internal-api', () => ({
     list: jest.fn(),
     startReview: jest.fn(),
     assign: jest.fn(),
+    claim: jest.fn(),
   },
   internalOrdersApi: {
+    list: jest.fn().mockResolvedValue({ orders: [], meta: { page: 1, limit: 20, total: 0, totalPages: 0 } }),
     approve: jest.fn().mockResolvedValue({}),
     reject: jest.fn().mockResolvedValue({}),
     requestRevision: jest.fn(),

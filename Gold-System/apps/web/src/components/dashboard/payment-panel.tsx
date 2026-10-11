@@ -8,7 +8,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { PermissionGate } from './permission-gate';
 import { internalPaymentsApi, type StaffPayment, type TradePaymentStatus } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
-import { formatMoney } from '@/lib/utils';
+import { formatMoney, tomanToRial } from '@/lib/utils';
 
 export function PaymentActionPanel({
   payment,
@@ -32,9 +32,11 @@ export function PaymentActionPanel({
       if (open === 'validate') await internalPaymentsApi.validate(payment.id);
       if (open === 'allocate') {
         if (!payment.tradeId) throw new Error('این پرداخت واریز اعتبار است و به معامله تخصیص داده نمی‌شود.');
+        const rialAmount = tomanToRial(amount.trim());
+        if (!rialAmount) throw new Error('مبلغ نامعتبر است.');
         await internalPaymentsApi.allocate(payment.id, {
           tradeId: payment.tradeId,
-          amount: amount.trim(),
+          amount: rialAmount,
         });
       }
       setFeedback('عملیات پرداخت ثبت شد.');
@@ -70,7 +72,7 @@ export function PaymentActionPanel({
       </div>
       {open === 'allocate' ? (
         <Input
-          label="مبلغ تخصیص (همان مقدار ارسالی به سرور)"
+          label="مبلغ تخصیص (تومان)"
           dir="ltr"
           value={amount}
           onChange={(event) => setAmount(event.target.value)}
@@ -84,7 +86,7 @@ export function PaymentActionPanel({
             ? 'سرور تخصیص و وضعیت تسویه معامله را ثبت می‌کند.'
             : payment.tradeId
               ? 'وضعیت پرداخت به تأییدشده تغییر می‌کند.'
-              : 'پس از تأیید، اعتبار ریالی مشتری به اندازه مبلغ این واریز افزایش می‌یابد.'
+              : 'پس از تأیید، اعتبار مشتری به اندازه مبلغ این واریز افزایش می‌یابد.'
         }
         isLoading={busy}
         onClose={() => setOpen(null)}

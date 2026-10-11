@@ -21,9 +21,11 @@ import {
 } from '../lib/utils';
 
 describe('formatRial', () => {
-  it('formats Rial with separator and unit', () => {
+  it('formats stored Rial as Toman with separator and unit', () => {
     const result = formatRial('5000000.00');
-    expect(result).toContain('ریال');
+    expect(result).toContain('تومان');
+    expect(result).toContain('۵۰۰,۰۰۰');
+    expect(result).not.toContain('ریال');
   });
 
   it('returns — for null', () => {
@@ -39,7 +41,7 @@ describe('formatRial', () => {
   });
 
   it('handles integer value', () => {
-    expect(formatRial(1000000)).toContain('ریال');
+    expect(formatRial(1000000)).toContain('تومان');
   });
 });
 

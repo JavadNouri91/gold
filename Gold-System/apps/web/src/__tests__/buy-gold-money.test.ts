@@ -43,6 +43,8 @@ describe('weight input', () => {
     expect(decreaseWeightByMilli('6.596')).toBe('6.595');
     expect(decreaseWeightByMilli('0.001')).toBeNull();
     expect(capWeightToAvailable('2.123456', '2.123456')).toBe('2.123');
+    expect(capWeightToAvailable('2.000000', '2.000000')).toBe('2');
+    expect(capWeightToAvailable('8.097', '2.000000')).toBe('2');
     expect(capWeightToAvailable('0.0004', '0.0004')).toBeNull();
   });
 

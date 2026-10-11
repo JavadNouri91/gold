@@ -151,9 +151,9 @@ describe('AssetsPage', () => {
     );
     expect(screen.getByRole('link', { name: 'مشاهده همه' })).toHaveAttribute('href', '/portal/trades');
     expect(screen.getByRole('link', { name: /گزارش معاملات/ })).toHaveAttribute('href', '/portal/trades');
-    expect(screen.getByRole('link', { name: /واریز ریال/ })).toHaveAttribute('href', '/portal/payments');
+    expect(screen.getByRole('link', { name: /واریز تومان/ })).toHaveAttribute('href', '/portal/payments');
     expect(screen.queryByRole('button', { name: 'دانلود گزارش' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'برداشت ریال' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'برداشت تومان' })).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'گزارش سود و زیان' })).not.toBeInTheDocument();
   });
 

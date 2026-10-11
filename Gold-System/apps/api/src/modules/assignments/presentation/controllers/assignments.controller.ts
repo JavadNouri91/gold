@@ -64,6 +64,20 @@ export class AssignmentsController {
   }
 
   /**
+   * POST /orders/:id/claim
+   *
+   * Reviewer picks up an unassigned QUOTED Order (QUOTED → ASSIGNED).
+   * Authorization: trade.review
+   */
+  @Post('orders/:id/claim')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('trade.review')
+  async claimOrder(@CurrentUser() user: CurrentUserData, @Param('id') orderId: string) {
+    return this.assignmentsService.claimOrder(user.userId, orderId);
+  }
+
+  /**
    * POST /orders/:id/start-review
    *
    * Transitions an ASSIGNED Order to UNDER_REVIEW.

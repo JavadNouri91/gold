@@ -158,7 +158,7 @@ export function SessionCard({
       <div className="mt-3 space-y-2">
         <Meter percent={session.amountPercent} tone="green" />
         <div className="flex justify-between text-xs text-muted-foreground">
-          <span>سقف ریالی {money(session.maxAmountRial)}</span>
+          <span>سقف مبلغ {money(session.maxAmountRial)}</span>
           <span>مصرف‌شده {money(session.usedAmountRial)}</span>
         </div>
       </div>

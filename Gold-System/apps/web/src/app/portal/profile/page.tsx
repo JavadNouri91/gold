@@ -11,6 +11,7 @@ import { PersonalInformationCard } from '@/components/portal/profile/personal-in
 import { ProfileCreditCard } from '@/components/portal/profile/profile-credit-card';
 import { ProfileHero } from '@/components/portal/profile/profile-hero';
 import { ProfileKycCard } from '@/components/portal/profile/profile-kyc-card';
+import { ProfilePreferences } from '@/components/portal/profile/profile-preferences';
 import { readListTotal } from '@/components/portal/profile/read-list-total';
 import { SecurityCard } from '@/components/portal/profile/security-card';
 
@@ -89,6 +90,8 @@ export default function ProfilePage() {
           />
         </div>
       </div>
+
+      <ProfilePreferences />
     </div>
   );
 }

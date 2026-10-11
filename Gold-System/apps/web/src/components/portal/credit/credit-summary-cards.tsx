@@ -45,7 +45,7 @@ export function CreditSummaryCards({ figures }: { figures: CreditFigures }) {
           <p className={`mt-2 break-words text-[11px] font-bold leading-5 tabular-nums min-[390px]:text-sm sm:text-base ${card.valueClass}`}>
             {formatCreditAmount(card.amount(figures))}
           </p>
-          <p className="text-[10px] text-[#6B7280]">ریال</p>
+          <p className="text-[10px] text-[#6B7280]">تومان</p>
           <p className={`mt-2 text-xs font-bold tabular-nums ${card.labelClass}`}>
             {formatShare(card.percent(figures))}
           </p>
