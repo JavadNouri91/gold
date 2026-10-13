@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -10,6 +11,9 @@ export type SidebarNavItemProps = {
   icon: LucideIcon;
   iconClassName?: string;
   active?: boolean;
+  /** Desktop portal/staff chrome uses gold; mobile drawer uses emerald. */
+  tone?: 'gold' | 'emerald';
+  trailing?: ReactNode;
   onNavigate?: () => void;
 } & (
   | { href: string; onClick?: never }
@@ -17,7 +21,7 @@ export type SidebarNavItemProps = {
 );
 
 const BASE_CLASS =
-  'group relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-right transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500';
+  'group relative flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-right transition-colors focus-visible:outline-none';
 
 export function SidebarNavItem({
   label,
@@ -25,15 +29,25 @@ export function SidebarNavItem({
   icon: Icon,
   iconClassName,
   active = false,
+  tone = 'gold',
+  trailing,
   href,
   onClick,
   onNavigate,
 }: SidebarNavItemProps) {
+  const emerald = tone === 'emerald';
   const className = cn(
     BASE_CLASS,
+    emerald
+      ? 'focus-visible:ring-2 focus-visible:ring-emerald-500'
+      : 'focus-visible:ring-2 focus-visible:ring-gold-500',
     active
-      ? 'border-r-4 border-gold-500 bg-[#FFF4D6] text-gold-800'
-      : 'border-r-4 border-transparent text-slate-800 hover:bg-slate-50',
+      ? emerald
+        ? 'bg-emerald-50 text-emerald-800'
+        : 'border-r-4 border-gold-500 bg-[#FFF4D6] text-gold-800'
+      : emerald
+        ? 'text-slate-800 hover:bg-slate-50'
+        : 'border-r-4 border-transparent text-slate-800 hover:bg-slate-50',
   );
 
   const content = (
@@ -41,7 +55,11 @@ export function SidebarNavItem({
       <span
         className={cn(
           'flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors',
-          active ? 'bg-gold-100 text-gold-700' : iconClassName ?? 'bg-slate-100 text-slate-600',
+          active
+            ? emerald
+              ? 'bg-emerald-100 text-emerald-700'
+              : 'bg-gold-100 text-gold-700'
+            : iconClassName ?? 'bg-slate-100 text-slate-600',
         )}
         aria-hidden
       >
@@ -51,7 +69,7 @@ export function SidebarNavItem({
         <span
           className={cn(
             'block truncate text-sm font-semibold',
-            active ? 'text-gold-800' : 'text-slate-800',
+            active ? (emerald ? 'text-emerald-800' : 'text-gold-800') : 'text-slate-800',
           )}
         >
           {label}
@@ -60,13 +78,18 @@ export function SidebarNavItem({
           <span
             className={cn(
               'mt-0.5 block truncate text-[11px]',
-              active ? 'text-gold-700/80' : 'text-muted-foreground',
+              active
+                ? emerald
+                  ? 'text-emerald-700/80'
+                  : 'text-gold-700/80'
+                : 'text-muted-foreground',
             )}
           >
             {description}
           </span>
         ) : null}
       </span>
+      {trailing}
     </>
   );
 

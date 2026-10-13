@@ -29,6 +29,7 @@ import {
   TRADING_PURITIES,
   purityLabel,
 } from './trading-purities';
+import { quickTomanStepsFromRial } from './quick-toman-steps';
 import {
   canonicalWeight,
   capWeightToAvailable,
@@ -105,6 +106,9 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   const accountBlocked = tradingReady && account.data != null && account.data.status !== 'ACTIVE';
 
   const available = account.data ? (readAvailableCredit(account.data) ?? undefined) : undefined;
+  const buyQuickAmounts = !selling ? quickTomanStepsFromRial(available) : [];
+  const sellQuickAmounts = selling ? QUICK_TOMAN_AMOUNTS : [];
+  const quickAmounts = selling ? sellQuickAmounts : buyQuickAmounts;
   const availableGold = holding.data?.weightGrams;
   const sellableGrams =
     availableGold && !isZeroDecimal(availableGold)
@@ -594,42 +598,44 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
                   </div>
                 </div>
 
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-[#202124]">مبلغ سریع</p>
-                  <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                    {QUICK_TOMAN_AMOUNTS.map((item) => {
-                      const unitPrice = price.data?.normalizedValue;
-                      const estimable =
-                        unitPrice != null && floorDivide(item.rial, unitPrice, 3) != null;
-                      const selected = selectedQuickRial === item.rial;
-                      return (
-                        <button
-                          key={item.rial}
-                          type="button"
-                          aria-pressed={selected}
-                          disabled={
-                            pricingAll ||
-                            (selling && !sellableGrams) ||
-                            !estimable ||
-                            kycBlocked ||
-                            accountBlocked
-                          }
-                          onClick={() => void applyQuickRial(item.rial)}
-                          className={cn(
-                            'h-11 shrink-0 rounded-xl border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
-                            selected
-                              ? selling
-                                ? 'border-red-600 bg-red-50 text-red-800'
-                                : 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
-                              : 'border-[#E5E7EB] bg-white text-[#202124]',
-                          )}
-                        >
-                          {item.label}
-                        </button>
-                      );
-                    })}
+                {quickAmounts.length > 0 ? (
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-[#202124]">مبلغ سریع (تومان)</p>
+                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                      {quickAmounts.map((item) => {
+                        const unitPrice = price.data?.normalizedValue;
+                        const estimable =
+                          unitPrice != null && floorDivide(item.rial, unitPrice, 3) != null;
+                        const selected = selectedQuickRial === item.rial;
+                        return (
+                          <button
+                            key={item.rial}
+                            type="button"
+                            aria-pressed={selected}
+                            disabled={
+                              pricingAll ||
+                              (selling && !sellableGrams) ||
+                              !estimable ||
+                              kycBlocked ||
+                              accountBlocked
+                            }
+                            onClick={() => void applyQuickRial(item.rial)}
+                            className={cn(
+                              'h-11 shrink-0 rounded-xl border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
+                              selected
+                                ? selling
+                                  ? 'border-red-600 bg-red-50 text-red-800'
+                                  : 'border-[#C8922E] bg-[#FFF8EB] text-[#92400E]'
+                                : 'border-[#E5E7EB] bg-white text-[#202124]',
+                            )}
+                          >
+                            {item.label}
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : null}
               </div>
             )}
 

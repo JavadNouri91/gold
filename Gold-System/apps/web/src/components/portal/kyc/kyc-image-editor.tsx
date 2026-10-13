@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { FlipHorizontal, RotateCcw, RotateCw } from 'lucide-react';
+import { FlipHorizontal, RotateCcw, RotateCw, Wand2 } from 'lucide-react';
 import {
   FULL_CROP,
   exportEditedImage,
@@ -11,14 +11,21 @@ import {
   type CropHandle,
   type NormCrop,
 } from '@/lib/kyc-image-edit';
+import { PortraitMatteError, removePersonalPhotoBackground } from '@/lib/kyc-portrait-matte';
 
 interface KycImageEditorProps {
   file: File;
   maxBytes: number;
+  skipLabel?: string;
+  applyLabel?: string;
+  allowBackgroundRemoval?: boolean;
   onUseOriginal: () => void;
   onApply: (file: File) => void;
   onError: (message: string) => void;
 }
+
+const CHECKERBOARD =
+  'bg-[length:16px_16px] bg-[linear-gradient(45deg,#4b5563_25%,transparent_25%),linear-gradient(-45deg,#4b5563_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#4b5563_75%),linear-gradient(-45deg,transparent_75%,#4b5563_75%)] bg-[position:0_0,0_8px,8px_-8px,-8px_0]';
 
 const HANDLES: Array<{ id: Exclude<CropHandle, 'move'>; className: string; label: string }> = [
   { id: 'nw', className: 'left-0 top-0 -translate-x-1/2 -translate-y-1/2 cursor-nwse-resize', label: 'گوشه بالا چپ' },
@@ -27,7 +34,16 @@ const HANDLES: Array<{ id: Exclude<CropHandle, 'move'>; className: string; label
   { id: 'se', className: 'bottom-0 right-0 translate-x-1/2 translate-y-1/2 cursor-nwse-resize', label: 'گوشه پایین راست' },
 ];
 
-export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError }: KycImageEditorProps) {
+export function KycImageEditor({
+  file,
+  maxBytes,
+  skipLabel = 'ادامه بدون تغییر',
+  applyLabel = 'اعمال و پیش‌نمایش',
+  allowBackgroundRemoval = false,
+  onUseOriginal,
+  onApply,
+  onError,
+}: KycImageEditorProps) {
   const frameRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     handle: CropHandle;
@@ -44,8 +60,18 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
   const previewRef = useRef<string | null>(null);
   const [preparing, setPreparing] = useState(false);
   const [working, setWorking] = useState(false);
+  const [workingFile, setWorkingFile] = useState(file);
+  const [cutout, setCutout] = useState(file.type === 'image/png');
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+
+  useEffect(() => {
+    setWorkingFile(file);
+    setCutout(file.type === 'image/png');
+    setTurns(0);
+    setFlip(false);
+    setCrop(FULL_CROP);
+  }, [file]);
 
   useEffect(() => {
     return () => {
@@ -56,7 +82,7 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
   useEffect(() => {
     let active = true;
     setPreparing(true);
-    orientedPreviewUrl(file, turns, flip)
+    orientedPreviewUrl(workingFile, turns, flip)
       .then((next) => {
         if (!active) {
           URL.revokeObjectURL(next);
@@ -75,7 +101,7 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
     return () => {
       active = false;
     };
-  }, [file, turns, flip]);
+  }, [workingFile, turns, flip]);
 
   useEffect(() => {
     const move = (event: PointerEvent) => {
@@ -121,7 +147,7 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
   const apply = async () => {
     setWorking(true);
     try {
-      const edited = await exportEditedImage(file, turns, flip, crop, maxBytes);
+      const edited = await exportEditedImage(workingFile, turns, flip, crop, maxBytes);
       onApply(edited);
     } catch (error) {
       onError(error instanceof Error ? error.message : 'آماده‌سازی تصویر انجام نشد.');
@@ -130,15 +156,53 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
     }
   };
 
+  const removeBackground = async () => {
+    setWorking(true);
+    try {
+      const prepared = await exportEditedImage(workingFile, turns, flip, crop, maxBytes);
+      const next = await removePersonalPhotoBackground(prepared, maxBytes);
+      setWorkingFile(next);
+      setCutout(true);
+      setTurns(0);
+      setFlip(false);
+      setCrop(FULL_CROP);
+    } catch (error) {
+      onError(
+        error instanceof PortraitMatteError
+          ? error.message
+          : error instanceof Error
+            ? error.message
+            : 'حذف پس‌زمینه انجام نشد. تصویر اصلی بدون تغییر ماند.',
+      );
+    } finally {
+      setWorking(false);
+    }
+  };
+
+  const restoreBackground = () => {
+    setWorkingFile(file);
+    setCutout(false);
+    setTurns(0);
+    setFlip(false);
+    setCrop(FULL_CROP);
+  };
+
   return (
     <div className="mt-4">
       <p className="text-sm leading-6 text-[#6B7280]">
-        تصویر را بچرخانید و با کشیدن کادر، بخش مهم مدرک را برش دهید.
+        {allowBackgroundRemoval
+          ? 'تصویر را بچرخانید، برش دهید یا پس‌زمینه عکس پرسنلی را حذف کنید. نسخه اصلی برای بررسی نگه داشته می‌شود.'
+          : 'تصویر را بچرخانید و با کشیدن کادر، بخش مهم مدرک را برش دهید.'}
       </p>
       <div className="mt-3 rounded-2xl border border-[#E5E7EB] bg-[#111827] p-6">
         <div ref={frameRef} dir="ltr" className="relative mx-auto w-full max-w-[420px]">
           {previewUrl ? (
-            <img src={previewUrl} alt="پیش‌نمایش قابل ویرایش" className="block h-auto w-full select-none" draggable={false} />
+            <img
+              src={previewUrl}
+              alt="پیش‌نمایش قابل ویرایش"
+              className={`block h-auto w-full select-none ${cutout ? CHECKERBOARD : ''}`}
+              draggable={false}
+            />
           ) : (
             <div className="flex h-48 items-center justify-center text-sm text-white">
               {preparing ? 'در حال آماده‌سازی تصویر…' : 'تصویر در دسترس نیست'}
@@ -196,7 +260,7 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-3 gap-2">
+      <div className={`mt-3 grid gap-2 ${allowBackgroundRemoval ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
         <button
           type="button"
           className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[#E5E7EB] bg-white px-2 text-xs font-medium text-[#202124]"
@@ -227,6 +291,17 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
           <FlipHorizontal className="h-4 w-4" aria-hidden />
           آینه
         </button>
+        {allowBackgroundRemoval ? (
+          <button
+            type="button"
+            className="inline-flex min-h-11 items-center justify-center gap-1 rounded-xl border border-[#E5E7EB] bg-white px-2 text-xs font-medium text-[#202124] disabled:opacity-60"
+            onClick={() => void (cutout ? restoreBackground() : removeBackground())}
+            disabled={working || preparing}
+          >
+            <Wand2 className="h-4 w-4" aria-hidden />
+            {working ? 'در حال پردازش…' : cutout ? 'بازگرداندن پس‌زمینه' : 'حذف پس‌زمینه'}
+          </button>
+        ) : null}
       </div>
 
       <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -236,7 +311,7 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
           onClick={onUseOriginal}
           disabled={working}
         >
-          ادامه بدون تغییر
+          {skipLabel}
         </button>
         <button
           type="button"
@@ -244,7 +319,7 @@ export function KycImageEditor({ file, maxBytes, onUseOriginal, onApply, onError
           onClick={() => void apply()}
           disabled={working || preparing || !previewUrl}
         >
-          {working ? 'در حال آماده‌سازی…' : 'اعمال و پیش‌نمایش'}
+          {working ? 'در حال آماده‌سازی…' : applyLabel}
         </button>
       </div>
     </div>

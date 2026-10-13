@@ -23,6 +23,14 @@ export class KycVerificationRepository {
     return row ? this.toDomain(row) : null;
   }
 
+  async findLatestPerCustomer(): Promise<KYCVerificationEntity[]> {
+    const rows = await this.prisma.kYCVerification.findMany({
+      distinct: ['customerId'],
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row) => this.toDomain(row));
+  }
+
   async findAllByCustomerId(customerId: string): Promise<KYCVerificationEntity[]> {
     const rows = await this.prisma.kYCVerification.findMany({
       where: { customerId },

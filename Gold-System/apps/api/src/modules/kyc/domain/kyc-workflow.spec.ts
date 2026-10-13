@@ -4,6 +4,8 @@ import {
   canDeleteDocument,
   canUploadDocument,
   deriveKycPhase,
+  kycStaffBucket,
+  documentDisplayStatus,
   requiredKycTypes,
   uploadBlockReason,
   type WorkflowCustomer,
@@ -97,7 +99,7 @@ describe('deriveKycPhase', () => {
     ).toBe('UNDER_REVIEW');
   });
 
-  it('is verified for an active customer', () => {
+  it('is verified only when the case and every required document are approved', () => {
     expect(
       deriveKycPhase({
         ...base,
@@ -106,6 +108,30 @@ describe('deriveKycPhase', () => {
         latestStatusByType: statuses(VerificationStatus.APPROVED),
       }),
     ).toBe('VERIFIED');
+  });
+
+  it('does not verify an active customer whose uploaded documents are pending', () => {
+    expect(
+      deriveKycPhase({
+        ...base,
+        customerStatus: CustomerStatus.ACTIVE,
+        verificationStatus: null,
+        latestStatusByType: statuses(VerificationStatus.PENDING),
+      }),
+    ).toBe('SUBMITTED');
+  });
+
+  it('does not verify a case approval while a required document is still pending', () => {
+    const latest = statuses(VerificationStatus.APPROVED);
+    latest.set('national_id_front', VerificationStatus.PENDING);
+    expect(
+      deriveKycPhase({
+        ...base,
+        customerStatus: CustomerStatus.ACTIVE,
+        verificationStatus: VerificationStatus.APPROVED,
+        latestStatusByType: latest,
+      }),
+    ).toBe('SUBMITTED');
   });
 
   it('stays not started for an active customer who has not sent documents', () => {
@@ -143,6 +169,22 @@ describe('deriveKycPhase', () => {
     ).toBe('SUBMITTED');
   });
 
+  it('keeps a viewed replacement submitted until the case decision changes', () => {
+    const latest = statuses(VerificationStatus.APPROVED);
+    latest.set('national_id_front', VerificationStatus.UNDER_REVIEW);
+    expect(
+      deriveKycPhase({
+        ...base,
+        customerStatus: CustomerStatus.REJECTED,
+        verificationStatus: VerificationStatus.REJECTED,
+        latestStatusByType: latest,
+      }),
+    ).toBe('SUBMITTED');
+    expect(documentDisplayStatus(VerificationStatus.UNDER_REVIEW, 'SUBMITTED')).toBe(
+      'UNDER_REVIEW',
+    );
+  });
+
   it('is rejected when the case is rejected and documents cannot be corrected', () => {
     expect(
       deriveKycPhase({
@@ -156,10 +198,38 @@ describe('deriveKycPhase', () => {
 
   it('requires the business registration only for partners', () => {
     expect(requiredKycTypes(null).map((item) => item.type)).toContain('personal_photo');
+    expect(requiredKycTypes(null).map((item) => item.type)).not.toContain('selfie_with_id');
+    expect(requiredKycTypes(null).map((item) => item.type)).not.toContain('proof_of_address');
     expect(requiredKycTypes('PARTNER').map((item) => item.type)).toContain('business_registration');
     expect(requiredKycTypes('HOUSEHOLD').map((item) => item.type)).not.toContain(
       'business_registration',
     );
+  });
+});
+
+describe('kycStaffBucket', () => {
+  it('classifies verified, awaiting, and unverified customers', () => {
+    expect(
+      kycStaffBucket({
+        verificationStatus: VerificationStatus.APPROVED,
+        requiredTypes: ALL,
+        latestStatusByType: statuses(VerificationStatus.APPROVED),
+      }),
+    ).toBe('verified');
+    expect(
+      kycStaffBucket({
+        verificationStatus: null,
+        requiredTypes: ALL,
+        latestStatusByType: new Map([['national_id_front', VerificationStatus.PENDING]]),
+      }),
+    ).toBe('awaiting');
+    expect(
+      kycStaffBucket({
+        verificationStatus: null,
+        requiredTypes: ALL,
+        latestStatusByType: new Map(),
+      }),
+    ).toBe('unverified');
   });
 });
 
@@ -220,7 +290,7 @@ describe('buildOwnKycView', () => {
 
     expect(view.phase).toBe('UNDER_REVIEW');
     expect(view.documents).toHaveLength(ALL.length);
-    expect(view.documents.every((item) => item.displayStatus === 'UNDER_REVIEW')).toBe(true);
+    expect(view.documents.every((item) => item.displayStatus === 'SUBMITTED')).toBe(true);
     expect(view.documents.every((item) => item.canUpload === false)).toBe(true);
     expect(view.documents.every((item) => item.canDelete === false)).toBe(true);
     expect(JSON.stringify(view)).not.toMatch(/fileKey|signedUrl|reviewerId/);
@@ -228,6 +298,32 @@ describe('buildOwnKycView', () => {
     expect(view.history.some((event) => event.title === 'ثبت اطلاعات')).toBe(true);
     expect(view.history.some((event) => event.title === 'ارسال مدارک')).toBe(true);
     expect(view.upload.maxBytes).toBe(10 * 1024 * 1024);
+  });
+
+  it('shows viewed status only for the document actually opened by staff', () => {
+    const documents = ALL.map((type) => doc(type, VerificationStatus.PENDING));
+    documents[0] = doc(ALL[0], VerificationStatus.UNDER_REVIEW);
+    const view = buildOwnKycView({
+      customer: customer(CustomerStatus.UNDER_REVIEW),
+      documents,
+      verifications: [
+        {
+          id: 'ver-1',
+          status: VerificationStatus.UNDER_REVIEW,
+          decisionReason: null,
+          reviewedAt: null,
+          createdAt: new Date('2026-09-27T11:30:00.000Z'),
+          updatedAt: new Date('2026-09-27T11:30:00.000Z'),
+        },
+      ],
+    });
+
+    expect(view.documents.find((item) => item.type === ALL[0])?.displayStatus).toBe('UNDER_REVIEW');
+    expect(
+      view.documents
+        .filter((item) => item.type !== ALL[0])
+        .every((item) => item.displayStatus === 'SUBMITTED'),
+    ).toBe(true);
   });
 
   it('keeps an empty upload list as not started with no fake submission date', () => {

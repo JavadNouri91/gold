@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState, type DragEvent } from 'react';
 import { Camera, FileText, ImageIcon, Trash2, Upload } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { KycImageEditor } from '@/components/portal/kyc/kyc-image-editor';
@@ -33,11 +33,13 @@ export function KycUploadDialog({
   const galleryRef = useRef<HTMLInputElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const loadedSeed = useRef<File | null>(null);
+  const dragDepth = useRef(0);
   const [stage, setStage] = useState<Stage>('pick');
   const [sourceFile, setSourceFile] = useState<File | null>(null);
   const [readyFile, setReadyFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
   const inputId = useId();
 
   useEffect(() => {
@@ -54,6 +56,8 @@ export function KycUploadDialog({
     setReadyFile(null);
     setPreviewUrl(null);
     setError(null);
+    setIsDragging(false);
+    dragDepth.current = 0;
   }, [open]);
 
   const accept = policy.mimeTypes.join(',');
@@ -81,8 +85,12 @@ export function KycUploadDialog({
     }
   };
 
-  const choose = (list: FileList | null) => {
-    const next = list?.item(0) ?? null;
+  const choose = (list: FileList | readonly File[] | null) => {
+    const next = list
+      ? 'item' in list && typeof list.item === 'function'
+        ? list.item(0)
+        : list[0] ?? null
+      : null;
     const problem = validateKycFile(next, policy);
     if (problem || !next) {
       setError(problem ?? 'فایل انتخاب نشده است.');
@@ -124,6 +132,34 @@ export function KycUploadDialog({
     if (cameraRef.current) cameraRef.current.value = '';
     if (galleryRef.current) galleryRef.current.value = '';
     if (fileRef.current) fileRef.current.value = '';
+  };
+
+  const onDragEnter = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current += 1;
+    setIsDragging(true);
+  };
+
+  const onDragOver = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const onDragLeave = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = Math.max(0, dragDepth.current - 1);
+    if (dragDepth.current === 0) setIsDragging(false);
+  };
+
+  const onDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+    dragDepth.current = 0;
+    setIsDragging(false);
+    choose(event.dataTransfer.files);
   };
 
   return (
@@ -209,10 +245,25 @@ export function KycUploadDialog({
       ) : null}
 
       {stage === 'pick' ? (
-        <div className="mt-4 rounded-2xl border border-dashed border-[#E5E7EB] bg-[#F8F9FA] px-4 py-6 text-center">
+        <div
+          className={`mt-4 rounded-2xl border-2 border-dashed px-4 py-6 text-center transition-colors ${
+            isDragging
+              ? 'border-[#C8922E] bg-[#FFF4D6]'
+              : 'border-[#E5E7EB] bg-[#F8F9FA]'
+          }`}
+          aria-label="ناحیه کشیدن و رها کردن فایل مدرک"
+          onDragEnter={onDragEnter}
+          onDragOver={onDragOver}
+          onDragLeave={onDragLeave}
+          onDrop={onDrop}
+        >
           <Upload className="mx-auto h-7 w-7 text-[#C8922E]" aria-hidden />
-          <p className="mt-2 text-sm font-semibold text-[#202124]">آپلود مدرک</p>
-          <p className="mt-1 text-xs text-[#6B7280]">تصویر یا فایل خود را انتخاب کنید</p>
+          <p className="mt-2 text-sm font-semibold text-[#202124]">
+            {isDragging ? 'فایل را اینجا رها کنید' : 'آپلود مدرک'}
+          </p>
+          <p className="mt-1 text-xs text-[#6B7280]">
+            فایل را اینجا بکشید و رها کنید یا یکی از گزینه‌های زیر را انتخاب کنید
+          </p>
           <div className="mt-4 grid grid-cols-1 gap-2">
             <button
               type="button"

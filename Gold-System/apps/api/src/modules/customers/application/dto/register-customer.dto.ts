@@ -16,7 +16,6 @@ import { LatinDigits } from '../../../../common/latin-digits.decorator';
 import {
   CustomerType,
   CustomerGender,
-  CustomerLevel,
   ReferenceSource,
   CustomerAccountStatus,
 } from '@gold/shared-types';
@@ -72,15 +71,15 @@ export class RegisterCustomerDto {
   @Length(5, 500)
   address?: string;
 
-  @ApiProperty({
-    description: 'Password (min 8 chars)',
-    example: 'SecurePass123!',
+  @ApiPropertyOptional({
+    description: 'Portal password. Defaults to national ID when omitted.',
+    example: '0012345678',
     minLength: 8,
   })
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
   @MinLength(8)
-  password: string;
+  password?: string;
 
   // ── Extended staff registration fields ──────────────────────────────────────
 
@@ -93,11 +92,6 @@ export class RegisterCustomerDto {
   @IsOptional()
   @IsEnum(CustomerGender)
   gender?: CustomerGender;
-
-  @ApiPropertyOptional({ description: 'Customer level / tier', enum: CustomerLevel })
-  @IsOptional()
-  @IsEnum(CustomerLevel)
-  level?: CustomerLevel;
 
   @ApiPropertyOptional({ description: 'Postal code — 10 digits', example: '1234567890' })
   @IsOptional()
@@ -115,6 +109,12 @@ export class RegisterCustomerDto {
   @IsOptional()
   @IsEnum(ReferenceSource)
   referenceSource?: ReferenceSource;
+
+  @ApiPropertyOptional({ description: 'Existing customer who referred this customer (معرف)' })
+  @IsOptional()
+  @IsString()
+  @IsNotEmpty()
+  referrerId?: string;
 
   @ApiPropertyOptional({ description: 'Internal staff note (not customer-visible)' })
   @IsOptional()

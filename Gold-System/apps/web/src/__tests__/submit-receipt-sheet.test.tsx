@@ -16,17 +16,46 @@ describe('SubmitReceiptButton drop zone', () => {
     render(<SubmitReceiptButton onSubmitted={jest.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'افزایش اعتبار' }));
 
-    const zone = screen.getByRole('button', { name: 'فایل رسید' });
-    fireEvent.drop(zone, { dataTransfer: { files: [jpegFile()] } });
+    const zone = screen.getByLabelText('فایل رسید').closest('label');
+    expect(zone).toBeTruthy();
+    fireEvent.drop(zone!, { dataTransfer: { files: [jpegFile()] } });
 
     expect(await screen.findByText('receipt.jpg')).toBeInTheDocument();
+  });
+
+  it('keeps focus on the amount field while typing', () => {
+    render(<SubmitReceiptButton onSubmitted={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'افزایش اعتبار' }));
+
+    const amount = screen.getByLabelText('مبلغ');
+    amount.focus();
+    fireEvent.change(amount, { target: { value: '1' } });
+    fireEvent.change(amount, { target: { value: '12' } });
+    fireEvent.change(amount, { target: { value: '125000' } });
+
+    expect(amount).toHaveValue('۱۲۵,۰۰۰');
+    expect(amount).toHaveFocus();
+  });
+
+  it('keeps focus on the tracking number while typing', () => {
+    render(<SubmitReceiptButton onSubmitted={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: 'افزایش اعتبار' }));
+
+    const reference = screen.getByLabelText('شماره پیگیری');
+    reference.focus();
+    fireEvent.change(reference, { target: { value: 'A' } });
+    fireEvent.change(reference, { target: { value: 'AB12' } });
+    fireEvent.change(reference, { target: { value: 'AB123456' } });
+
+    expect(reference).toHaveValue('AB۱۲۳۴۵۶');
+    expect(reference).toHaveFocus();
   });
 
   it('rejects a dropped file that is not a receipt type', async () => {
     render(<SubmitReceiptButton onSubmitted={jest.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'افزایش اعتبار' }));
 
-    fireEvent.drop(screen.getByRole('button', { name: 'فایل رسید' }), {
+    fireEvent.drop(screen.getByLabelText('فایل رسید').closest('label')!, {
       dataTransfer: { files: [new File(['plain'], 'note.txt', { type: 'text/plain' })] },
     });
 

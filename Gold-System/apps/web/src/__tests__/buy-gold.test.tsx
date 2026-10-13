@@ -251,12 +251,16 @@ describe('BuyGoldPage', () => {
     expect(screen.queryByRole('button', { name: 'محاسبه قیمت' })).not.toBeInTheDocument();
   });
 
-  it('fills buy weight from a round toman amount', async () => {
+  it('fills buy weight from a fifth of available credit', async () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    const chip = await screen.findByRole('button', { name: '۲۰ میلیون تومان' });
-    expect(screen.getByRole('button', { name: '۵۰ میلیون تومان' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: '۱۰۰ میلیون تومان' })).toBeInTheDocument();
+    expect(screen.getByText('مبلغ سریع (تومان)')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '۱۰ میلیون' })).toBeInTheDocument();
+    const chip = await screen.findByRole('button', { name: '۲۰ میلیون' });
+    expect(screen.getByRole('button', { name: '۳۰ میلیون' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '۴۰ میلیون' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '۵۰ میلیون' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '۱۰۰ میلیون' })).not.toBeInTheDocument();
     fireEvent.click(chip);
     expect(await screen.findByDisplayValue('۳.۲۳۸')).toBeInTheDocument();
     expect(chip).toHaveAttribute('aria-pressed', 'true');
@@ -340,7 +344,7 @@ describe('BuyGoldPage', () => {
   it('fills sell weight from a quick toman amount capped to the holding', async () => {
     renderPage('sell');
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.click(await screen.findByRole('button', { name: '۵۰ میلیون تومان' }));
+    fireEvent.click(await screen.findByRole('button', { name: '۵۰ میلیون' }));
     expect(await screen.findByDisplayValue('۲')).toBeInTheDocument();
     expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));

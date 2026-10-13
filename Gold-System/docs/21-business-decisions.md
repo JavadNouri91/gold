@@ -356,9 +356,7 @@ The Gold Ledger tracks actual gold weight movements separately from the Financia
 |---|---|---|
 | National ID Card — front (کارت ملی — رو) | YES | All customers |
 | National ID Card — back (کارت ملی — پشت) | YES | All customers |
-| Birth Certificate (شناسنامه) | YES | All customers |
-| Proof of Address / Utility Bill (قبض / گواهی سکونت) | YES | All customers |
-| Selfie with National ID (سلفی با مدرک) | YES | All customers |
+| Birth Certificate — first page (صفحه اول شناسنامه) | YES | All customers |
 | Business Registration Certificate (گواهی ثبت شرکت/کسب) | YES | همکار (Partner) customers only |
 
 **Implementation requirement:** Document type list must be stored in configuration, not hard-coded. Store Manager can add, remove, or change required/optional status.

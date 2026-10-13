@@ -4,7 +4,6 @@ import { CustomerEntity } from '../../domain/entities/customer.entity';
 import {
   CustomerAccountStatus,
   CustomerGender,
-  CustomerLevel,
   CustomerStatus,
   CustomerType,
   ReferenceSource,
@@ -20,6 +19,17 @@ export class CustomerRepository {
   async findById(id: string): Promise<CustomerEntity | null> {
     const row = await this.prisma.customer.findUnique({ where: { id } });
     return row ? this.toDomain(row) : null;
+  }
+
+  async findByIds(ids: string[]): Promise<CustomerEntity[]> {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.customer.findMany({ where: { id: { in: ids } } });
+    return rows.map((row) => this.toDomain(row));
+  }
+
+  async findAll(): Promise<CustomerEntity[]> {
+    const rows = await this.prisma.customer.findMany({ orderBy: { createdAt: 'desc' } });
+    return rows.map((row) => this.toDomain(row));
   }
 
   async findByCustomerNumber(number: string): Promise<CustomerEntity | null> {
@@ -100,7 +110,6 @@ export class CustomerRepository {
     address?: string;
     type?: CustomerType;
     gender?: CustomerGender;
-    level?: CustomerLevel;
     postalCode?: string;
     phone?: string;
     referenceSource?: ReferenceSource;
@@ -132,7 +141,6 @@ export class CustomerRepository {
         address: data.address ?? null,
         type: data.type ?? null,
         gender: data.gender ?? null,
-        level: data.level ?? null,
         postalCode: data.postalCode ?? null,
         phone: data.phone ?? null,
         referenceSource: data.referenceSource ?? null,
@@ -224,10 +232,10 @@ export class CustomerRepository {
       avatarKey: row.avatarKey,
       type: row.type as CustomerType | null,
       gender: row.gender as CustomerGender | null,
-      level: row.level as CustomerLevel | null,
       postalCode: row.postalCode,
       phone: row.phone,
       referenceSource: row.referenceSource as ReferenceSource | null,
+      referrerId: row.referrerId,
       companyName: row.companyName,
       companyNationalId: row.companyNationalId,
       companyEconomicId: row.companyEconomicId,

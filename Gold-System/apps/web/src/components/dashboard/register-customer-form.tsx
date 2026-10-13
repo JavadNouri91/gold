@@ -9,7 +9,7 @@ import { Alert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { ApiClientError } from '@/lib/api';
 import { internalCustomersApi, type StaffCustomer } from '@/lib/internal-api';
-import { isValidMobile, latinMobile, isValidNationalId, latinNationalId, isValidEmail, toPersianDigits, latinPhone, MOBILE_PLACEHOLDER } from '@/lib/utils';
+import { isValidMobile, latinMobile, isValidNationalId, latinNationalId, isValidEmail, toPersianDigits, latinPhone, formatMobile, formatNationalId, MOBILE_PLACEHOLDER } from '@/lib/utils';
 import { MobileInput } from '@/components/ui/mobile-input';
 import { NationalIdInput } from '@/components/ui/national-id-input';
 import { PostalCodeInput } from '@/components/ui/postal-code-input';
@@ -21,15 +21,12 @@ import {
   CheckCircle,
   Mail,
   MapPin,
-  Smartphone,
-  PhoneCall,
-  Contact2,
 } from 'lucide-react';
 import { getCitiesForProvince, getProvinceNames } from '@/lib/iran-provinces';
 import { DatePickerJalali } from '@/components/ui/date-picker-jalali';
 import { GenderPicker } from '@/components/ui/gender-picker';
-import { PasswordInput } from '@/components/ui/password-input';
 import { SearchableSelect } from '@/components/ui/searchable-select';
+import { ReferrerPicker } from '@/components/dashboard/referrer-picker';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,8 +41,6 @@ interface RegisterCustomerFormValues {
   gender: string;
   type: string;
   initialAccountStatus: string;
-  level: string;
-  password: string;
   companyName: string;
   companyNationalId: string;
   companyEconomicId: string;
@@ -57,14 +52,8 @@ interface RegisterCustomerFormValues {
   city: string;
   postalCode: string;
   address: string;
-  secondaryMobile: string;
-  workPhone: string;
-  fax: string;
-  workAddress: string;
-  contactNotes: string;
   // Step 3 — Supplementary
-  verificationStatus: string;
-  referenceSource: string;
+  referrerId: string;
   internalNote: string;
 }
 
@@ -79,12 +68,11 @@ function registrationError(err: unknown): string {
 // ─── Step sidebar ─────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { num: 1, label: 'اطلاعات پایه', desc: 'اطلاعات هویتی و نوع مشتری' },
-  { num: 2, label: 'اطلاعات تماس', desc: 'آدرس و راه‌های ارتباطی' },
-  { num: 3, label: 'اطلاعات تکمیلی', desc: 'وضعیت، یادداشت و سایر موارد' },
+  { num: 1, label: 'اطلاعات پایه', desc: 'هویت، تماس و آدرس' },
+  { num: 2, label: 'اطلاعات تکمیلی', desc: 'وضعیت، یادداشت و سایر موارد' },
 ] as const;
 
-function StepSidebar({ current }: { current: 1 | 2 | 3 }) {
+function StepSidebar({ current }: { current: 1 | 2 }) {
   return (
     <div className="flex flex-col gap-3">
       {STEPS.map((step) => {
@@ -239,54 +227,6 @@ function InputWithIcon({
   );
 }
 
-// ─── MobileInputWithIcon ──────────────────────────────────────────────────────
-
-function MobileInputWithIcon({
-  label,
-  error,
-  required,
-  hint,
-  value,
-  onValueChange,
-}: {
-  label?: string;
-  error?: string;
-  required?: boolean;
-  hint?: string;
-  value?: string;
-  onValueChange: (v: string) => void;
-}) {
-  const fieldId = label ?? 'mobile-with-icon';
-  return (
-    <div className="space-y-1">
-      {label && (
-        <label htmlFor={fieldId} className="block text-sm font-medium text-foreground">
-          {label}
-          {required && <span className="text-red-500 ms-1">*</span>}
-        </label>
-      )}
-      <div className="relative">
-        <span className="pointer-events-none absolute inset-y-0 start-3 flex items-center text-muted-foreground z-10">
-          <Smartphone className="h-4 w-4" />
-        </span>
-        <MobileInput
-          className="ps-9"
-          value={value}
-          onValueChange={onValueChange}
-          aria-invalid={!!error}
-          aria-describedby={error ? `${fieldId}-err` : undefined}
-        />
-      </div>
-      {error && (
-        <p id={`${fieldId}-err`} className="text-xs text-red-600">
-          {error}
-        </p>
-      )}
-      {!error && hint && <p className="text-xs text-muted-foreground">{hint}</p>}
-    </div>
-  );
-}
-
 // ─── TextareaField ────────────────────────────────────────────────────────────
 
 function TextareaField({
@@ -407,7 +347,7 @@ export function RegisterCustomerButton({
   onCreated: (customer: StaffCustomer) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2>(1);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [successCustomer, setSuccessCustomer] = useState<StaffCustomer | null>(null);
@@ -434,25 +374,17 @@ export function RegisterCustomerButton({
       gender: '',
       type: 'HOUSEHOLD',
       initialAccountStatus: 'ACTIVE',
-      level: 'NORMAL',
-      password: '',
       companyName: '',
       companyNationalId: '',
       companyEconomicId: '',
       contactName: '',
       contactTitle: '',
       phone: '',
-      province: '',
+      province: 'مازندران',
       city: '',
       postalCode: '',
       address: '',
-      secondaryMobile: '',
-      workPhone: '',
-      fax: '',
-      workAddress: '',
-      contactNotes: '',
-      verificationStatus: '',
-      referenceSource: '',
+      referrerId: '',
       internalNote: '',
     },
   });
@@ -481,29 +413,12 @@ export function RegisterCustomerButton({
   });
 
   register('postalCode', {
-    required: 'کد پستی الزامی است',
-    validate: (v) => /^\d{10}$/.test(v) || 'کد پستی باید ۱۰ رقم باشد',
-  });
-
-  register('secondaryMobile', {
-    validate: (v) => !v || isValidMobile(v) || 'شماره موبایل واردشده معتبر نیست',
+    validate: (v) => !v.trim() || /^\d{10}$/.test(v) || 'کد پستی باید ۱۰ رقم باشد',
   });
 
   register('phone', {
     validate: (v) =>
       !v.trim() || (v.trim().length >= 8 && v.trim().length <= 20) || 'شماره تلفن معتبر نیست',
-  });
-
-  register('workPhone', {
-    validate: (v) =>
-      !v.trim() ||
-      (v.trim().length >= 8 && v.trim().length <= 20) ||
-      'شماره تلفن محل کار معتبر نیست',
-  });
-
-  register('fax', {
-    validate: (v) =>
-      !v.trim() || (v.trim().length >= 8 && v.trim().length <= 20) || 'شماره فکس معتبر نیست',
   });
 
   register('email', {
@@ -529,8 +444,6 @@ export function RegisterCustomerButton({
   const watchedType = watch('type');
   const watchedProvince = watch('province');
   const watchedAddress = watch('address');
-  const watchedWorkAddress = watch('workAddress');
-  const watchedContactNotes = watch('contactNotes');
   const watchedInternalNote = watch('internalNote');
   const isCorporate = watchedType === 'CORPORATE';
 
@@ -565,20 +478,16 @@ export function RegisterCustomerButton({
 
   const step1Fields: (keyof RegisterCustomerFormValues)[] = [
     'firstName', 'lastName', 'nationalId', 'mobile',
-    'type', 'initialAccountStatus', 'password',
-    ...(isCorporate ? (['companyName', 'contactName'] as const) : []),
-  ];
-
-  const step2Fields: (keyof RegisterCustomerFormValues)[] = [
-    'mobile', 'email', 'phone',
+    'email', 'phone',
     'province', 'city', 'postalCode', 'address',
-    'secondaryMobile', 'workPhone', 'fax',
+    'type', 'initialAccountStatus',
+    ...(isCorporate ? (['companyName', 'contactName'] as const) : []),
   ];
 
   // ── Navigation ──────────────────────────────────────────────────────────────
 
   const goNext = async () => {
-    const fields = step === 1 ? step1Fields : step === 2 ? step2Fields : [];
+    const fields = step === 1 ? step1Fields : [];
     const valid = await trigger(fields as (keyof RegisterCustomerFormValues)[]);
     if (!valid) {
       // Focus the first invalid element
@@ -590,12 +499,12 @@ export function RegisterCustomerButton({
       });
       return;
     }
-    setStep((s) => Math.min(s + 1, 3) as 1 | 2 | 3);
+    setStep((s) => Math.min(s + 1, 2) as 1 | 2);
     setSubmitError(null);
   };
 
   const goPrev = () => {
-    setStep((s) => Math.max(s - 1, 1) as 1 | 2 | 3);
+    setStep((s) => Math.max(s - 1, 1) as 1 | 2);
     setSubmitError(null);
   };
 
@@ -612,10 +521,8 @@ export function RegisterCustomerButton({
         mobile: latinMobile(data.mobile),
         email: data.email.trim().toLowerCase() || undefined,
         dateOfBirth: data.dateOfBirth || undefined,
-        password: data.password,
         type: data.type || undefined,
         gender: data.gender || undefined,
-        level: data.level || undefined,
         initialAccountStatus: data.initialAccountStatus || undefined,
         ...(isCorporate && {
           companyName: data.companyName.trim() || undefined,
@@ -629,12 +536,7 @@ export function RegisterCustomerButton({
         city: data.city || undefined,
         postalCode: data.postalCode.trim() || undefined,
         address: data.address.trim() || undefined,
-        secondaryMobile: data.secondaryMobile ? latinMobile(data.secondaryMobile) : undefined,
-        workPhone: data.workPhone.trim() || undefined,
-        fax: data.fax.trim() || undefined,
-        workAddress: data.workAddress.trim() || undefined,
-        contactNotes: data.contactNotes.trim() || undefined,
-        referenceSource: data.referenceSource || undefined,
+        referrerId: data.referrerId || undefined,
         internalNote: data.internalNote.trim() || undefined,
       });
       setSuccessCustomer(customer);
@@ -665,6 +567,18 @@ export function RegisterCustomerButton({
                 کد مشتری:{' '}
                 <span dir="ltr" className="font-mono font-bold">
                   {successCustomer.customerNumber}
+                </span>
+              </p>
+              <p className="mt-3 text-sm text-foreground">
+                نام کاربری پورتال:{' '}
+                <span dir="ltr" className="font-medium">
+                  {formatMobile(successCustomer.mobile, successCustomer.mobile)}
+                </span>
+              </p>
+              <p className="text-sm text-foreground">
+                رمز ورود پیش‌فرض:{' '}
+                <span dir="ltr" className="font-medium">
+                  {formatNationalId(successCustomer.nationalId)}
                 </span>
               </p>
             </div>
@@ -840,16 +754,36 @@ export function RegisterCustomerButton({
                     </div>
 
                     <div className="grid gap-3 sm:grid-cols-2">
-                      <Input
+                      <InputWithIcon
+                        icon={Mail}
                         label="ایمیل"
-                        dir="ltr"
                         type="email"
+                        dir="ltr"
                         hint="اختیاری"
                         error={errors.email?.message}
                         value={watch('email')}
                         onChange={(e) => setValue('email', e.target.value, { shouldValidate: false })}
                         onBlur={() => void trigger('email')}
                       />
+                      <InputWithIcon
+                        icon={Phone}
+                        label={isCorporate ? 'تلفن مسئول' : 'تلفن ثابت'}
+                        dir="ltr"
+                        inputMode="numeric"
+                        hint="اختیاری"
+                        error={errors.phone?.message}
+                        value={watch('phone') ? toPersianDigits(latinPhone(watch('phone'))) : ''}
+                        onChange={(e) =>
+                          setValue('phone', latinPhone(e.target.value), {
+                            shouldValidate: true,
+                            shouldDirty: true,
+                          })
+                        }
+                        onBlur={() => trigger('phone')}
+                      />
+                    </div>
+
+                    <div className="grid gap-3 sm:grid-cols-2">
                       <DatePickerJalali
                         label="تاریخ تولد"
                         hint="اختیاری"
@@ -857,15 +791,14 @@ export function RegisterCustomerButton({
                         value={watch('dateOfBirth')}
                         onChange={(v) => setValue('dateOfBirth', v, { shouldValidate: true })}
                       />
+                      <GenderPicker
+                        label="جنسیت"
+                        hint="اختیاری"
+                        value={watch('gender')}
+                        onChange={(v) => setValue('gender', v, { shouldValidate: true })}
+                        error={errors.gender?.message}
+                      />
                     </div>
-
-                    <GenderPicker
-                      label="جنسیت"
-                      hint="اختیاری"
-                      value={watch('gender')}
-                      onChange={(v) => setValue('gender', v, { shouldValidate: true })}
-                      error={errors.gender?.message}
-                    />
 
                     <div className="grid gap-3 sm:grid-cols-2">
                       <SelectField
@@ -892,12 +825,6 @@ export function RegisterCustomerButton({
                         <option value="INACTIVE">○ غیرفعال</option>
                       </SelectField>
                     </div>
-
-                    <SelectField label="سطح مشتری" hint="اختیاری" {...register('level')}>
-                      <option value="NORMAL">عادی</option>
-                      <option value="VIP">VIP</option>
-                      <option value="PREMIUM">ویژه</option>
-                    </SelectField>
 
                     {isCorporate && (
                       <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
@@ -946,83 +873,12 @@ export function RegisterCustomerButton({
                       </div>
                     )}
 
-                    <PasswordInput
-                      label="رمز ورود به پورتال"
-                      autoComplete="new-password"
-                      hint="حداقل ۸ کاراکتر — مشتری با همین رمز وارد پورتال می‌شود"
-                      required
-                      error={errors.password?.message}
-                      {...register('password', {
-                        required: 'رمز عبور الزامی است',
-                        minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
-                      })}
-                    />
-                  </>
-                )}
-
-                {/* ══════════════════════════════════════════════════
-                    STEP 2 — اطلاعات تماس
-                ══════════════════════════════════════════════════ */}
-                {step === 2 && (
-                  <>
-                    {/* ── Card 1: اطلاعات اصلی تماس ──────────────────── */}
-                    <CardSection
-                      icon={PhoneCall}
-                      title="اطلاعات اصلی تماس"
-                      desc="راه‌های ارتباطی اصلی مشتری"
-                    >
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        {/* شماره موبایل */}
-                        <MobileInputWithIcon
-                          label="شماره موبایل"
-                          required
-                          error={errors.mobile?.message}
-                          value={watch('mobile')}
-                          onValueChange={(v) => setValue('mobile', v, { shouldValidate: true })}
-                        />
-
-                        {/* ایمیل */}
-                        <InputWithIcon
-                          icon={Mail}
-                          label="ایمیل"
-                          type="email"
-                          dir="ltr"
-                          hint="اختیاری"
-                          error={errors.email?.message}
-                          value={watch('email')}
-                          onChange={(e) => setValue('email', e.target.value, { shouldValidate: false })}
-                          onBlur={() => void trigger('email')}
-                        />
-
-                        {/* تلفن ثابت */}
-                        <InputWithIcon
-                          icon={Phone}
-                          label={isCorporate ? 'تلفن مسئول' : 'تلفن ثابت'}
-                          dir="ltr"
-                          inputMode="numeric"
-                          hint="اختیاری"
-                          error={errors.phone?.message}
-                          value={watch('phone') ? toPersianDigits(latinPhone(watch('phone'))) : ''}
-                          onChange={(e) =>
-                            setValue('phone', latinPhone(e.target.value), {
-                              shouldValidate: true,
-                              shouldDirty: true,
-                            })
-                          }
-                          onBlur={() => trigger('phone')}
-                        />
-                      </div>
-                    </CardSection>
-
-                    {/* ── Card 2: آدرس محل سکونت ──────────────────────── */}
                     <CardSection
                       icon={MapPin}
                       title={isCorporate ? 'آدرس شرکت' : 'آدرس محل سکونت'}
                       desc={isCorporate ? 'آدرس دقیق محل شرکت' : 'آدرس دقیق محل سکونت مشتری'}
                     >
-                      {/* Row 1: Province / City / PostalCode — 3 columns */}
                       <div className="grid gap-3 sm:grid-cols-3">
-                        {/* استان */}
                         <SearchableSelect
                           label="استان"
                           required
@@ -1035,8 +891,6 @@ export function RegisterCustomerButton({
                           placeholder="انتخاب استان..."
                           searchPlaceholder="جستجوی استان..."
                         />
-
-                        {/* شهر */}
                         <SearchableSelect
                           label="شهر"
                           required
@@ -1048,12 +902,9 @@ export function RegisterCustomerButton({
                           placeholder={watchedProvince ? 'انتخاب شهر...' : 'ابتدا استان را انتخاب کنید'}
                           searchPlaceholder="جستجوی شهر..."
                         />
-
-                        {/* کد پستی */}
                         <PostalCodeInput
                           label="کد پستی"
-                          required
-                          hint="۱۰ رقم وارد کنید"
+                          hint="اختیاری"
                           error={errors.postalCode?.message}
                           value={watch('postalCode')}
                           onValueChange={(v) =>
@@ -1062,8 +913,6 @@ export function RegisterCustomerButton({
                           onBlur={() => trigger('postalCode')}
                         />
                       </div>
-
-                      {/* Row 2: آدرس کامل */}
                       <TextareaField
                         label="آدرس کامل"
                         id="address"
@@ -1077,124 +926,31 @@ export function RegisterCustomerButton({
                       />
                     </CardSection>
 
-                    {/* ── Card 3: اطلاعات ارتباطی تکمیلی ─────────────── */}
-                    <CardSection
-                      icon={Contact2}
-                      title="اطلاعات ارتباطی تکمیلی"
-                      desc="سایر راه‌های ارتباطی (اختیاری)"
-                    >
-                      {/* Row 1: Secondary mobile / Work phone / Fax — 3 columns */}
-                      <div className="grid gap-3 sm:grid-cols-3">
-                        {/* شماره موبایل دوم */}
-                        <MobileInputWithIcon
-                          label={isCorporate ? 'موبایل مسئول دوم' : 'شماره موبایل دوم'}
-                          hint="اختیاری"
-                          error={errors.secondaryMobile?.message}
-                          value={watch('secondaryMobile')}
-                          onValueChange={(v) => setValue('secondaryMobile', v, { shouldValidate: true })}
-                        />
-
-                        {/* تلفن محل کار */}
-                        <InputWithIcon
-                          icon={Phone}
-                          label={isCorporate ? 'تلفن شرکت' : 'تلفن محل کار'}
-                          dir="ltr"
-                          inputMode="numeric"
-                          hint="اختیاری"
-                          error={errors.workPhone?.message}
-                          value={watch('workPhone') ? toPersianDigits(latinPhone(watch('workPhone'))) : ''}
-                          onChange={(e) =>
-                            setValue('workPhone', latinPhone(e.target.value), {
-                              shouldValidate: true,
-                              shouldDirty: true,
-                            })
-                          }
-                          onBlur={() => trigger('workPhone')}
-                        />
-
-                        {/* فکس */}
-                        <InputWithIcon
-                          icon={Phone}
-                          label="فکس"
-                          dir="ltr"
-                          inputMode="numeric"
-                          hint="اختیاری"
-                          error={errors.fax?.message}
-                          value={watch('fax') ? toPersianDigits(latinPhone(watch('fax'))) : ''}
-                          onChange={(e) =>
-                            setValue('fax', latinPhone(e.target.value), {
-                              shouldValidate: true,
-                              shouldDirty: true,
-                            })
-                          }
-                          onBlur={() => trigger('fax')}
-                        />
-                      </div>
-
-                      {/* آدرس محل کار */}
-                      <TextareaField
-                        label={isCorporate ? 'آدرس دفتر مرکزی' : 'آدرس محل کار'}
-                        id="workAddress"
-                        rows={3}
-                        maxLength={500}
-                        hint="اختیاری"
-                        value={watchedWorkAddress}
-                        onChange={(e) => setValue('workAddress', e.target.value)}
-                      />
-
-                      {/* توضیحات تماس */}
-                      <TextareaField
-                        label="توضیحات تماس"
-                        id="contactNotes"
-                        rows={3}
-                        maxLength={500}
-                        hint="اختیاری"
-                        placeholder="ترجیحاً در ساعات اداری تماس گرفته شود."
-                        value={watchedContactNotes}
-                        onChange={(e) => setValue('contactNotes', e.target.value)}
-                      />
-                    </CardSection>
+                    <p className="rounded-lg border border-dashed bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                      ورود به پورتال با شماره موبایل و رمز پیش‌فرض کد ملی انجام می‌شود.
+                    </p>
                   </>
                 )}
 
                 {/* ══════════════════════════════════════════════════
-                    STEP 3 — اطلاعات تکمیلی
+                    STEP 2 — اطلاعات تکمیلی
                 ══════════════════════════════════════════════════ */}
-                {step === 3 && (
+                {step === 2 && (
                   <>
                     <SectionHeader
                       icon={FileText}
                       title="اطلاعات تکمیلی"
-                      desc="اطلاعات احراز هویت، منبع آشنایی و یادداشت داخلی"
+                      desc="معرف و یادداشت داخلی"
                     />
 
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <SelectField
-                        label="وضعیت احراز هویت"
-                        hint="اختیاری"
-                        {...register('verificationStatus')}
-                      >
-                        <option value="">انتخاب نشده</option>
-                        <option value="UNVERIFIED">تأیید نشده</option>
-                        <option value="PENDING_REVIEW">در انتظار بررسی</option>
-                        <option value="VERIFIED">تأیید شده</option>
-                        <option value="REJECTED">رد شده</option>
-                      </SelectField>
-
-                      <SelectField
-                        label="چگونه با ما آشنا شدید؟"
-                        hint="اختیاری"
-                        {...register('referenceSource')}
-                      >
-                        <option value="">انتخاب کنید...</option>
-                        <option value="FRIEND_REFERRAL">معرفی دوستان</option>
-                        <option value="INTERNET_SEARCH">جستجوی اینترنتی</option>
-                        <option value="SOCIAL_MEDIA">شبکه‌های اجتماعی</option>
-                        <option value="IN_PERSON">مراجعه حضوری</option>
-                        <option value="ADVERTISEMENT">تبلیغات</option>
-                        <option value="OTHER">سایر</option>
-                      </SelectField>
+                    <div className="rounded-xl border border-amber-200 bg-amber-50/60 px-4 py-3 text-sm text-amber-900">
+                      وضعیت احراز هویت پس از ثبت، «تأیید نشده» است. مشتری باید مدارک هویتی را بارگذاری کند تا بررسی و تأیید شود.
                     </div>
+
+                    <ReferrerPicker
+                      value={watch('referrerId')}
+                      onChange={(id) => setValue('referrerId', id, { shouldDirty: true })}
+                    />
 
                     <TextareaField
                       label="توضیحات / یادداشت داخلی"
@@ -1221,7 +977,6 @@ export function RegisterCustomerButton({
                     انصراف
                   </Button>
 
-                  {/* بازگشت (step 2 and 3 only) */}
                   {step > 1 && (
                     <Button type="button" variant="outline" onClick={goPrev} disabled={isLoading}>
                       بازگشت
@@ -1232,10 +987,9 @@ export function RegisterCustomerButton({
                   )}
                 </div>
 
-                {/* Right cluster */}
-                {step < 3 ? (
+                {step < 2 ? (
                   <Button type="button" onClick={() => void goNext()} disabled={isLoading}>
-                    {step === 2 ? 'ذخیره و ادامه' : 'بعدی'}
+                    بعدی
                     <svg className="h-4 w-4 ms-1.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <path d="m15 18-6-6 6-6" />
                     </svg>

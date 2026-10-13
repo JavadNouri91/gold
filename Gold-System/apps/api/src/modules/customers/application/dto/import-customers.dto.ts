@@ -35,10 +35,11 @@ export class ImportCustomerRowDto {
   @Matches(/^09\d{9}$/)
   mobile: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ description: 'Portal password. Defaults to national ID when omitted.' })
+  @IsOptional()
   @IsString()
   @MinLength(8)
-  password: string;
+  password?: string;
 
   @ApiPropertyOptional()
   @IsOptional()

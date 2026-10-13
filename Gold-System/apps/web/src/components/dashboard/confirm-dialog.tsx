@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -33,6 +33,10 @@ export function ConfirmDialog({
   const [reason, setReason] = useState('');
   const tooShort = requireReason && reason.trim().length < minReason;
 
+  useEffect(() => {
+    if (open) setReason('');
+  }, [open]);
+
   return (
     <Modal
       open={open}
@@ -48,6 +52,7 @@ export function ConfirmDialog({
           <Input
             label={reasonLabel}
             value={reason}
+            required
             onChange={(event) => setReason(event.target.value)}
             hint={`حداقل ${minReason.toLocaleString('fa-IR')} نویسه`}
           />

@@ -32,6 +32,9 @@ export interface SearchableSelectProps {
   emptyMessage?: string;
   className?: string;
   id?: string;
+  /** When set, parent owns filtering (e.g. server search). Local filter is skipped. */
+  onQueryChange?: (query: string) => void;
+  loading?: boolean;
 }
 
 export function SearchableSelect({
@@ -48,6 +51,8 @@ export function SearchableSelect({
   emptyMessage = 'موردی یافت نشد',
   className,
   id,
+  onQueryChange,
+  loading,
 }: SearchableSelectProps) {
   const uid = useId();
   const inputId = id ?? uid;
@@ -68,10 +73,11 @@ export function SearchableSelect({
 
   // ── Filtered options ─────────────────────────────────────────────────────
   const filtered = useMemo(() => {
+    if (onQueryChange) return options;
     if (!query.trim()) return options;
     const q = query.trim().toLowerCase();
     return options.filter((o) => o.label.toLowerCase().includes(q));
-  }, [options, query]);
+  }, [options, query, onQueryChange]);
 
   // ── Reset highlight when filtered list changes ────────────────────────────
   useEffect(() => { setHighlighted(0); }, [filtered]);
@@ -93,6 +99,12 @@ export function SearchableSelect({
       requestAnimationFrame(() => searchRef.current?.focus());
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!onQueryChange || !open) return;
+    const handle = window.setTimeout(() => onQueryChange(query), query.trim() ? 250 : 0);
+    return () => window.clearTimeout(handle);
+  }, [query, open, onQueryChange]);
 
   // ── Scroll highlighted item into view ─────────────────────────────────────
   useEffect(() => {
@@ -221,7 +233,7 @@ export function SearchableSelect({
           >
             {filtered.length === 0 ? (
               <li className="px-4 py-3 text-sm text-muted-foreground text-center">
-                {emptyMessage}
+                {loading ? 'در حال جستجو...' : emptyMessage}
               </li>
             ) : (
               filtered.map((opt, idx) => {

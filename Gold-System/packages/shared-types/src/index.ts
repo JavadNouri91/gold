@@ -53,12 +53,6 @@ export enum CustomerGender {
   NOT_SPECIFIED = 'NOT_SPECIFIED',
 }
 
-export enum CustomerLevel {
-  NORMAL = 'NORMAL',
-  VIP = 'VIP',
-  PREMIUM = 'PREMIUM',
-}
-
 export enum ReferenceSource {
   FRIEND_REFERRAL = 'FRIEND_REFERRAL',
   INTERNET_SEARCH = 'INTERNET_SEARCH',

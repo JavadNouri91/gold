@@ -46,7 +46,14 @@ export default function KycDetailPage({ params }: { params: { customerId: string
         <CardHeader><CardTitle>مدارک</CardTitle></CardHeader>
         <CardContent>
           <PermissionGate anyOf="kyc.documents.read" fallback={<p className="text-sm">مجوز مشاهده مدرک ندارید.</p>}>
-            <KycDocumentList customerId={params.customerId} customerType={customer.data?.type} />
+            <KycDocumentList
+              customerId={params.customerId}
+              customerType={customer.data?.type}
+              onDecision={() => {
+                void history.mutate();
+                void customer.mutate();
+              }}
+            />
           </PermissionGate>
         </CardContent>
       </Card>

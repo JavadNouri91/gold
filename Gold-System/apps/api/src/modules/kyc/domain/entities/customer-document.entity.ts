@@ -12,6 +12,8 @@ export class CustomerDocumentEntity {
   readonly customerId: string;
   readonly documentType: string;
   readonly fileKey: string;
+  readonly originalFileKey: string | null;
+  readonly processedFileKey: string | null;
   readonly fileName: string;
   readonly fileMimeType: string;
   readonly fileSizeBytes: number;
@@ -27,6 +29,8 @@ export class CustomerDocumentEntity {
     customerId: string;
     documentType: string;
     fileKey: string;
+    originalFileKey?: string | null;
+    processedFileKey?: string | null;
     fileName: string;
     fileMimeType: string;
     fileSizeBytes: number;
@@ -37,10 +41,16 @@ export class CustomerDocumentEntity {
     createdAt: Date;
     updatedAt: Date;
   }) {
-    Object.assign(this, props);
+    Object.assign(this, {
+      ...props,
+      originalFileKey: props.originalFileKey ?? null,
+      processedFileKey: props.processedFileKey ?? null,
+    });
   }
 
   canBeReviewed(): boolean {
-    return this.status === VerificationStatus.PENDING;
+    return (
+      this.status === VerificationStatus.PENDING || this.status === VerificationStatus.UNDER_REVIEW
+    );
   }
 }

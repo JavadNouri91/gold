@@ -1,7 +1,6 @@
 import {
   CustomerAccountStatus,
   CustomerGender,
-  CustomerLevel,
   CustomerStatus,
   CustomerType,
   ReferenceSource,
@@ -34,10 +33,10 @@ export class CustomerEntity {
 
   readonly type: CustomerType | null;
   readonly gender: CustomerGender | null;
-  readonly level: CustomerLevel | null;
   readonly postalCode: string | null;
   readonly phone: string | null;
   readonly referenceSource: ReferenceSource | null;
+  readonly referrerId: string | null;
 
   // Company / corporate fields
   readonly companyName: string | null;
@@ -76,10 +75,10 @@ export class CustomerEntity {
     avatarKey?: string | null;
     type: CustomerType | null;
     gender?: CustomerGender | null;
-    level?: CustomerLevel | null;
     postalCode?: string | null;
     phone?: string | null;
     referenceSource?: ReferenceSource | null;
+    referrerId?: string | null;
     companyName?: string | null;
     companyNationalId?: string | null;
     companyEconomicId?: string | null;
@@ -101,10 +100,10 @@ export class CustomerEntity {
     Object.assign(this, props);
     this.accountStatus = props.accountStatus ?? CustomerAccountStatus.ACTIVE;
     this.gender = props.gender ?? null;
-    this.level = props.level ?? null;
     this.postalCode = props.postalCode ?? null;
     this.phone = props.phone ?? null;
     this.referenceSource = props.referenceSource ?? null;
+    this.referrerId = props.referrerId ?? null;
     this.companyName = props.companyName ?? null;
     this.companyNationalId = props.companyNationalId ?? null;
     this.companyEconomicId = props.companyEconomicId ?? null;
@@ -137,9 +136,9 @@ export class CustomerEntity {
     return this.status === CustomerStatus.APPROVED || this.status === CustomerStatus.ACTIVE;
   }
 
-  /** Transition: PENDING → UNDER_REVIEW */
+  /** Transition: PENDING/REJECTED → UNDER_REVIEW */
   canStartReview(): boolean {
-    return this.status === CustomerStatus.PENDING;
+    return this.status === CustomerStatus.PENDING || this.status === CustomerStatus.REJECTED;
   }
 
   /** Transition: UNDER_REVIEW → APPROVED */

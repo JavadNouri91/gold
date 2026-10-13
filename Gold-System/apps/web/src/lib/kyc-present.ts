@@ -160,7 +160,7 @@ export function reviewCopy(overview: Pick<OwnKycOverview, 'phase' | 'rejectionRe
 export const DOCUMENT_STATUS_LABEL: Record<KycDocumentDisplayStatus, string> = {
   NOT_UPLOADED: 'ارسال نشده',
   SUBMITTED: 'ارسال شده',
-  UNDER_REVIEW: 'در حال بررسی',
+  UNDER_REVIEW: 'مشاهده شده',
   APPROVED: 'تأیید شده',
   REJECTED: 'رد شده',
   NEEDS_CORRECTION: 'نیازمند اصلاح',

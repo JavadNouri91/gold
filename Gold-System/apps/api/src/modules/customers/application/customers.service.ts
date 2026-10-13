@@ -64,6 +64,13 @@ export class CustomersService {
       throw new ConflictException('Mobile number is already in use');
     }
 
+    if (dto.referrerId) {
+      const referrer = await this.customerRepo.findById(dto.referrerId);
+      if (!referrer) {
+        throw new NotFoundException('معرف پیدا نشد');
+      }
+    }
+
     // Resolve 'customer' role ID for new user
     const customerRole = await this.prisma.role.findUnique({
       where: { name: 'customer' },
@@ -80,7 +87,7 @@ export class CustomersService {
           name: `${dto.firstName} ${dto.lastName}`,
           mobile: dto.mobile,
           email: dto.email,
-          password: dto.password,
+          password: dto.password?.trim() || dto.nationalId,
           roleId: customerRole.id,
         },
         tx,
@@ -89,9 +96,8 @@ export class CustomersService {
       // Generate customer number within the same transaction
       const customerNumber = await this.customerRepo.nextCustomerNumber(tx);
 
-      // Determine initial status and accountStatus for staff-registered customers
+      // Account may be opened immediately; KYC stays unverified until documents are approved.
       const initialAccountStatus = dto.initialAccountStatus ?? 'INACTIVE';
-      const initialStatus = initialAccountStatus === 'ACTIVE' ? 'ACTIVE' : 'PENDING';
 
       // Create Customer profile
       const customerRow = await tx.customer.create({
@@ -107,10 +113,12 @@ export class CustomersService {
           address: dto.address ?? null,
           type: dto.type ?? null,
           gender: dto.gender ?? null,
-          level: dto.level ?? null,
           postalCode: dto.postalCode ?? null,
           phone: dto.phone ?? null,
-          referenceSource: dto.referenceSource ?? null,
+          referenceSource: dto.referrerId
+            ? (dto.referenceSource ?? 'FRIEND_REFERRAL')
+            : (dto.referenceSource ?? null),
+          referrerId: dto.referrerId ?? null,
           companyName: dto.companyName ?? null,
           companyNationalId: dto.companyNationalId ?? null,
           companyEconomicId: dto.companyEconomicId ?? null,
@@ -123,7 +131,7 @@ export class CustomersService {
           contactNotes: dto.contactNotes ?? null,
           province: dto.province ?? null,
           city: dto.city ?? null,
-          status: initialStatus,
+          status: CustomerStatus.PENDING,
           accountStatus: initialAccountStatus,
         },
       });

@@ -3,11 +3,17 @@
 import { useRef, useState } from 'react';
 import { FileText, Upload } from 'lucide-react';
 import { ApiClientError, paymentsApi } from '@/lib/api';
-import { PAYMENT_METHOD_LABELS, toLatinDigits, tomanToRial, toPersianDigits } from '@/lib/utils';
+import {
+  PAYMENT_METHOD_LABELS,
+  formatGroupedPersianInteger,
+  toLatinDigits,
+  tomanToRial,
+  toPersianDigits,
+} from '@/lib/utils';
 import { InboxSheet } from '@/components/portal/notifications/inbox-sheet';
 
 const fieldClass =
-  'mt-1 min-h-11 w-full rounded-xl border border-[#E5E7EB] bg-white px-3 text-sm text-[#202124] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8922E]';
+  'mt-1 min-h-11 w-full rounded-xl border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8922E]';
 
 const RECEIPT_ACCEPT = 'image/jpeg,image/png,image/webp,application/pdf';
 const RECEIPT_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'application/pdf']);
@@ -127,25 +133,33 @@ export function SubmitReceiptButton({ onSubmitted }: { onSubmitted: () => void }
         </label>
         <label className="mb-3 block text-sm text-[#6B7280]">
           مبلغ (تومان)
-          <input className={fieldClass} inputMode="numeric" value={amount} onChange={(event) => setAmount(event.target.value)} aria-label="مبلغ" />
+          <input
+            className={fieldClass}
+            dir="ltr"
+            inputMode="numeric"
+            autoComplete="off"
+            value={amount}
+            onChange={(event) => setAmount(formatGroupedPersianInteger(event.target.value))}
+            aria-label="مبلغ"
+          />
         </label>
         <label className="mb-3 block text-sm text-[#6B7280]">
           شماره پیگیری
-          <input className={fieldClass} dir="ltr" value={reference} onChange={(event) => setReference(event.target.value)} aria-label="شماره پیگیری" />
+          <input
+            className={fieldClass}
+            type="text"
+            name="referenceNumber"
+            dir="ltr"
+            inputMode="text"
+            autoComplete="off"
+            value={reference}
+            onChange={(event) => setReference(toPersianDigits(event.target.value))}
+            aria-label="شماره پیگیری"
+          />
         </label>
         <div className="block text-sm text-[#6B7280]">
           فایل رسید
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label="فایل رسید"
-            onClick={() => fileInputRef.current?.click()}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' || event.key === ' ') {
-                event.preventDefault();
-                fileInputRef.current?.click();
-              }
-            }}
+          <label
             onDragEnter={(event) => {
               event.preventDefault();
               setDragging(true);
@@ -164,7 +178,7 @@ export function SubmitReceiptButton({ onSubmitted }: { onSubmitted: () => void }
               setDragging(false);
               applyFile(event.dataTransfer.files[0]);
             }}
-            className={`mt-1 flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-3 py-4 text-center transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8922E] ${
+            className={`mt-1 flex min-h-[7.5rem] cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed px-3 py-4 text-center transition-colors ${
               dragging ? 'border-[#C8922E] bg-[#FFF8E7]' : 'border-[#E5E7EB] bg-[#F8F9FA]'
             }`}
           >
@@ -180,19 +194,18 @@ export function SubmitReceiptButton({ onSubmitted }: { onSubmitted: () => void }
                 <p className="mt-1 text-xs leading-6 text-[#6B7280]">یا برای انتخاب از دستگاه کلیک کنید. JPG، PNG، WebP یا PDF تا ۱۰ مگابایت</p>
               </>
             )}
-          </div>
-          <input
-            ref={fileInputRef}
-            className="sr-only"
-            type="file"
-            accept={RECEIPT_ACCEPT}
-            aria-hidden
-            tabIndex={-1}
-            onChange={(event) => {
-              applyFile(event.target.files?.[0]);
-              event.target.value = '';
-            }}
-          />
+            <input
+              ref={fileInputRef}
+              className="sr-only"
+              type="file"
+              accept={RECEIPT_ACCEPT}
+              aria-label="فایل رسید"
+              onChange={(event) => {
+                applyFile(event.target.files?.[0]);
+                event.target.value = '';
+              }}
+            />
+          </label>
         </div>
       </InboxSheet>
     </>

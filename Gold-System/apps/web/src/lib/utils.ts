@@ -24,6 +24,18 @@ export function toPersianDigits(value: string): string {
   return toLatinDigits(value).replace(/\d/g, (digit) => FA_DIGITS[Number(digit)] ?? digit);
 }
 
+/**
+ * Integer amount for live inputs: Persian digits grouped by thousands.
+ * Non-digits are dropped. Strip grouping before sending to the API.
+ */
+export function formatGroupedPersianInteger(value: string): string {
+  const digits = toLatinDigits(value).replace(/\D/g, '');
+  if (!digits) return '';
+  const trimmed = digits.replace(/^0+(?=\d)/, '');
+  const grouped = trimmed.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  return toPersianDigits(grouped);
+}
+
 /** User-visible mobile. Empty values render as `empty` (default em dash). */
 export function formatMobile(value: string | null | undefined, empty = '—'): string {
   if (value == null || String(value).trim() === '') return empty;
@@ -430,12 +442,6 @@ export const CUSTOMER_GENDER_LABELS: Record<string, string> = {
   FEMALE: 'زن',
   OTHER: 'سایر',
   NOT_SPECIFIED: 'ثبت نشده',
-};
-
-export const CUSTOMER_LEVEL_LABELS: Record<string, string> = {
-  NORMAL: 'عادی',
-  VIP: 'VIP',
-  PREMIUM: 'ویژه',
 };
 
 export const REFERENCE_SOURCE_LABELS: Record<string, string> = {

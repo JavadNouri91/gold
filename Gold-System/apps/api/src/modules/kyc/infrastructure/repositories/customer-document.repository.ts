@@ -23,6 +23,15 @@ export class CustomerDocumentRepository {
     return rows.map((r) => this.toDomain(r));
   }
 
+  /** Latest upload for each customer/document type, used by the review queue. */
+  async findLatestPerCustomerAndType(): Promise<CustomerDocumentEntity[]> {
+    const rows = await this.prisma.customerDocument.findMany({
+      distinct: ['customerId', 'documentType'],
+      orderBy: { createdAt: 'desc' },
+    });
+    return rows.map((row) => this.toDomain(row));
+  }
+
   async create(data: {
     customerId: string;
     documentType: string;
@@ -47,6 +56,43 @@ export class CustomerDocumentRepository {
 
   async deleteById(id: string): Promise<void> {
     await this.prisma.customerDocument.delete({ where: { id } });
+  }
+
+  async replaceFile(
+    id: string,
+    data: {
+      fileKey: string;
+      originalFileKey: string;
+      fileName: string;
+      fileMimeType: string;
+      fileSizeBytes: number;
+      processedFileKey?: string | null;
+    },
+  ): Promise<CustomerDocumentEntity> {
+    const row = await this.prisma.customerDocument.update({
+      where: { id },
+      data: {
+        fileKey: data.fileKey,
+        originalFileKey: data.originalFileKey,
+        fileName: data.fileName,
+        fileMimeType: data.fileMimeType,
+        fileSizeBytes: data.fileSizeBytes,
+        ...(data.processedFileKey !== undefined ? { processedFileKey: data.processedFileKey } : {}),
+        updatedAt: new Date(),
+      },
+    });
+    return this.toDomain(row);
+  }
+
+  async updateProcessedFile(
+    id: string,
+    processedFileKey: string | null,
+  ): Promise<CustomerDocumentEntity> {
+    const row = await this.prisma.customerDocument.update({
+      where: { id },
+      data: { processedFileKey, updatedAt: new Date() },
+    });
+    return this.toDomain(row);
   }
 
   async updateStatus(
@@ -74,6 +120,8 @@ export class CustomerDocumentRepository {
       customerId: row.customerId,
       documentType: row.documentType,
       fileKey: row.fileKey,
+      originalFileKey: row.originalFileKey,
+      processedFileKey: row.processedFileKey,
       fileName: row.fileName,
       fileMimeType: row.fileMimeType,
       fileSizeBytes: row.fileSizeBytes,

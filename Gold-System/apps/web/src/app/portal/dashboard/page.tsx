@@ -1,6 +1,6 @@
 'use client';
 import useSWR from 'swr';
-import { customerApi, ordersApi, pricingApi, tradesApi } from '@/lib/api';
+import { ApiClientError, customerApi, ordersApi, pricingApi, tradesApi } from '@/lib/api';
 import { toPortfolioPosition } from '@/lib/customer-portfolio';
 import { PageSpinner } from '@/components/ui/spinner';
 import { Alert } from '@/components/ui/alert';
@@ -13,11 +13,15 @@ import { ActiveOrders } from '@/components/portal/active-orders';
 import { RecentTransactions } from '@/components/portal/recent-transactions';
 import { DEMO_ACTIVE_ORDERS, DEMO_RECENT_TRADES } from '@/lib/portal-demo';
 
+function isNotFound(error: unknown): boolean {
+  return error instanceof ApiClientError && error.isNotFound;
+}
+
 export default function DashboardPage() {
   const { data: customer, error: customerError, isLoading: customerLoading } =
     useSWR('customer/me', () => customerApi.getMe());
 
-  const { data: account, isLoading: accountLoading } =
+  const { data: account, error: accountError, isLoading: accountLoading } =
     useSWR('customer/me/account', () => customerApi.getMyAccount());
 
   const { data: price, isValidating: priceRefreshing, mutate: refreshPrice } =
@@ -31,12 +35,22 @@ export default function DashboardPage() {
 
   const { data: holding } = useSWR('orders/portfolio', () => ordersApi.portfolio());
   const position = toPortfolioPosition(holding, price?.normalizedValue);
+  const customerMissing = isNotFound(customerError);
+  const customerLoadFailed = Boolean(customerError) && !customerMissing;
 
-  if ((customerLoading && !customerError) || (accountLoading && !account)) return <PageSpinner />;
+  if (
+    (customerLoading && !customerError) ||
+    (accountLoading && !account && !accountError)
+  ) {
+    return <PageSpinner />;
+  }
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-5">
-      {customerError ? <Alert variant="error">خطا در بارگذاری اطلاعات مشتری</Alert> : null}
+      {customerMissing ? (
+        <Alert variant="info">پروفایل مشتری برای این حساب کاربری ثبت نشده است.</Alert>
+      ) : null}
+      {customerLoadFailed ? <Alert variant="error">خطا در بارگذاری اطلاعات مشتری</Alert> : null}
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <div className="xl:col-span-5">
           <GoldPriceCard

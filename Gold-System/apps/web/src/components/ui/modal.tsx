@@ -1,5 +1,6 @@
 'use client';
 import * as React from 'react';
+import { createPortal } from 'react-dom';
 import { cn } from '@/lib/utils';
 import { Button } from './button';
 
@@ -11,8 +12,43 @@ interface ModalProps {
   className?: string;
 }
 
+const EXIT_MS = 150;
+
+function prefersReducedMotion() {
+  return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export function Modal({ open, onClose, title, children, className }: ModalProps) {
-  // Close on Escape
+  const [ready, setReady] = React.useState(false);
+  const [mounted, setMounted] = React.useState(open);
+  const [closing, setClosing] = React.useState(false);
+  const mountedRef = React.useRef(mounted);
+  mountedRef.current = mounted;
+
+  React.useEffect(() => {
+    setReady(true);
+  }, []);
+
+  React.useEffect(() => {
+    if (open) {
+      setMounted(true);
+      setClosing(false);
+      return;
+    }
+    if (!mountedRef.current) return;
+    if (prefersReducedMotion()) {
+      setClosing(false);
+      setMounted(false);
+      return;
+    }
+    setClosing(true);
+    const timer = window.setTimeout(() => {
+      setMounted(false);
+      setClosing(false);
+    }, EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [open]);
+
   React.useEffect(() => {
     if (!open) return;
     const handler = (e: KeyboardEvent) => {
@@ -22,9 +58,9 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     return () => document.removeEventListener('keydown', handler);
   }, [open, onClose]);
 
-  if (!open) return null;
+  if (!ready || !mounted) return null;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center"
       role="dialog"
@@ -33,7 +69,10 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
     >
       {/* Backdrop */}
       <div
-        className="absolute inset-0 bg-black/50"
+        className={cn(
+          'absolute inset-0 bg-black/40 backdrop-blur-sm',
+          closing ? 'modal-overlay-out' : 'modal-overlay-in',
+        )}
         onClick={onClose}
         aria-hidden="true"
       />
@@ -42,6 +81,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         className={cn(
           'relative z-10 w-full max-w-md rounded-xl bg-white p-6 shadow-xl',
           className,
+          closing ? 'modal-panel-out' : 'modal-panel-in',
         )}
       >
         {title && (
@@ -51,7 +91,8 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
         )}
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

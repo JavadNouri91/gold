@@ -10,11 +10,9 @@ import {
   Clock3,
   CreditCard,
   FileText,
-  Home,
   Lock,
   ShieldCheck,
   Store,
-  UserRound,
   X,
 } from 'lucide-react';
 import { kycApi, type KycDocumentDisplayStatus, type KycPhase, type OwnKycDocument, type OwnKycOverview } from '@/lib/api';
@@ -400,8 +398,6 @@ function PhaseIcon({ phase }: { phase: KycPhase }) {
 function DocumentIcon({ type }: { type: string }) {
   const className = 'h-5 w-5';
   if (type === 'birth_certificate') return <BookOpen className={className} aria-hidden />;
-  if (type === 'proof_of_address') return <Home className={className} aria-hidden />;
-  if (type === 'selfie_with_id') return <UserRound className={className} aria-hidden />;
   if (type === 'personal_photo') return <Camera className={className} aria-hidden />;
   if (type === 'business_registration') return <Store className={className} aria-hidden />;
   return <CreditCard className={className} aria-hidden />;
@@ -450,9 +446,10 @@ function DocumentCard({
         {document.file ? (
           <DocumentThumbnail
             documentId={document.file.id}
-            mime={document.file.fileMimeType}
+            mime={document.file.hasProcessedFile ? 'image/png' : document.file.fileMimeType}
             fileName={document.file.fileName}
             label={document.label}
+            processed={Boolean(document.file.hasProcessedFile)}
             onOpen={onView}
           />
         ) : (
@@ -511,12 +508,14 @@ function DocumentThumbnail({
   mime,
   fileName,
   label,
+  processed = false,
   onOpen,
 }: {
   documentId: string;
   mime: string;
   fileName: string;
   label: string;
+  processed?: boolean;
   onOpen: () => void;
 }) {
   const ref = useRef<HTMLButtonElement>(null);
@@ -548,7 +547,7 @@ function DocumentThumbnail({
     let objectUrl: string | null = null;
     setFailed(false);
     kycApi
-      .getOwnDocumentFile(documentId)
+      .getOwnDocumentFile(documentId, processed)
       .then((blob) => {
         if (!active) return;
         objectUrl = URL.createObjectURL(blob);
@@ -561,7 +560,7 @@ function DocumentThumbnail({
       active = false;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [seen, isImage, documentId]);
+  }, [seen, isImage, documentId, processed]);
 
   return (
     <button

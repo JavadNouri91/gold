@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
-import { isValidMobile, latinMobile, MOBILE_PLACEHOLDER } from '@/lib/utils';
+import { isValidMobile, latinMobile, toLatinDigits, MOBILE_PLACEHOLDER } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
 import { MobileInput } from '@/components/ui/mobile-input';
@@ -39,7 +39,7 @@ export default function LoginPage() {
     setIsLoading(true);
     try {
       const mobile = latinMobile(data.mobile);
-      const result = await login(mobile, data.password);
+      const result = await login(mobile, toLatinDigits(data.password));
       if (result.requiresOtp) {
         sessionStorage.setItem('login_mobile', mobile);
         router.push('/portal/otp');
@@ -77,7 +77,7 @@ export default function LoginPage() {
         {/* Form */}
         <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
           <h2 className="font-semibold text-lg">
-            {mode === 'login' ? 'ورود با شماره موبایل' : 'بازیابی رمز عبور'}
+            {mode === 'login' ? 'ورود به پورتال' : 'بازیابی رمز عبور'}
           </h2>
 
           {mode === 'login' ? (
@@ -109,13 +109,15 @@ export default function LoginPage() {
               <form onSubmit={handleSubmit(onSubmit)} noValidate>
                 <div className="space-y-4">
                   <MobileInput
-                    label="شماره موبایل"
+                    label="نام کاربری"
+                    hint="شماره موبایل"
                     error={errors.mobile?.message}
                     value={watch('mobile')}
                     onValueChange={(mobile) => setValue('mobile', mobile, { shouldValidate: true })}
                   />
                   <PasswordInput
                     label="رمز عبور"
+                    hint="برای ورود اول، کد ملی است"
                     autoComplete="current-password"
                     error={errors.password?.message}
                     {...register('password', {
@@ -148,7 +150,7 @@ export default function LoginPage() {
 
         {mode === 'login' ? (
           <p className="text-center text-xs text-muted-foreground mt-6">
-            با شماره موبایل و رمز عبور وارد شوید.
+            نام کاربری شماره موبایل است. رمز ورود اول کد ملی است.
           </p>
         ) : null}
       </div>

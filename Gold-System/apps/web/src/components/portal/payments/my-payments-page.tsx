@@ -143,7 +143,7 @@ export function MyPaymentsPage({
       ) : summaryLoading && !summary ? (
         <SummarySkeleton />
       ) : summary ? (
-        <SummaryCards summary={summary} />
+        <SummaryCards summary={summary} statusGroup={statusGroup} onStatusGroup={onStatusGroup} />
       ) : null}
 
       <Filters
@@ -189,14 +189,46 @@ export function MyPaymentsPage({
   );
 }
 
-function SummaryCards({ summary }: { summary: PaymentSummary }) {
+const STATUS_CARD_FILTERS: { id: PaymentStatusGroup; compactTitle: string; title: string; tone: PaymentTone }[] = [
+  { id: 'successful', compactTitle: 'موفق', title: 'پرداخت‌های موفق', tone: 'green' },
+  { id: 'failed', compactTitle: 'ناموفق', title: 'پرداخت‌های ناموفق', tone: 'red' },
+  { id: 'reversed', compactTitle: 'برگشتی', title: 'مبالغ برگشتی', tone: 'blue' },
+];
+
+function toggleStatusGroup(current: '' | PaymentStatusGroup, next: PaymentStatusGroup): '' | PaymentStatusGroup {
+  return current === next ? '' : next;
+}
+
+function SummaryCards({
+  summary,
+  statusGroup,
+  onStatusGroup,
+}: {
+  summary: PaymentSummary;
+  statusGroup: '' | PaymentStatusGroup;
+  onStatusGroup: (status: '' | PaymentStatusGroup) => void;
+}) {
+  const buckets = {
+    successful: summary.successful,
+    failed: summary.failed,
+    reversed: summary.reversed,
+  } as const;
+
   return (
     <>
       <div className="grid grid-cols-2 gap-2 lg:hidden">
         <CompactCard title="مجموع پرداختی" value={formatMoney(summary.totalPaid.amountRial)} hint={`${toPersianDigits(String(summary.totalPaid.count))} پرداخت`} />
-        <CompactCard title="موفق" value={toPersianDigits(String(summary.successful.count))} hint={formatMoney(summary.successful.amountRial)} tone="green" />
-        <CompactCard title="ناموفق" value={toPersianDigits(String(summary.failed.count))} hint={formatMoney(summary.failed.amountRial)} tone="red" />
-        <CompactCard title="برگشتی" value={toPersianDigits(String(summary.reversed.count))} hint={formatMoney(summary.reversed.amountRial)} tone="blue" />
+        {STATUS_CARD_FILTERS.map((card) => (
+          <CompactCard
+            key={card.id}
+            title={card.compactTitle}
+            value={toPersianDigits(String(buckets[card.id].count))}
+            hint={formatMoney(buckets[card.id].amountRial)}
+            tone={card.tone}
+            selected={statusGroup === card.id}
+            onSelect={() => onStatusGroup(toggleStatusGroup(statusGroup, card.id))}
+          />
+        ))}
       </div>
       <div className="hidden gap-3 lg:grid lg:grid-cols-4">
         <article className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
@@ -204,22 +236,20 @@ function SummaryCards({ summary }: { summary: PaymentSummary }) {
             <WalletCards className="h-4 w-4 text-[#C8922E]" aria-hidden />
             مجموع پرداختی
           </div>
-          <p className="mt-3 text-lg font-bold tabular-nums text-[#202124]">{formatMoney(summary.totalPaid.amountRial)}</p>
+          <p className="mt-3 text-lg font-bold tracking-tighter proportional-nums text-[#202124]">{formatMoney(summary.totalPaid.amountRial)}</p>
           <p className="mt-1 text-xs text-[#6B7280]">در {toPersianDigits(String(summary.totalPaid.count))} پرداخت</p>
         </article>
-        <SummaryStat
-          title="پرداخت‌های موفق"
-          count={summary.successful.count}
-          amount={summary.successful.amountRial}
-          tone="green"
-        />
-        <SummaryStat
-          title="پرداخت‌های ناموفق"
-          count={summary.failed.count}
-          amount={summary.failed.amountRial}
-          tone="red"
-        />
-        <SummaryStat title="مبالغ برگشتی" count={summary.reversed.count} amount={summary.reversed.amountRial} tone="blue" />
+        {STATUS_CARD_FILTERS.map((card) => (
+          <SummaryStat
+            key={card.id}
+            title={card.title}
+            count={buckets[card.id].count}
+            amount={buckets[card.id].amountRial}
+            tone={card.tone}
+            selected={statusGroup === card.id}
+            onSelect={() => onStatusGroup(toggleStatusGroup(statusGroup, card.id))}
+          />
+        ))}
       </div>
     </>
   );
@@ -230,18 +260,40 @@ function CompactCard({
   value,
   hint,
   tone = 'muted',
+  selected = false,
+  onSelect,
 }: {
   title: string;
   value: string;
   hint: string;
   tone?: PaymentTone;
+  selected?: boolean;
+  onSelect?: () => void;
 }) {
-  return (
-    <article className="min-w-0 rounded-2xl border border-[#E5E7EB] bg-white p-3 shadow-sm">
+  const className = cn(
+    'min-w-0 rounded-2xl border bg-white p-3 text-right shadow-sm',
+    selected ? 'border-[#C8922E] ring-1 ring-[#C8922E]' : 'border-[#E5E7EB]',
+  );
+  const body = (
+    <>
       <p className={cn('text-xs font-semibold', tone === 'muted' ? 'text-[#6B7280]' : toneClass[tone])}>{title}</p>
-      <p className="mt-1 break-words text-sm font-bold tabular-nums text-[#202124]">{value}</p>
+      <p className="mt-1 break-words text-sm font-bold tracking-tighter proportional-nums text-[#202124]">{value}</p>
       <p className="mt-1 break-words text-[11px] leading-5 text-[#6B7280]">{hint}</p>
-    </article>
+    </>
+  );
+  if (!onSelect) {
+    return <article className={className}>{body}</article>;
+  }
+  return (
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={`فیلتر ${title}`}
+      onClick={onSelect}
+      className={cn(className, 'cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8922E]')}
+    >
+      {body}
+    </button>
   );
 }
 
@@ -250,19 +302,32 @@ function SummaryStat({
   count,
   amount,
   tone,
+  selected,
+  onSelect,
 }: {
   title: string;
   count: number;
   amount: string;
   tone: PaymentTone;
+  selected: boolean;
+  onSelect: () => void;
 }) {
   return (
-    <article className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
+    <button
+      type="button"
+      aria-pressed={selected}
+      aria-label={`فیلتر ${title}`}
+      onClick={onSelect}
+      className={cn(
+        'rounded-2xl border bg-white p-4 text-right shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8922E]',
+        selected ? 'border-[#C8922E] ring-1 ring-[#C8922E]' : 'border-[#E5E7EB]',
+      )}
+    >
       <p className={cn('text-sm font-semibold', toneClass[tone].split(' ').at(-1))}>{title}</p>
-      <p className="mt-2 text-2xl font-bold tabular-nums text-[#202124]">{toPersianDigits(String(count))}</p>
+      <p className="mt-2 text-2xl font-bold tracking-tighter proportional-nums text-[#202124]">{toPersianDigits(String(count))}</p>
       <p className="mt-1 text-xs text-[#6B7280]">مجموع مبلغ</p>
-      <p className="text-sm font-semibold tabular-nums text-[#202124]">{formatMoney(amount)}</p>
-    </article>
+      <p className="text-sm font-semibold tracking-tighter proportional-nums text-[#202124]">{formatMoney(amount)}</p>
+    </button>
   );
 }
 
@@ -468,7 +533,7 @@ function PaymentCards({ rows }: { rows: Payment[] }) {
             <p className="mt-3 text-sm font-semibold text-[#202124]" dir="ltr">
               {relatedPaymentLabel(payment)}
             </p>
-            <p className="mt-1 text-base font-bold tabular-nums text-[#202124]">{formatMoney(payment.amount)}</p>
+            <p className="mt-1 text-base font-bold tracking-tighter proportional-nums text-[#202124]">{formatMoney(payment.amount)}</p>
             <p className="mt-3 inline-flex items-center gap-1 text-xs text-[#6B7280]">
               <CreditCard className="h-3.5 w-3.5" aria-hidden />
               {PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}
@@ -511,7 +576,7 @@ function PaymentTable({ rows }: { rows: Payment[] }) {
               </td>
               <td className="px-2 py-4 text-xs">{paymentTypeLabel(payment.relatedSide)}</td>
               <td className="px-2 py-4 text-xs">{PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}</td>
-              <td className="px-2 py-4 text-xs font-semibold tabular-nums">{formatMoney(payment.amount)}</td>
+              <td className="px-2 py-4 text-xs font-semibold tracking-tighter proportional-nums">{formatMoney(payment.amount)}</td>
               <td className="px-2 py-4">
                 <PaymentStatusBadge status={payment.status} />
               </td>

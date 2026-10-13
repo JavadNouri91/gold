@@ -46,22 +46,16 @@ export function MobileBottomNavigation() {
                   className={cn(
                     'flex items-center justify-center',
                     center
-                      ? '-mt-4 h-12 w-12 rounded-full bg-[#C8922E] text-white shadow-md'
+                      ? 'h-10 w-10 rounded-full bg-[#C8922E] text-white shadow-md'
                       : 'h-6 w-6',
                     center && active && 'ring-2 ring-[#FFF4D6]',
                   )}
                 >
-                  <Icon className="h-5 w-5" aria-hidden />
+                  <Icon className={center ? 'h-4 w-4' : 'h-5 w-5'} aria-hidden />
                 </span>
-                {center ? (
-                  <span className="text-center" aria-hidden>
-                    خرید
-                    <br />
-                    فروش
-                  </span>
-                ) : (
+                {!center ? (
                   <span className="max-w-full truncate">{item.label}</span>
-                )}
+                ) : null}
               </Link>
             </li>
           );

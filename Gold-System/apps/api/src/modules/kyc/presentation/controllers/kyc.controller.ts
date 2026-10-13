@@ -27,6 +27,8 @@ import {
 import { KycService } from '../../application/kyc.service';
 import { KycDecisionDto } from '../../application/dto/kyc-decision.dto';
 import { SubmitDocumentDto } from '../../application/dto/submit-document.dto';
+import { VerificationStatus } from '@gold/shared-types';
+import type { KycStaffBucket } from '../../domain/kyc-workflow';
 
 const MIME_BY_EXTENSION: Record<string, string> = {
   jpg: 'image/jpeg',
@@ -75,12 +77,14 @@ export class KycController {
   async readOwnFile(
     @CurrentUser() user: CurrentUserData,
     @Param('documentId') documentId: string,
+    @Query('processed') processed: string | undefined,
     @Req() req: Request,
   ): Promise<StreamableFile> {
     const file = await this.kyc.readOwnDocumentFile(
       requireActorId(user),
       documentId,
       req.ip ?? undefined,
+      processed === 'true' || processed === '1',
     );
     return new StreamableFile(file.buffer, {
       type: file.mimeType,
@@ -130,6 +134,39 @@ export class KycController {
     });
   }
 
+  @Get('kyc/queue')
+  @RequirePermissions('kyc.review', 'customer.read')
+  @ApiOperation({ summary: 'Customers whose latest required documents await a KYC decision' })
+  getReviewQueue(
+    @CurrentUser() user: CurrentUserData,
+    @Query('page') page: string | undefined,
+    @Query('limit') limit: string | undefined,
+    @Query('bucket') bucket: string | undefined,
+    @Query('status') status: string | undefined,
+    @Query('search') search: string | undefined,
+    @Req() req: Request,
+  ) {
+    const documentStatus =
+      status === VerificationStatus.PENDING || status === VerificationStatus.UNDER_REVIEW
+        ? status
+        : undefined;
+    const staffBucket: KycStaffBucket | undefined =
+      bucket === 'verified' || bucket === 'unverified' || bucket === 'awaiting'
+        ? bucket
+        : undefined;
+    return this.kyc.getReviewQueue(
+      {
+        page: page ? Number(page) : undefined,
+        limit: limit ? Number(limit) : undefined,
+        bucket: staffBucket,
+        status: documentStatus,
+        search,
+      },
+      requireActorId(user),
+      req.ip ?? undefined,
+    );
+  }
+
   @Get(':customerId/documents')
   @RequirePermissions('kyc.documents.read')
   @ApiOperation({ summary: 'List a customer’s KYC documents (staff)' })
@@ -154,6 +191,8 @@ export class KycController {
     @CurrentUser() user: CurrentUserData,
     @Param('customerId') customerId: string,
     @Param('documentId') documentId: string,
+    @Query('original') original: string | undefined,
+    @Query('processed') processed: string | undefined,
     @Req() req: Request,
   ): Promise<StreamableFile> {
     const file = await this.kyc.readDocumentFile(
@@ -161,11 +200,74 @@ export class KycController {
       documentId,
       requireActorId(user),
       req.ip ?? undefined,
+      true,
+      original === 'true' || original === '1',
+      processed === 'true' || processed === '1',
     );
     return new StreamableFile(file.buffer, {
       type: file.mimeType,
       disposition: 'inline; filename="document"',
     });
+  }
+
+  @Post(':customerId/documents/:documentId/file')
+  @RequirePermissions('kyc.review')
+  @HttpCode(HttpStatus.OK)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Replace a KYC document image after staff crop/rotate (keeps the original)' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_KYC_FILE_SIZE_BYTES },
+    }),
+  )
+  replaceDocumentImage(
+    @CurrentUser() user: CurrentUserData,
+    @Param('customerId') customerId: string,
+    @Param('documentId') documentId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: Request,
+  ) {
+    if (!file || file.size <= 0) {
+      throw new BadRequestException('فایل انتخاب نشده است.');
+    }
+    normalizeUploadedMime(file);
+    return this.kyc.replaceStaffDocumentImage(
+      customerId,
+      documentId,
+      file,
+      requireActorId(user),
+      req.ip ?? undefined,
+    );
+  }
+
+  @Post(':customerId/documents/:documentId/processed-file')
+  @RequirePermissions('kyc.review')
+  @HttpCode(HttpStatus.OK)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Save a background-free personal photo without replacing the review original' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_KYC_FILE_SIZE_BYTES },
+    }),
+  )
+  saveProcessedPersonalPhoto(
+    @CurrentUser() user: CurrentUserData,
+    @Param('customerId') customerId: string,
+    @Param('documentId') documentId: string,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: Request,
+  ) {
+    if (!file || file.size <= 0) {
+      throw new BadRequestException('فایل انتخاب نشده است.');
+    }
+    normalizeUploadedMime(file);
+    return this.kyc.saveProcessedPersonalPhoto(
+      customerId,
+      documentId,
+      file,
+      requireActorId(user),
+      req.ip ?? undefined,
+    );
   }
 
   @Post(':customerId/documents/:documentId/decision')

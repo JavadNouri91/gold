@@ -6,6 +6,7 @@ import {
   isPositiveWeight,
   normalizeWeightInput,
 } from '../components/portal/buy-gold/weight-input';
+import { quickTomanStepsFromRial } from '../components/portal/buy-gold/quick-toman-steps';
 
 describe('decimal strings', () => {
   it('compares without binary floating point', () => {
@@ -46,6 +47,50 @@ describe('weight input', () => {
     expect(capWeightToAvailable('2.000000', '2.000000')).toBe('2');
     expect(capWeightToAvailable('8.097', '2.000000')).toBe('2');
     expect(capWeightToAvailable('0.0004', '0.0004')).toBeNull();
+  });
+
+  it('builds five rounded toman slices from available rial', () => {
+    expect(quickTomanStepsFromRial('1000000000')).toEqual([
+      { label: '۲۰ میلیون', rial: '200000000' },
+      { label: '۴۰ میلیون', rial: '400000000' },
+      { label: '۶۰ میلیون', rial: '600000000' },
+      { label: '۸۰ میلیون', rial: '800000000' },
+      { label: '۱۰۰ میلیون', rial: '1000000000' },
+    ]);
+    expect(quickTomanStepsFromRial('500000000.00')).toEqual([
+      { label: '۱۰ میلیون', rial: '100000000' },
+      { label: '۲۰ میلیون', rial: '200000000' },
+      { label: '۳۰ میلیون', rial: '300000000' },
+      { label: '۴۰ میلیون', rial: '400000000' },
+      { label: '۵۰ میلیون', rial: '500000000' },
+    ]);
+    // 100_000_000.7 toman → drop خرده; fifths stay clean whole millions.
+    expect(quickTomanStepsFromRial('1000000007')).toEqual([
+      { label: '۲۰ میلیون', rial: '200000000' },
+      { label: '۴۰ میلیون', rial: '400000000' },
+      { label: '۶۰ میلیون', rial: '600000000' },
+      { label: '۸۰ میلیون', rial: '800000000' },
+      { label: '۱۰۰ میلیون', rial: '1000000000' },
+    ]);
+    // Uneven fifths floor each slice to a whole million toman.
+    expect(quickTomanStepsFromRial('1370000000')).toEqual([
+      { label: '۲۷ میلیون', rial: '270000000' },
+      { label: '۵۴ میلیون', rial: '540000000' },
+      { label: '۸۲ میلیون', rial: '820000000' },
+      { label: '۱۰۹ میلیون', rial: '1090000000' },
+      { label: '۱۳۷ میلیون', rial: '1370000000' },
+    ]);
+    // 3,165,200 toman fifth → «۳ میلیون».
+    expect(quickTomanStepsFromRial('158260000')).toEqual([
+      { label: '۳ میلیون', rial: '30000000' },
+      { label: '۶ میلیون', rial: '60000000' },
+      { label: '۹ میلیون', rial: '90000000' },
+      { label: '۱۲ میلیون', rial: '120000000' },
+      { label: '۱۵ میلیون', rial: '150000000' },
+    ]);
+    expect(quickTomanStepsFromRial('5000000')).toEqual([]);
+    expect(quickTomanStepsFromRial('0')).toEqual([]);
+    expect(quickTomanStepsFromRial(null)).toEqual([]);
   });
 
   it('rejects zero and empty weights', () => {

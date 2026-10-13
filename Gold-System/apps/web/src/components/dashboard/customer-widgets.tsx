@@ -333,7 +333,7 @@ export function buildImportRows(rows: string[][], mapping: ImportColumnMap, defa
     const lastName = cellAt(cells, mapping.lastName).trim();
     const nationalId = normalizeNationalId(cellAt(cells, mapping.nationalId));
     const mobile = normalizeImportedMobile(cellAt(cells, mapping.mobile));
-    const password = cellAt(cells, mapping.password).trim() || fallback;
+    const password = cellAt(cells, mapping.password).trim() || fallback || nationalId;
     const email = cellAt(cells, mapping.email).trim();
     const address = cellAt(cells, mapping.address).trim();
     if (!firstName && !lastName && !nationalId && !mobile && !email && !address) return [];
@@ -364,7 +364,7 @@ export function parseCustomerCsv(text: string): ImportRow[] {
 
 export function customerImportTemplate(): string {
   const mobile = formatMobile('09120001111', '');
-  return `\uFEFFfirstName,lastName,nationalId,mobile,password,email,address\r\nعلی,رضایی,0012345678,${mobile},ChangeMe123!,ali@example.com,تهران\r\n`;
+  return `\uFEFFfirstName,lastName,nationalId,mobile,email,address\r\nعلی,رضایی,0012345678,${mobile},ali@example.com,تهران\r\n`;
 }
 
 function readFileBytes(file: File): Promise<ArrayBuffer> {
@@ -448,7 +448,6 @@ export function CustomerImportDialog({
   const used = new Set(Object.values(mapping).filter(Boolean));
   const unused = headers.filter((_, index) => !used.has(String(index)));
   const missing = IMPORT_FIELDS.filter((field) => field.required && !mapping[field.key]).map((field) => field.label);
-  const passwordMissing = !mapping.password && defaultPassword.trim().length < 8;
 
   const loadFile = async (file: File) => {
     setError(null);
@@ -474,7 +473,7 @@ export function CustomerImportDialog({
   };
 
   const submit = async () => {
-    if (missing.length || passwordMissing || !readyRows.length) return;
+    if (missing.length || !readyRows.length) return;
     if (readyRows.length > 200) {
       setError('در هر بار حداکثر ۲۰۰ ردیف ثبت می‌شود.');
       return;
@@ -574,15 +573,14 @@ export function CustomerImportDialog({
               })}
             </div>
             <Input
-              label="رمز پیش‌فرض"
-              hint="اگر فایل ستون رمز ندارد، همین رمز برای ردیف‌ها استفاده می‌شود."
+              label="رمز پیش‌فرض (اختیاری)"
+              hint="اگر خالی باشد، رمز هر مشتری کد ملی او خواهد بود."
               value={defaultPassword}
               dir="ltr"
               disabled={importing}
               onChange={(event) => setDefaultPassword(event.target.value)}
             />
             {missing.length ? <Alert variant="error">این ستون‌ها را وصل کنید: {missing.join('، ')}</Alert> : null}
-            {passwordMissing ? <Alert variant="error">ستون رمز را انتخاب کنید یا یک رمز پیش‌فرض حداقل ۸ نویسه بگذارید.</Alert> : null}
             {unused.length ? <p className="text-muted-foreground">ستون‌های بدون تطبیق: {unused.join('، ')}</p> : null}
             <p>
               {readyRows.length.toLocaleString('fa-IR')} ردیف آماده ثبت است.
@@ -592,7 +590,7 @@ export function CustomerImportDialog({
             </p>
             <div className="flex justify-end gap-2">
               <Button variant="outline" type="button" onClick={onClose} disabled={importing}>انصراف</Button>
-              <Button type="button" isLoading={importing} disabled={Boolean(missing.length) || passwordMissing || !readyRows.length} onClick={() => void submit()}>
+              <Button type="button" isLoading={importing} disabled={Boolean(missing.length) || !readyRows.length} onClick={() => void submit()}>
                 ثبت مشتریان
               </Button>
             </div>

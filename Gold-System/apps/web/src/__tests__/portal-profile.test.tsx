@@ -2,7 +2,6 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AccountStatsCard } from '../components/portal/profile/account-stats-card';
-import { DeleteAccountCard } from '../components/portal/profile/delete-account-card';
 import { PersonalInformationCard } from '../components/portal/profile/personal-information-card';
 import { ProfileHero } from '../components/portal/profile/profile-hero';
 import { ProfileKycCard } from '../components/portal/profile/profile-kyc-card';
@@ -68,15 +67,5 @@ describe('PersonalInformationCard', () => {
     ).toBeInTheDocument();
     expect(screen.getByLabelText('ایمیل')).toBeInTheDocument();
     expect(screen.queryByLabelText('کد ملی')).not.toBeInTheDocument();
-  });
-});
-
-describe('DeleteAccountCard', () => {
-  it('blocks deletion when the customer has orders', async () => {
-    const user = userEvent.setup();
-    render(<DeleteAccountCard account={null} orderCount={2} tradeCount={0} />);
-    await user.click(screen.getByRole('button', { name: 'درخواست حذف حساب' }));
-    expect(screen.getByText(/حذف مستقیم حساب امکان‌پذیر نیست/)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'ثبت درخواست' })).not.toBeInTheDocument();
   });
 });

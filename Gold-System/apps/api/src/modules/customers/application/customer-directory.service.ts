@@ -165,7 +165,7 @@ export class CustomerDirectoryService {
             lastName: row.lastName.trim(),
             nationalId: row.nationalId.trim(),
             mobile: row.mobile.trim(),
-            password: row.password,
+            password: row.password?.trim() || row.nationalId.trim(),
             email: row.email?.trim() || undefined,
             address: row.address?.trim() || undefined,
           },

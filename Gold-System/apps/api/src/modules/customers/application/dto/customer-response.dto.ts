@@ -1,7 +1,6 @@
 import {
   CustomerAccountStatus,
   CustomerGender,
-  CustomerLevel,
   CustomerStatus,
   CustomerType,
   ReferenceSource,
@@ -23,10 +22,10 @@ export class CustomerResponseDto {
   hasAvatar: boolean;
   type: CustomerType | null;
   gender: CustomerGender | null;
-  level: CustomerLevel | null;
   postalCode: string | null;
   phone: string | null;
   referenceSource: ReferenceSource | null;
+  referrerId: string | null;
   companyName: string | null;
   companyNationalId: string | null;
   companyEconomicId: string | null;
@@ -62,10 +61,10 @@ export class CustomerResponseDto {
     dto.hasAvatar = Boolean(entity.avatarKey);
     dto.type = entity.type;
     dto.gender = entity.gender;
-    dto.level = entity.level;
     dto.postalCode = entity.postalCode;
     dto.phone = entity.phone;
     dto.referenceSource = entity.referenceSource;
+    dto.referrerId = entity.referrerId;
     dto.companyName = entity.companyName;
     dto.companyNationalId = entity.companyNationalId;
     dto.companyEconomicId = entity.companyEconomicId;

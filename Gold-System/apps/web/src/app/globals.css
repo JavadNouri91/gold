@@ -150,3 +150,34 @@ html.dark .shadow-\[0_8px_24px_rgba\(15\,23\,42\,0\.12\)\],
 html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
   --tw-shadow-color: rgb(0 0 0 / 0.35);
 }
+
+@keyframes modal-overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modal-overlay-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+@keyframes modal-panel-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes modal-panel-out {
+  from { opacity: 1; transform: scale(1); }
+  to { opacity: 0; transform: scale(0.96); }
+}
+
+.modal-overlay-in { animation: modal-overlay-in 150ms ease-out both; }
+.modal-overlay-out { animation: modal-overlay-out 150ms ease-out both; }
+.modal-panel-in { animation: modal-panel-in 150ms ease-out both; }
+.modal-panel-out { animation: modal-panel-out 150ms ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .modal-overlay-in,
+  .modal-overlay-out,
+  .modal-panel-in,
+  .modal-panel-out {
+    animation: none;
+  }
+}

@@ -1,4 +1,13 @@
-import { formatMoney, rialToToman, tomanToRial } from '@/lib/utils';
+import { formatGroupedPersianInteger, formatMoney, rialToToman, tomanToRial } from '@/lib/utils';
+
+describe('formatGroupedPersianInteger', () => {
+  it('groups thousands with Persian digits', () => {
+    expect(formatGroupedPersianInteger('125000')).toBe('۱۲۵,۰۰۰');
+    expect(formatGroupedPersianInteger('۱۲۵۰۰۰')).toBe('۱۲۵,۰۰۰');
+    expect(formatGroupedPersianInteger('1,250,000')).toBe('۱,۲۵۰,۰۰۰');
+    expect(formatGroupedPersianInteger('')).toBe('');
+  });
+});
 
 describe('authoritative money display', () => {
   it('shows Rial amounts as Toman without rounding away backend fraction digits', () => {

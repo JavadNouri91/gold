@@ -238,10 +238,10 @@ model Customer {
   avatarKey         String?               @map("avatar_key")
   type              CustomerType?
   gender            CustomerGender?
-  level             CustomerLevel?        @default(NORMAL)
   postalCode        String?               @map("postal_code")
   phone             String?
   referenceSource   ReferenceSource?      @map("reference_source")
+  referrerId        String?               @map("referrer_id")
   companyName       String?               @map("company_name")
   companyNationalId String?               @map("company_national_id")
   companyEconomicId String?               @map("company_economic_id")
@@ -268,12 +268,15 @@ model Customer {
   payments         Payment[]
   quotations       Quotation[]
   trades           Trade[]
+  referrer         Customer?             @relation("CustomerReferrals", fields: [referrerId], references: [id], onDelete: SetNull)
+  referrals        Customer[]            @relation("CustomerReferrals")
 
   @@index([status])
   @@index([accountStatus])
   @@index([mobile])
   @@index([nationalId])
   @@index([customerNumber])
+  @@index([referrerId])
   @@map("customers")
 }
 
@@ -296,6 +299,8 @@ model CustomerDocument {
   customerId      String             @map("customer_id")
   documentType    String             @map("document_type")
   fileKey         String             @map("file_key")
+  originalFileKey String?            @map("original_file_key")
+  processedFileKey String?           @map("processed_file_key")
   fileName        String             @map("file_name")
   fileMimeType    String             @map("file_mime_type")
   fileSizeBytes   Int                @map("file_size_bytes")
@@ -953,12 +958,6 @@ enum CustomerGender {
   FEMALE
   OTHER
   NOT_SPECIFIED
-}
-
-enum CustomerLevel {
-  NORMAL
-  VIP
-  PREMIUM
 }
 
 enum ReferenceSource {

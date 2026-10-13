@@ -12,15 +12,18 @@ import { CustomerRepository } from '../../customers/infrastructure/repositories/
 import { NotificationService } from '../../notifications/application/notification.service';
 import { NotificationType } from '../../notifications/domain/constants/notification-types';
 import { BusinessRuleException } from '../../../common/exceptions/business-rule.exception';
+import { toLatinDigits } from '../../../common/digits';
 import { KYCVerificationEntity } from '../domain/entities/kyc-verification.entity';
 import { CustomerDocumentEntity } from '../domain/entities/customer-document.entity';
 import { KycDecisionDto, KycDecision } from './dto/kyc-decision.dto';
-import { VerificationStatus } from '@gold/shared-types';
+import { CustomerStatus, VerificationStatus } from '@gold/shared-types';
 import {
   buildOwnKycView,
   deleteBlockReason,
+  kycStaffBucket,
   requiredKycTypes,
   uploadBlockReason,
+  type KycStaffBucket,
   type OwnKycView,
   type WorkflowDocument,
   type WorkflowVerification,
@@ -37,6 +40,8 @@ export class DocumentResponseDto {
   reviewedBy: string | null;
   reviewedAt: Date | null;
   rejectionReason: string | null;
+  hasOriginalFile: boolean;
+  hasProcessedFile: boolean;
   createdAt: Date;
   updatedAt: Date;
   /** Signed URL — generated on demand; caller must audit access (§7.3) */
@@ -54,6 +59,8 @@ export class DocumentResponseDto {
     dto.reviewedBy = entity.reviewedBy;
     dto.reviewedAt = entity.reviewedAt;
     dto.rejectionReason = entity.rejectionReason;
+    dto.hasOriginalFile = Boolean(entity.originalFileKey);
+    dto.hasProcessedFile = Boolean(entity.processedFileKey);
     dto.createdAt = entity.createdAt;
     dto.updatedAt = entity.updatedAt;
     if (signedUrl !== undefined) dto.signedUrl = signedUrl;
@@ -84,6 +91,67 @@ export class KycVerificationResponseDto {
     return dto;
   }
 }
+
+export interface KycReviewQueueItem {
+  id: string;
+  customerNumber: string;
+  fullName: string;
+  mobile: string;
+  status: CustomerStatus;
+  bucket: KycStaffBucket;
+  pendingDocuments: number;
+  viewedDocuments: number;
+  latestSubmittedAt: string;
+}
+
+export interface KycReviewQueueSummary {
+  verified: number;
+  unverified: number;
+  awaiting: number;
+}
+
+export interface KycReviewQueue {
+  items: KycReviewQueueItem[];
+  summary: KycReviewQueueSummary;
+  meta: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+const EDITABLE_KYC_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+const PERSONAL_PHOTO_TYPE = 'personal_photo';
+
+function mimeFromStoredKey(key: string, fallback: string): string {
+  const extension = key.split('.').pop()?.toLowerCase() ?? '';
+  if (extension === 'png') return 'image/png';
+  if (extension === 'webp') return 'image/webp';
+  if (extension === 'pdf') return 'application/pdf';
+  if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+  return fallback;
+}
+
+function latestDocumentStatusByType(
+  documents: CustomerDocumentEntity[],
+): Map<string, VerificationStatus> {
+  const latest = new Map<string, VerificationStatus>();
+  const ordered = [...documents].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  for (const document of ordered) {
+    if (!latest.has(document.documentType)) {
+      latest.set(document.documentType, document.status);
+    }
+  }
+  return latest;
+}
+
+const PRESERVED_REVIEW_CUSTOMER_STATUSES = new Set<CustomerStatus>([
+  CustomerStatus.APPROVED,
+  CustomerStatus.ACTIVE,
+  CustomerStatus.SUSPENDED,
+  CustomerStatus.BLOCKED,
+]);
 
 @Injectable()
 export class KycService {
@@ -226,6 +294,117 @@ export class KycService {
     return responses;
   }
 
+  async getReviewQueue(
+    params: {
+      page?: number;
+      limit?: number;
+      bucket?: KycStaffBucket;
+      status?: VerificationStatus.PENDING | VerificationStatus.UNDER_REVIEW;
+      search?: string;
+    },
+    actorId: string,
+    ipAddress?: string,
+  ): Promise<KycReviewQueue> {
+    const page = Number.isFinite(params.page) ? Math.max(1, params.page ?? 1) : 1;
+    const limit = Number.isFinite(params.limit)
+      ? Math.min(100, Math.max(1, params.limit ?? 20))
+      : 20;
+    const bucket = params.bucket ?? 'awaiting';
+    const [customers, latestDocuments, latestVerifications] = await Promise.all([
+      this.customerRepo.findAll(),
+      this.documentRepo.findLatestPerCustomerAndType(),
+      this.kycRepo.findLatestPerCustomer(),
+    ]);
+
+    const latestByCustomer = new Map<string, CustomerDocumentEntity[]>();
+    for (const document of latestDocuments) {
+      const current = latestByCustomer.get(document.customerId) ?? [];
+      current.push(document);
+      latestByCustomer.set(document.customerId, current);
+    }
+    const verificationByCustomer = new Map(
+      latestVerifications.map((verification) => [verification.customerId, verification.status]),
+    );
+
+    const summary: KycReviewQueueSummary = { verified: 0, unverified: 0, awaiting: 0 };
+    const search = toLatinDigits(params.search?.trim() ?? '').toLocaleLowerCase('fa-IR');
+    const rows = customers.flatMap<KycReviewQueueItem>((customer) => {
+      const required = requiredKycTypes(customer.type);
+      const requiredTypes = required.map((item) => item.type);
+      const latest = latestDocumentStatusByType(latestByCustomer.get(customer.id) ?? []);
+      const customerBucket = kycStaffBucket({
+        verificationStatus: verificationByCustomer.get(customer.id) ?? null,
+        requiredTypes,
+        latestStatusByType: latest,
+      });
+      summary[customerBucket] += 1;
+
+      const awaiting = (latestByCustomer.get(customer.id) ?? []).filter(
+        (document) =>
+          requiredTypes.includes(document.documentType) &&
+          (document.status === VerificationStatus.PENDING ||
+            document.status === VerificationStatus.UNDER_REVIEW),
+      );
+      if (customerBucket !== bucket) return [];
+      if (params.status && !awaiting.some((document) => document.status === params.status)) {
+        return [];
+      }
+      const searchable = toLatinDigits(
+        `${customer.fullName} ${customer.mobile} ${customer.customerNumber}`,
+      ).toLocaleLowerCase('fa-IR');
+      if (search && !searchable.includes(search)) return [];
+
+      const dated = latestByCustomer.get(customer.id) ?? [];
+      const latestSubmittedAt = dated.reduce(
+        (latestDate, document) =>
+          document.createdAt > latestDate ? document.createdAt : latestDate,
+        dated[0]?.createdAt ?? customer.createdAt,
+      );
+      return [
+        {
+          id: customer.id,
+          customerNumber: customer.customerNumber,
+          fullName: customer.fullName,
+          mobile: customer.mobile,
+          status: customer.status,
+          bucket: customerBucket,
+          pendingDocuments: awaiting.filter(
+            (document) => document.status === VerificationStatus.PENDING,
+          ).length,
+          viewedDocuments: awaiting.filter(
+            (document) => document.status === VerificationStatus.UNDER_REVIEW,
+          ).length,
+          latestSubmittedAt: latestSubmittedAt.toISOString(),
+        },
+      ];
+    });
+    rows.sort(
+      (a, b) => new Date(b.latestSubmittedAt).getTime() - new Date(a.latestSubmittedAt).getTime(),
+    );
+
+    const total = rows.length;
+    const items = rows.slice((page - 1) * limit, page * limit);
+    await this.audit.log({
+      actorId,
+      action: 'KYC_REVIEW_QUEUE_ACCESSED',
+      entityType: 'KYCReviewQueue',
+      entityId: 'queue',
+      after: { page, limit, total, bucket, status: params.status ?? null, summary },
+      ipAddress,
+    });
+
+    return {
+      items,
+      summary,
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
+    };
+  }
+
   // ----------------------------------------------------------------
   // Read one document file for inline review.
   // §7.3: every view is audited. The file stays in the private bucket.
@@ -235,6 +414,9 @@ export class KycService {
     documentId: string,
     actorId: string,
     ipAddress?: string,
+    markAsViewed = true,
+    original = false,
+    processed = false,
   ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
     const customer = await this.customerRepo.findById(customerId);
     if (!customer) {
@@ -246,18 +428,54 @@ export class KycService {
       throw new NotFoundException(`Document ${documentId} not found`);
     }
 
-    const buffer = await this.storage.getObject(doc.fileKey, this.storage.kycBucket);
+    if (processed) {
+      if (!doc.processedFileKey) {
+        throw new NotFoundException('تصویر بدون پس‌زمینه برای این مدرک ذخیره نشده است.');
+      }
+      const buffer = await this.storage.getObject(doc.processedFileKey, this.storage.kycBucket);
+      await this.audit.log({
+        actorId,
+        action: 'KYC_DOCUMENT_PROCESSED_VIEWED',
+        entityType: 'CustomerDocument',
+        entityId: doc.id,
+        after: { documentType: doc.documentType, customerId, processed: true },
+        ipAddress,
+      });
+      return {
+        buffer,
+        mimeType: 'image/png',
+        fileName: `processed-${doc.fileName.replace(/\.[^.]+$/, '')}.png`,
+      };
+    }
+
+    const useOriginal = Boolean(original && doc.originalFileKey);
+    const fileKey = useOriginal ? doc.originalFileKey! : doc.fileKey;
+    const buffer = await this.storage.getObject(fileKey, this.storage.kycBucket);
+    const shouldMarkViewed = markAsViewed && !useOriginal && doc.status === VerificationStatus.PENDING;
+    if (shouldMarkViewed) {
+      await this.documentRepo.updateStatus(doc.id, VerificationStatus.UNDER_REVIEW, actorId);
+    }
 
     await this.audit.log({
       actorId,
-      action: 'KYC_DOCUMENT_VIEWED',
+      action: useOriginal ? 'KYC_DOCUMENT_ORIGINAL_VIEWED' : 'KYC_DOCUMENT_VIEWED',
       entityType: 'CustomerDocument',
       entityId: doc.id,
-      after: { documentType: doc.documentType, customerId },
+      before: { status: doc.status },
+      after: {
+        documentType: doc.documentType,
+        customerId,
+        original: useOriginal,
+        status: shouldMarkViewed ? VerificationStatus.UNDER_REVIEW : doc.status,
+      },
       ipAddress,
     });
 
-    return { buffer, mimeType: doc.fileMimeType, fileName: doc.fileName };
+    return {
+      buffer,
+      mimeType: useOriginal ? mimeFromStoredKey(fileKey, doc.fileMimeType) : doc.fileMimeType,
+      fileName: useOriginal ? `original-${doc.fileName}` : doc.fileName,
+    };
   }
 
   // ----------------------------------------------------------------
@@ -271,7 +489,8 @@ export class KycService {
     actorId: string,
     ipAddress?: string,
   ): Promise<DocumentResponseDto> {
-    if (dto.decision === KycDecision.REJECT && !dto.reason) {
+    const reason = dto.reason?.trim();
+    if (dto.decision === KycDecision.REJECT && (!reason || reason.length < 10)) {
       throw new BusinessRuleException(
         'KYC_REJECTION_REASON_REQUIRED',
         'A reason must be provided when rejecting a KYC document',
@@ -288,6 +507,13 @@ export class KycService {
       throw new NotFoundException(`Document ${documentId} not found`);
     }
 
+    if (dto.decision === KycDecision.APPROVE && doc.status === VerificationStatus.APPROVED) {
+      throw new BusinessRuleException(
+        'KYC_DOCUMENT_ALREADY_APPROVED',
+        'This document has already been approved',
+      );
+    }
+
     const status =
       dto.decision === KycDecision.APPROVE
         ? VerificationStatus.APPROVED
@@ -297,7 +523,7 @@ export class KycService {
       doc.id,
       status,
       actorId,
-      dto.decision === KycDecision.REJECT ? dto.reason : undefined,
+      dto.decision === KycDecision.REJECT ? reason : undefined,
     );
 
     await this.audit.log({
@@ -311,9 +537,242 @@ export class KycService {
         status,
         documentType: doc.documentType,
         customerId,
-        reason: dto.reason ?? null,
+        reason: reason ?? null,
       },
-      reason: dto.reason,
+      reason,
+      ipAddress,
+    });
+
+    if (dto.decision === KycDecision.APPROVE) {
+      await this.verifyCustomerIfDocumentsComplete(customer, actorId, ipAddress);
+    }
+
+    return DocumentResponseDto.fromEntity(updated);
+  }
+
+  private allRequiredDocumentsApproved(
+    customerType: string | null | undefined,
+    documents: CustomerDocumentEntity[],
+  ): boolean {
+    const latest = latestDocumentStatusByType(documents);
+    const required = requiredKycTypes(customerType);
+    return (
+      required.length > 0 &&
+      required.every((requirement) => latest.get(requirement.type) === VerificationStatus.APPROVED)
+    );
+  }
+
+  /** When every required document is approved, persist the KYC case as verified. */
+  private async verifyCustomerIfDocumentsComplete(
+    customer: { id: string; type: string | null; status: CustomerStatus },
+    actorId: string,
+    ipAddress?: string,
+  ): Promise<KYCVerificationEntity | null> {
+    const documents = await this.documentRepo.findByCustomerId(customer.id);
+    if (!this.allRequiredDocumentsApproved(customer.type, documents)) return null;
+
+    let verification = await this.kycRepo.findLatestByCustomerId(customer.id);
+    if (verification?.status === VerificationStatus.APPROVED) {
+      if (!PRESERVED_REVIEW_CUSTOMER_STATUSES.has(customer.status)) {
+        await this.customersService.approve(customer.id, actorId, ipAddress);
+      }
+      return verification;
+    }
+
+    if (!verification || verification.status === VerificationStatus.REJECTED) {
+      verification = await this.kycRepo.create(customer.id);
+    }
+
+    const previousStatus = verification.status;
+    const updated = await this.kycRepo.updateStatus(
+      verification.id,
+      VerificationStatus.APPROVED,
+      actorId,
+    );
+
+    if (!PRESERVED_REVIEW_CUSTOMER_STATUSES.has(customer.status)) {
+      await this.customersService.approve(customer.id, actorId, ipAddress);
+    }
+
+    await this.audit.log({
+      actorId,
+      action: 'KYC_APPROVED',
+      entityType: 'KYCVerification',
+      entityId: verification.id,
+      before: { status: previousStatus },
+      after: { status: 'APPROVED', reviewerId: actorId, source: 'all_documents_approved' },
+      ipAddress,
+    });
+
+    const customerForNotif = await this.customerRepo.findById(customer.id).catch(() => null);
+    this.notificationService
+      .dispatch({
+        recipientId: customerForNotif?.userId ?? null,
+        recipientMobile: customerForNotif?.mobile ?? null,
+        type: NotificationType.KYC_APPROVED,
+        subject: 'احراز هویت تأیید شد',
+        body: 'اطلاعات هویتی شما با موفقیت تأیید شد. اکنون می‌توانید سفارش ثبت کنید.',
+        relatedEntityType: 'KYCVerification',
+        relatedEntityId: verification.id,
+      })
+      .catch((err: unknown) =>
+        this.logger.error(`[KycService] KYC_APPROVED notification failed: ${err}`),
+      );
+
+    return updated;
+  }
+
+  // ----------------------------------------------------------------
+  // Staff crop/rotate of the current KYC image. The first uploaded object
+  // is kept as originalFileKey for audit; later edits replace fileKey only.
+  // ----------------------------------------------------------------
+  async replaceStaffDocumentImage(
+    customerId: string,
+    documentId: string,
+    file: Express.Multer.File,
+    actorId: string,
+    ipAddress?: string,
+  ): Promise<DocumentResponseDto> {
+    if (!file || file.size <= 0) {
+      throw new BadRequestException('فایل انتخاب نشده است.');
+    }
+    if (file.size > MAX_KYC_FILE_SIZE_BYTES) {
+      throw new BadRequestException('حجم فایل بیش از حد مجاز است.');
+    }
+    if (!EDITABLE_KYC_IMAGE_TYPES.has(file.mimetype)) {
+      throw new BadRequestException('فقط تصویر JPEG، PNG یا WebP قابل ویرایش است.');
+    }
+
+    const customer = await this.customerRepo.findById(customerId);
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
+    }
+    const doc = await this.documentRepo.findById(documentId);
+    if (!doc || doc.customerId !== customerId) {
+      throw new NotFoundException(`Document ${documentId} not found`);
+    }
+    if (!doc.fileMimeType.startsWith('image/')) {
+      throw new BadRequestException('این مدرک تصویر نیست و قابل ویرایش نیست.');
+    }
+
+    const stored = await this.storage.upload({
+      buffer: file.buffer,
+      originalName: file.originalname,
+      mimeType: file.mimetype,
+      sizeBytes: file.size,
+      prefix: `kyc-documents/${customerId}`,
+      bucket: this.storage.kycBucket,
+    });
+
+    const originalFileKey = doc.originalFileKey ?? doc.fileKey;
+    const previousKey = doc.fileKey;
+    const previousProcessed = doc.processedFileKey;
+    const updated = await this.documentRepo.replaceFile(doc.id, {
+      fileKey: stored.key,
+      originalFileKey,
+      fileName: file.originalname,
+      fileMimeType: file.mimetype,
+      fileSizeBytes: file.size,
+      processedFileKey: null,
+    });
+
+    if (previousKey !== originalFileKey && previousKey !== stored.key) {
+      try {
+        await this.storage.delete(previousKey, this.storage.kycBucket);
+      } catch (err) {
+        this.logger.warn(`Could not delete superseded KYC edit ${previousKey}`, err);
+      }
+    }
+    if (previousProcessed) {
+      try {
+        await this.storage.delete(previousProcessed, this.storage.kycBucket);
+      } catch (err) {
+        this.logger.warn(`Could not delete stale processed KYC photo ${previousProcessed}`, err);
+      }
+    }
+
+    await this.audit.log({
+      actorId,
+      action: 'KYC_DOCUMENT_IMAGE_EDITED',
+      entityType: 'CustomerDocument',
+      entityId: doc.id,
+      before: { fileKey: previousKey, originalFileKey: doc.originalFileKey },
+      after: {
+        fileKey: stored.key,
+        originalFileKey,
+        customerId,
+        documentType: doc.documentType,
+      },
+      ipAddress,
+    });
+
+    return DocumentResponseDto.fromEntity(updated);
+  }
+
+  async saveProcessedPersonalPhoto(
+    customerId: string,
+    documentId: string,
+    file: Express.Multer.File,
+    actorId: string,
+    ipAddress?: string,
+  ): Promise<DocumentResponseDto> {
+    if (!file || file.size <= 0) {
+      throw new BadRequestException('فایل انتخاب نشده است.');
+    }
+    if (file.size > MAX_KYC_FILE_SIZE_BYTES) {
+      throw new BadRequestException('حجم فایل بیش از حد مجاز است.');
+    }
+    if (file.mimetype !== 'image/png') {
+      throw new BadRequestException('عکس بدون پس‌زمینه باید PNG باشد.');
+    }
+
+    const customer = await this.customerRepo.findById(customerId);
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
+    }
+    const doc = await this.documentRepo.findById(documentId);
+    if (!doc || doc.customerId !== customerId) {
+      throw new NotFoundException(`Document ${documentId} not found`);
+    }
+    if (doc.documentType !== PERSONAL_PHOTO_TYPE) {
+      throw new BadRequestException('حذف پس‌زمینه فقط برای عکس پرسنلی مجاز است.');
+    }
+    if (!doc.fileMimeType.startsWith('image/')) {
+      throw new BadRequestException('این مدرک تصویر نیست.');
+    }
+
+    const stored = await this.storage.upload({
+      buffer: file.buffer,
+      originalName: file.originalname || 'personal-photo-cutout.png',
+      mimeType: 'image/png',
+      sizeBytes: file.size,
+      prefix: `kyc-documents/${customerId}/processed`,
+      bucket: this.storage.kycBucket,
+    });
+
+    const previousProcessed = doc.processedFileKey;
+    const updated = await this.documentRepo.updateProcessedFile(doc.id, stored.key);
+    if (previousProcessed && previousProcessed !== stored.key) {
+      try {
+        await this.storage.delete(previousProcessed, this.storage.kycBucket);
+      } catch (err) {
+        this.logger.warn(`Could not delete previous processed KYC photo ${previousProcessed}`, err);
+      }
+    }
+
+    await this.audit.log({
+      actorId,
+      action: 'KYC_PERSONAL_PHOTO_PROCESSED',
+      entityType: 'CustomerDocument',
+      entityId: doc.id,
+      before: { processedFileKey: previousProcessed, fileKey: doc.fileKey },
+      after: {
+        processedFileKey: stored.key,
+        fileKey: doc.fileKey,
+        originalFileKey: doc.originalFileKey ?? doc.fileKey,
+        customerId,
+        documentType: doc.documentType,
+      },
       ipAddress,
     });
 
@@ -346,11 +805,27 @@ export class KycService {
       );
     }
 
+    const documents = await this.documentRepo.findByCustomerId(customerId);
+    const latestStatuses = latestDocumentStatusByType(documents);
+    const incomplete = requiredKycTypes(customer.type).filter((requirement) => {
+      const status = latestStatuses.get(requirement.type);
+      return !status || status === VerificationStatus.REJECTED;
+    });
+    if (incomplete.length > 0) {
+      throw new BusinessRuleException(
+        'KYC_DOCUMENTS_INCOMPLETE',
+        'همه مدارک الزامی باید پیش از شروع بررسی ارسال شوند.',
+      );
+    }
+
     // Create KYCVerification record
     const verification = await this.kycRepo.create(customerId);
 
-    // Transition customer to UNDER_REVIEW via CustomersService
-    await this.customersService.markUnderReview(customerId, actorId);
+    // Legacy customers may already have an active account. Their account
+    // status is preserved while a new KYC cycle reviews newly-required docs.
+    if (!PRESERVED_REVIEW_CUSTOMER_STATUSES.has(customer.status)) {
+      await this.customersService.markUnderReview(customerId, actorId);
+    }
 
     // Update verification to UNDER_REVIEW
     const updated = await this.kycRepo.updateStatus(
@@ -403,43 +878,16 @@ export class KycService {
     }
 
     if (dto.decision === KycDecision.APPROVE) {
-      const updated = await this.kycRepo.updateStatus(
-        verification.id,
-        VerificationStatus.APPROVED,
-        actorId,
-      );
-
-      // Approve customer via CustomersService (also creates CustomerAccount)
-      await this.customersService.approve(customerId, actorId, ipAddress);
-
-      await this.audit.log({
-        actorId,
-        action: 'KYC_APPROVED',
-        entityType: 'KYCVerification',
-        entityId: verification.id,
-        before: { status: 'UNDER_REVIEW' },
-        after: { status: 'APPROVED', reviewerId: actorId },
-        ipAddress,
-      });
-
-      // Notify customer — docs/16: "KYC approved"
-      // Non-blocking: notification failure must not affect KYC decision
-      const customer = await this.customerRepo.findById(customerId).catch(() => null);
-      this.notificationService
-        .dispatch({
-          recipientId: customer?.userId ?? null,
-          recipientMobile: customer?.mobile ?? null,
-          type: NotificationType.KYC_APPROVED,
-          subject: 'احراز هویت تأیید شد',
-          body: 'اطلاعات هویتی شما با موفقیت تأیید شد. اکنون می‌توانید سفارش ثبت کنید.',
-          relatedEntityType: 'KYCVerification',
-          relatedEntityId: verification.id,
-        })
-        .catch((err: unknown) =>
-          this.logger.error(`[KycService] KYC_APPROVED notification failed: ${err}`),
+      const documents = await this.documentRepo.findByCustomerId(customerId);
+      if (!this.allRequiredDocumentsApproved(customer.type, documents)) {
+        throw new BusinessRuleException(
+          'KYC_DOCUMENTS_NOT_APPROVED',
+          'تأیید نهایی فقط پس از تأیید همه مدارک الزامی ممکن است.',
         );
+      }
 
-      return KycVerificationResponseDto.fromEntity(updated);
+      const updated = await this.verifyCustomerIfDocumentsComplete(customer, actorId, ipAddress);
+      return KycVerificationResponseDto.fromEntity(updated ?? verification);
     } else {
       const updated = await this.kycRepo.updateStatus(
         verification.id,
@@ -448,8 +896,11 @@ export class KycService {
         dto.reason,
       );
 
-      // Reject customer via CustomersService
-      await this.customersService.reject(customerId, dto.reason!, actorId, ipAddress);
+      // Preserve an existing account state during legacy re-verification.
+      // The KYC verification itself remains rejected and visible to the user.
+      if (!PRESERVED_REVIEW_CUSTOMER_STATUSES.has(customer.status)) {
+        await this.customersService.reject(customerId, dto.reason!, actorId, ipAddress);
+      }
 
       await this.audit.log({
         actorId,
@@ -512,6 +963,7 @@ export class KycService {
         fileName: document.fileName,
         fileMimeType: document.fileMimeType,
         fileSizeBytes: document.fileSizeBytes,
+        hasProcessedFile: Boolean(document.processedFileKey),
         status: document.status,
         rejectionReason: document.rejectionReason,
         createdAt: document.createdAt,
@@ -563,6 +1015,7 @@ export class KycService {
         fileName: document.fileName,
         fileMimeType: document.fileMimeType,
         fileSizeBytes: document.fileSizeBytes,
+        hasProcessedFile: Boolean(document.processedFileKey),
         status: document.status,
         rejectionReason: document.rejectionReason,
         createdAt: document.createdAt,
@@ -651,9 +1104,10 @@ export class KycService {
     userId: string,
     documentId: string,
     ipAddress?: string,
+    processed = false,
   ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
     const customer = await this.findCustomerByUserId(userId);
-    return this.readDocumentFile(customer.id, documentId, userId, ipAddress);
+    return this.readDocumentFile(customer.id, documentId, userId, ipAddress, false, false, processed);
   }
 
   // ----------------------------------------------------------------

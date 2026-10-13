@@ -35,6 +35,17 @@ describe('customer import column matching', () => {
     });
   });
 
+  it('defaults the portal password to national ID when none is given', () => {
+    const headers = ['نام', 'نام خانوادگی', 'کد ملی', 'موبایل'];
+    const mapping = suggestImportMapping(headers);
+    const rows = buildImportRows(
+      [['سارا', 'موسوی', '0012345678', '09121111111']],
+      mapping,
+      '',
+    );
+    expect(rows[0]?.password).toBe('0012345678');
+  });
+
   it('keeps the template columns working', () => {
     const rows = parseCustomerCsv(
       'firstName,lastName,nationalId,mobile,password\r\nعلی,رضایی,0012345678,09120001111,ChangeMe123!\r\n',

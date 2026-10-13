@@ -5,7 +5,7 @@ import useSWR from 'swr';
 import { ChevronLeft, Wallet } from 'lucide-react';
 import { ApiClientError, customerApi } from '@/lib/api';
 import { readAvailableCredit } from '@/lib/credit-view';
-import { formatMoney } from '@/lib/utils';
+import { cn, formatMoney } from '@/lib/utils';
 
 /** Same SWR key as the dashboard and credit page, so the header reuses that response. */
 const ACCOUNT_KEY = 'customer/me/account';
@@ -15,7 +15,13 @@ const ACCOUNT_KEY = 'customer/me/account';
  * The amount is the server `availableRial` field, shown in Toman. Gold, reserved,
  * and consumed buckets are not shown and are not recomputed here.
  */
-export function RialBalanceCard() {
+export function RialBalanceCard({
+  variant = 'header',
+  className,
+}: {
+  variant?: 'header' | 'drawer';
+  className?: string;
+}) {
   const { data, error, isLoading } = useSWR(ACCOUNT_KEY, () => customerApi.getMyAccount());
   const loading = isLoading && !data;
   const unavailable = error instanceof ApiClientError && error.isNotFound;
@@ -28,11 +34,45 @@ export function RialBalanceCard() {
   if (failed) value = 'خطا در دریافت';
   else if (amount) value = amount;
 
+  if (variant === 'drawer') {
+    return (
+      <Link
+        href="/portal/credit"
+        aria-busy={loading || undefined}
+        className={cn(
+          'block rounded-2xl bg-emerald-50 p-3 text-emerald-800 shadow-sm ring-1 ring-emerald-100 transition-colors hover:bg-emerald-100',
+          className,
+        )}
+      >
+        <span className="flex items-center gap-2">
+          <Wallet className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+          <span className="min-w-0 flex-1">
+            <span className="block text-[11px] font-medium text-emerald-700">توان خرید شما</span>
+            {loading ? (
+              <span className="mt-1 block h-4 w-28 animate-pulse rounded bg-emerald-200/80" />
+            ) : (
+              <span className="mt-0.5 block truncate text-sm font-bold text-emerald-900">
+                {value}
+              </span>
+            )}
+          </span>
+        </span>
+        <span className="mt-2 flex items-center gap-1 text-[11px] font-medium text-emerald-700">
+          مشاهده جزئیات دارایی و موجودی
+          <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
+        </span>
+      </Link>
+    );
+  }
+
   return (
     <Link
       href="/portal/credit"
       aria-busy={loading || undefined}
-      className="inline-flex h-11 max-w-[9.5rem] shrink-0 items-center gap-1.5 self-center rounded-xl bg-emerald-50 px-2 text-emerald-800 shadow-sm ring-1 ring-emerald-100 transition-colors hover:bg-emerald-100 sm:h-12 sm:max-w-[16rem] sm:gap-2 sm:px-3"
+      className={cn(
+        'inline-flex h-11 max-w-[min(11rem,42vw)] shrink-0 items-center gap-1.5 self-center rounded-xl bg-emerald-50 px-2 text-emerald-800 shadow-sm ring-1 ring-emerald-100 transition-colors hover:bg-emerald-100 sm:h-12 sm:max-w-[16rem] sm:gap-2 sm:px-3',
+        className,
+      )}
     >
       <Wallet className="h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
       <span className="min-w-0 flex-1 text-start">

@@ -69,45 +69,32 @@ export function GenderPicker({
         </p>
       )}
 
-      {/* Two circles: male + female */}
       <div
         role="radiogroup"
         aria-label="جنسیت"
-        className="flex items-start justify-center gap-10"
+        className="flex items-start justify-start gap-1"
       >
-        {/* ── مرد ── */}
-        <CircleOption
+        <GenderOption
           value="MALE"
           selected={selected}
           disabled={disabled}
           onToggle={toggle}
           label="مرد"
-          ringColor="ring-blue-400"
-          bgSelected="bg-blue-500"
-          bgHover="hover:bg-blue-50"
-          borderColor="border-blue-400"
-          checkColor="bg-blue-600"
-          iconColor={selected === 'MALE' ? 'text-white' : 'text-blue-300'}
+          iconColor={selected === 'MALE' ? 'text-blue-600' : 'text-blue-300'}
         >
           <MaleIcon className="h-10 w-10" />
-        </CircleOption>
+        </GenderOption>
 
-        {/* ── زن ── */}
-        <CircleOption
+        <GenderOption
           value="FEMALE"
           selected={selected}
           disabled={disabled}
           onToggle={toggle}
           label="زن"
-          ringColor="ring-pink-400"
-          bgSelected="bg-pink-500"
-          bgHover="hover:bg-pink-50"
-          borderColor="border-pink-400"
-          checkColor="bg-pink-600"
-          iconColor={selected === 'FEMALE' ? 'text-white' : 'text-pink-300'}
+          iconColor={selected === 'FEMALE' ? 'text-pink-600' : 'text-pink-300'}
         >
           <FemaleIcon className="h-10 w-10" />
-        </CircleOption>
+        </GenderOption>
       </div>
 
       {/* Error / hint */}
@@ -122,17 +109,12 @@ export function GenderPicker({
 
 // ─── CircleOption sub-component ───────────────────────────────────────────────
 
-function CircleOption({
+function GenderOption({
   value,
   selected,
   disabled,
   onToggle,
   label,
-  ringColor,
-  bgSelected,
-  bgHover,
-  borderColor,
-  checkColor,
   iconColor,
   children,
 }: {
@@ -141,11 +123,6 @@ function CircleOption({
   disabled?: boolean;
   onToggle: (v: GenderValue) => void;
   label: string;
-  ringColor: string;
-  bgSelected: string;
-  bgHover: string;
-  borderColor: string;
-  checkColor: string;
   iconColor: string;
   children: React.ReactNode;
 }) {
@@ -160,56 +137,14 @@ function CircleOption({
       disabled={disabled}
       onClick={() => onToggle(value)}
       className={cn(
-        'group flex flex-col items-center gap-2',
-        'focus-visible:outline-none',
+        'rounded-md p-0.5',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500',
         disabled && 'cursor-not-allowed opacity-50',
       )}
     >
-      {/* Circle */}
-      <div
-        className={cn(
-          'relative flex h-20 w-20 items-center justify-center rounded-full border-2 transition-all duration-200',
-          isSelected
-            ? [bgSelected, borderColor, 'shadow-md']
-            : [
-                'border-border bg-muted/20',
-                bgHover,
-                `group-hover:${borderColor}`,
-                `group-focus-visible:ring-2 group-focus-visible:${ringColor}`,
-              ],
-        )}
-      >
-        {/* Silhouette icon — color changes based on selection */}
-        <div className={cn('transition-colors duration-200', iconColor)}>
-          {children}
-        </div>
-
-        {/* Checkmark badge at bottom-end */}
-        {isSelected && (
-          <span
-            aria-hidden="true"
-            className={cn(
-              'absolute -bottom-1 -end-1 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white',
-              checkColor,
-            )}
-          >
-            <svg className="h-3 w-3 text-white" viewBox="0 0 12 12" fill="none"
-              stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m2 6 3 3 5-5" />
-            </svg>
-          </span>
-        )}
+      <div className={cn('transition-colors duration-200', iconColor)}>
+        {children}
       </div>
-
-      {/* Label */}
-      <span className={cn(
-        'text-sm font-semibold transition-colors',
-        isSelected
-          ? value === 'MALE' ? 'text-blue-700' : 'text-pink-700'
-          : 'text-muted-foreground group-hover:text-foreground',
-      )}>
-        {label}
-      </span>
     </button>
   );
 }

@@ -9,8 +9,6 @@ import { ApiProperty } from '@nestjs/swagger';
  *   national_id_front     — required for all
  *   national_id_back      — required for all
  *   birth_certificate     — required for all
- *   proof_of_address      — required for all
- *   selfie_with_id        — required for all
  *   personal_photo        — required for all
  *   business_registration — required for PARTNER customers only
  */
@@ -18,8 +16,6 @@ export const KNOWN_DOCUMENT_TYPES = [
   'national_id_front',
   'national_id_back',
   'birth_certificate',
-  'proof_of_address',
-  'selfie_with_id',
   'personal_photo',
   'business_registration',
 ] as const;

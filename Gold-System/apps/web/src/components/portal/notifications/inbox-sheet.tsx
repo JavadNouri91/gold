@@ -17,29 +17,29 @@ export function InboxSheet({
   footer?: React.ReactNode;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
     };
     document.addEventListener('keydown', onKey);
-    panelRef.current?.focus();
     return () => document.removeEventListener('keydown', onKey);
-  }, [open, onClose]);
+  }, [open]);
 
   if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center lg:p-6">
-      <button type="button" className="absolute inset-0 bg-black/40" aria-label="بستن" onClick={onClose} />
+      <button type="button" className="absolute inset-0 z-0 bg-black/40" aria-label="بستن" onClick={onClose} />
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-labelledby="inbox-sheet-title"
-        tabIndex={-1}
-        className="relative flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-xl outline-none lg:max-h-[80vh] lg:max-w-lg lg:rounded-2xl"
+        className="relative z-10 flex max-h-[88vh] w-full flex-col rounded-t-2xl bg-white shadow-xl outline-none lg:max-h-[80vh] lg:max-w-lg lg:rounded-2xl"
       >
         <div className="flex items-center justify-between gap-3 border-b border-[#E5E7EB] px-4 py-3">
           <h2 id="inbox-sheet-title" className="text-base font-bold text-[#202124]">

@@ -15,6 +15,15 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
+jest.mock('@/lib/auth', () => ({
+  useAuth: () => ({
+    user: { id: 'u-1', mobile: '09120000000', roles: [], permissions: [] },
+    isLoading: false,
+    isAuthenticated: true,
+    logout: jest.fn(),
+  }),
+}));
+
 jest.mock('@/lib/api', () => {
   const actual = jest.requireActual<typeof import('@/lib/api')>('@/lib/api');
   return {
@@ -133,17 +142,20 @@ describe('RialBalanceCard', () => {
 
 describe('DashboardHeader', () => {
   it('keeps the Rial balance in the header beside the signed-in customer', async () => {
+    const onMenu = jest.fn();
     render(
       <ThemeProvider>
         <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
-          <DashboardHeader onMenu={() => undefined} />
+          <DashboardHeader onMenu={onMenu} />
         </SWRConfig>
       </ThemeProvider>,
     );
 
-    expect(await screen.findByText('سلام علی رضایی 👋')).toBeInTheDocument();
-    const link = screen.getByRole('link', { name: /توان خرید/ });
-    expect(link).toHaveTextContent('۱۷۵,۰۰۰,۰۰۰ تومان');
-    expect(link).toHaveAttribute('href', '/portal/credit');
+    expect((await screen.findAllByText('سلام علی رضایی 👋')).length).toBeGreaterThanOrEqual(1);
+    const links = screen.getAllByRole('link', { name: /توان خرید/ });
+    expect(links.length).toBeGreaterThanOrEqual(1);
+    expect(links[0]).toHaveTextContent('۱۷۵,۰۰۰,۰۰۰ تومان');
+    expect(links[0]).toHaveAttribute('href', '/portal/credit');
+    expect(screen.getByRole('button', { name: 'منو' })).toBeInTheDocument();
   });
 });

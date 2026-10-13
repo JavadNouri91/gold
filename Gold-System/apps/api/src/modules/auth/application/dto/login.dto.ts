@@ -10,6 +10,7 @@ export class InitiateLoginDto {
   mobile: string;
 
   @ApiProperty({ minLength: 8 })
+  @LatinDigits()
   @IsNotEmpty()
   @MinLength(8)
   password: string;

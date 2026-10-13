@@ -4,7 +4,9 @@ import { useEffect, useRef, useState } from 'react';
 import { Camera } from 'lucide-react';
 import { customerApi, fetchBlob, type CustomerProfile } from '@/lib/api';
 import { UserStatusBadge } from '@/components/portal/user-status-badge';
+import { Modal } from '@/components/ui/modal';
 import { formatDate } from '@/lib/utils';
+import { AvatarImageEditor } from './avatar-image-editor';
 import { friendlyApiMessage } from './friendly-message';
 
 const MAX_AVATAR_BYTES = 2 * 1024 * 1024;
@@ -20,6 +22,7 @@ export function ProfileHero({
   const name = `${customer.firstName} ${customer.lastName}`.trim();
   const inputRef = useRef<HTMLInputElement>(null);
   const [src, setSrc] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,7 +48,7 @@ export function ProfileHero({
     };
   }, [customer.hasAvatar, customer.updatedAt]);
 
-  const onFile = async (file: File) => {
+  const onFile = (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
       setError('فقط تصویر JPG، PNG یا WebP پذیرفته می‌شود.');
       return;
@@ -55,78 +58,104 @@ export function ProfileHero({
       return;
     }
     setError(null);
+    setSelectedFile(file);
+  };
+
+  const uploadAvatar = async (file: File) => {
     setUploading(true);
     try {
       await customerApi.uploadAvatar(file);
       await onUpdated();
+      setSelectedFile(null);
     } catch (err) {
-      setError(friendlyApiMessage(err, 'ذخیره عکس انجام نشد. لطفاً دوباره تلاش کنید.'));
+      const message = friendlyApiMessage(err, 'ذخیره عکس انجام نشد. لطفاً دوباره تلاش کنید.');
+      setError(message);
+      throw new Error(message);
     } finally {
       setUploading(false);
     }
   };
 
   return (
-    <section className="relative overflow-hidden rounded-2xl border border-gold-100 bg-[#fbf7ef] shadow-sm">
-      <div
-        className="pointer-events-none absolute inset-y-0 left-0 hidden w-56 items-center justify-center sm:flex"
-        aria-hidden
-      >
-        <GoldMark />
-      </div>
-      <div className="relative flex items-center gap-4 p-5 md:p-6">
-        <div className="relative shrink-0">
-          {src ? (
-            <img
-              src={src}
-              alt=""
-              className="h-16 w-16 rounded-full border border-gold-200 object-cover shadow-sm md:h-20 md:w-20"
+    <>
+      <section className="relative overflow-hidden rounded-2xl border border-gold-100 bg-[#fbf7ef] shadow-sm">
+        <div
+          className="pointer-events-none absolute inset-y-0 left-0 hidden w-56 items-center justify-center sm:flex"
+          aria-hidden
+        >
+          <GoldMark />
+        </div>
+        <div className="relative flex items-center gap-4 p-5 md:p-6">
+          <div className="relative shrink-0">
+            {src ? (
+              <img
+                src={src}
+                alt=""
+                className="h-16 w-16 rounded-full border border-gold-200 object-cover shadow-sm md:h-20 md:w-20"
+              />
+            ) : (
+              <AvatarInitials name={name} />
+            )}
+            <button
+              type="button"
+              className="absolute -bottom-1 -left-1 flex h-8 w-8 items-center justify-center rounded-full border border-gold-200 bg-white text-gold-800 shadow-sm hover:bg-gold-50 disabled:opacity-60"
+              aria-label="تغییر عکس پروفایل"
+              disabled={uploading}
+              onClick={() => inputRef.current?.click()}
+            >
+              <Camera className="h-4 w-4" aria-hidden />
+            </button>
+            <input
+              ref={inputRef}
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              className="sr-only"
+              aria-label="انتخاب عکس پروفایل"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                event.target.value = '';
+                if (file) onFile(file);
+              }}
             />
-          ) : (
-            <AvatarInitials name={name} />
-          )}
-          <button
-            type="button"
-            className="absolute -bottom-1 -left-1 flex h-8 w-8 items-center justify-center rounded-full border border-gold-200 bg-white text-gold-800 shadow-sm hover:bg-gold-50 disabled:opacity-60"
-            aria-label="تغییر عکس پروفایل"
-            disabled={uploading}
-            onClick={() => inputRef.current?.click()}
-          >
-            <Camera className="h-4 w-4" aria-hidden />
-          </button>
-          <input
-            ref={inputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp"
-            className="sr-only"
-            aria-label="انتخاب عکس پروفایل"
-            onChange={(event) => {
-              const file = event.target.files?.[0];
-              event.target.value = '';
-              if (file) void onFile(file);
-            }}
-          />
-        </div>
-        <div className="min-w-0">
-          <h2 className="truncate text-xl font-bold text-slate-900 md:text-2xl">{name}</h2>
-          <p className="mt-2 text-sm text-slate-600">
-            شماره مشتری:{' '}
-            <span dir="ltr" className="font-medium text-slate-800">
-              {customer.customerNumber}
-            </span>
-          </p>
-          <p className="mt-1 text-sm text-slate-600">
-            عضویت از:{' '}
-            <span className="font-medium text-slate-800">{formatDate(customer.createdAt)}</span>
-          </p>
-          <div className="mt-3">
-            <UserStatusBadge type={customer.type} status={customer.status} />
           </div>
-          {uploading ? <p className="mt-2 text-xs text-muted-foreground">در حال ذخیره عکس…</p> : null}
-          {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+          <div className="min-w-0">
+            <h2 className="truncate text-xl font-bold text-slate-900 md:text-2xl">{name}</h2>
+            <p className="mt-2 text-sm text-slate-600">
+              شماره مشتری:{' '}
+              <span dir="ltr" className="font-medium text-slate-800">
+                {customer.customerNumber}
+              </span>
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              عضویت از:{' '}
+              <span className="font-medium text-slate-800">{formatDate(customer.createdAt)}</span>
+            </p>
+            <div className="mt-3">
+              <UserStatusBadge type={customer.type} status={customer.status} />
+            </div>
+            {uploading ? <p className="mt-2 text-xs text-muted-foreground">در حال ذخیره عکس…</p> : null}
+            {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+          </div>
         </div>
-      </div>
-    </section>
+      </section>
+
+      <Modal
+        open={Boolean(selectedFile)}
+        onClose={() => {
+          if (!uploading) setSelectedFile(null);
+        }}
+        title="تنظیم عکس پروفایل"
+        className="max-h-[calc(100vh-2rem)] max-w-md overflow-y-auto p-4 sm:p-6"
+      >
+        {selectedFile ? (
+          <AvatarImageEditor
+            file={selectedFile}
+            onCancel={() => setSelectedFile(null)}
+            onApply={uploadAvatar}
+          />
+        ) : null}
+      </Modal>
+    </>
   );
 }
 

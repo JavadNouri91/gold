@@ -13,6 +13,7 @@ import { CustomerDocumentEntity } from './domain/entities/customer-document.enti
 import { CustomerEntity } from '../customers/domain/entities/customer.entity';
 import { VerificationStatus, CustomerStatus } from '@gold/shared-types';
 import { KycDecision } from './application/dto/kyc-decision.dto';
+import { requiredKycTypes } from './domain/kyc-workflow';
 
 // ─── Helpers ───────────────────────────────────────────────────
 function makeVerification(
@@ -72,10 +73,23 @@ function makeDocument(
   });
 }
 
+function makeRequiredDocuments(
+  status: VerificationStatus = VerificationStatus.PENDING,
+): CustomerDocumentEntity[] {
+  return requiredKycTypes(null).map((requirement, index) =>
+    makeDocument({
+      id: `doc-${index + 1}`,
+      documentType: requirement.type,
+      status,
+    }),
+  );
+}
+
 // ─── Mocks ─────────────────────────────────────────────────────
 const mockKycRepo = {
   findById: jest.fn(),
   findLatestByCustomerId: jest.fn(),
+  findLatestPerCustomer: jest.fn(),
   findAllByCustomerId: jest.fn(),
   create: jest.fn(),
   updateStatus: jest.fn(),
@@ -83,13 +97,18 @@ const mockKycRepo = {
 
 const mockDocRepo = {
   findByCustomerId: jest.fn(),
+  findLatestPerCustomerAndType: jest.fn(),
   findById: jest.fn(),
   create: jest.fn(),
   updateStatus: jest.fn(),
+  replaceFile: jest.fn(),
+  updateProcessedFile: jest.fn(),
 };
 
 const mockCustomerRepo = {
   findById: jest.fn(),
+  findByIds: jest.fn(),
+  findAll: jest.fn(),
   findByUserId: jest.fn(),
 };
 
@@ -103,6 +122,7 @@ const mockStorage = {
   upload: jest.fn(),
   getSignedUrl: jest.fn(),
   getObject: jest.fn(),
+  delete: jest.fn(),
   kycBucket: 'gold-kyc-documents',
 };
 
@@ -237,6 +257,7 @@ describe('KycService', () => {
     it('creates KYC verification and moves customer to UNDER_REVIEW', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
       mockKycRepo.findLatestByCustomerId.mockResolvedValue(null); // no existing
+      mockDocRepo.findByCustomerId.mockResolvedValue(makeRequiredDocuments());
       mockKycRepo.create.mockResolvedValue(makeVerification());
       mockCustomersService.markUnderReview.mockResolvedValue(
         makeCustomer(CustomerStatus.UNDER_REVIEW),
@@ -248,6 +269,34 @@ describe('KycService', () => {
       const result = await service.startReview('cust-1', 'reviewer-1');
 
       expect(mockCustomersService.markUnderReview).toHaveBeenCalledWith('cust-1', 'reviewer-1');
+      expect(result.status).toBe(VerificationStatus.UNDER_REVIEW);
+    });
+
+    it('does not start review while a required document is missing', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(null);
+      mockDocRepo.findByCustomerId.mockResolvedValue([makeDocument()]);
+
+      await expect(service.startReview('cust-1', 'reviewer-1')).rejects.toMatchObject({
+        response: { code: 'KYC_DOCUMENTS_INCOMPLETE' },
+      });
+      expect(mockKycRepo.create).not.toHaveBeenCalled();
+    });
+
+    it('starts re-verification without downgrading an existing active account', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.ACTIVE));
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.APPROVED }),
+      );
+      mockDocRepo.findByCustomerId.mockResolvedValue(makeRequiredDocuments());
+      mockKycRepo.create.mockResolvedValue(makeVerification());
+      mockKycRepo.updateStatus.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.UNDER_REVIEW }),
+      );
+
+      const result = await service.startReview('cust-1', 'reviewer-1');
+
+      expect(mockCustomersService.markUnderReview).not.toHaveBeenCalled();
       expect(result.status).toBe(VerificationStatus.UNDER_REVIEW);
     });
   });
@@ -282,6 +331,9 @@ describe('KycService', () => {
       mockKycRepo.findLatestByCustomerId.mockResolvedValue(
         makeVerification({ status: VerificationStatus.UNDER_REVIEW }),
       );
+      mockDocRepo.findByCustomerId.mockResolvedValue(
+        makeRequiredDocuments(VerificationStatus.APPROVED),
+      );
       mockKycRepo.updateStatus.mockResolvedValue(
         makeVerification({ status: VerificationStatus.APPROVED, reviewerId: 'reviewer-1' }),
       );
@@ -297,6 +349,44 @@ describe('KycService', () => {
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'KYC_APPROVED' }),
       );
+      expect(result.status).toBe(VerificationStatus.APPROVED);
+    });
+
+    it('does not approve the case while a required document is pending', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.UNDER_REVIEW));
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.UNDER_REVIEW }),
+      );
+      mockDocRepo.findByCustomerId.mockResolvedValue(makeRequiredDocuments());
+
+      await expect(
+        service.makeDecision('cust-1', { decision: KycDecision.APPROVE }, 'reviewer-1'),
+      ).rejects.toMatchObject({
+        response: { code: 'KYC_DOCUMENTS_NOT_APPROVED' },
+      });
+      expect(mockKycRepo.updateStatus).not.toHaveBeenCalled();
+      expect(mockCustomersService.approve).not.toHaveBeenCalled();
+    });
+
+    it('approves re-verification without changing an existing active account', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.ACTIVE));
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.UNDER_REVIEW }),
+      );
+      mockDocRepo.findByCustomerId.mockResolvedValue(
+        makeRequiredDocuments(VerificationStatus.APPROVED),
+      );
+      mockKycRepo.updateStatus.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.APPROVED }),
+      );
+
+      const result = await service.makeDecision(
+        'cust-1',
+        { decision: KycDecision.APPROVE },
+        'reviewer-1',
+      );
+
+      expect(mockCustomersService.approve).not.toHaveBeenCalled();
       expect(result.status).toBe(VerificationStatus.APPROVED);
     });
 
@@ -356,6 +446,48 @@ describe('KycService', () => {
     });
   });
 
+  describe('getReviewQueue', () => {
+    it('includes an active customer whose latest required documents await decisions', async () => {
+      mockDocRepo.findLatestPerCustomerAndType.mockResolvedValue([
+        makeDocument({
+          id: 'pending-front',
+          documentType: 'national_id_front',
+          status: VerificationStatus.PENDING,
+          createdAt: new Date('2026-10-13T14:57:42.000Z'),
+        }),
+        makeDocument({
+          id: 'viewed-photo',
+          documentType: 'personal_photo',
+          status: VerificationStatus.UNDER_REVIEW,
+          createdAt: new Date('2026-10-13T15:02:20.000Z'),
+        }),
+        makeDocument({
+          id: 'deprecated-address',
+          documentType: 'proof_of_address',
+          status: VerificationStatus.PENDING,
+        }),
+      ]);
+      mockCustomerRepo.findAll.mockResolvedValue([makeCustomer(CustomerStatus.ACTIVE)]);
+      mockKycRepo.findLatestPerCustomer.mockResolvedValue([]);
+
+      const result = await service.getReviewQueue({ search: '۰۹۱۲۳۴۵۶۷۸۹' }, 'reviewer-1');
+
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          id: 'cust-1',
+          bucket: 'awaiting',
+          pendingDocuments: 1,
+          viewedDocuments: 1,
+        }),
+      ]);
+      expect(result.summary).toEqual({ verified: 0, unverified: 0, awaiting: 1 });
+      expect(result.meta.total).toBe(1);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_REVIEW_QUEUE_ACCESSED' }),
+      );
+    });
+  });
+
   describe('decideDocument', () => {
     it('approves one document and audits the decision', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
@@ -363,6 +495,9 @@ describe('KycService', () => {
       mockDocRepo.updateStatus.mockResolvedValue(
         makeDocument({ status: VerificationStatus.APPROVED, reviewedBy: 'reviewer-1' }),
       );
+      mockDocRepo.findByCustomerId.mockResolvedValue([
+        makeDocument({ status: VerificationStatus.APPROVED }),
+      ]);
 
       const result = await service.decideDocument(
         'cust-1',
@@ -380,7 +515,44 @@ describe('KycService', () => {
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'KYC_DOCUMENT_APPROVED' }),
       );
+      expect(mockCustomersService.approve).not.toHaveBeenCalled();
       expect(result.status).toBe(VerificationStatus.APPROVED);
+    });
+
+    it('verifies the customer when every required document has been approved', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.UNDER_REVIEW));
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ id: 'doc-4', documentType: 'personal_photo' }),
+      );
+      mockDocRepo.updateStatus.mockResolvedValue(
+        makeDocument({
+          id: 'doc-4',
+          documentType: 'personal_photo',
+          status: VerificationStatus.APPROVED,
+        }),
+      );
+      mockDocRepo.findByCustomerId.mockResolvedValue(
+        makeRequiredDocuments(VerificationStatus.APPROVED),
+      );
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.UNDER_REVIEW }),
+      );
+      mockKycRepo.updateStatus.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.APPROVED, reviewerId: 'reviewer-1' }),
+      );
+      mockCustomersService.approve.mockResolvedValue(makeCustomer(CustomerStatus.APPROVED));
+
+      await service.decideDocument('cust-1', 'doc-4', { decision: KycDecision.APPROVE }, 'reviewer-1');
+
+      expect(mockKycRepo.updateStatus).toHaveBeenCalledWith(
+        'kyc-1',
+        VerificationStatus.APPROVED,
+        'reviewer-1',
+      );
+      expect(mockCustomersService.approve).toHaveBeenCalledWith('cust-1', 'reviewer-1', undefined);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_APPROVED' }),
+      );
     });
 
     it('rejects a document only when a reason is present', async () => {
@@ -390,10 +562,150 @@ describe('KycService', () => {
         message: expect.stringContaining('reason must be provided'),
       });
     });
+
+    it('rejects a document when the reason is only whitespace', async () => {
+      await expect(
+        service.decideDocument(
+          'cust-1',
+          'doc-1',
+          { decision: KycDecision.REJECT, reason: '          ' },
+          'reviewer-1',
+        ),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('reason must be provided'),
+      });
+    });
+
+    it('does not approve an already approved document again', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ status: VerificationStatus.APPROVED }),
+      );
+
+      await expect(
+        service.decideDocument('cust-1', 'doc-1', { decision: KycDecision.APPROVE }, 'reviewer-1'),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('already been approved'),
+      });
+      expect(mockDocRepo.updateStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('replaceStaffDocumentImage', () => {
+    const imageFile: Express.Multer.File = {
+      fieldname: 'file',
+      originalname: 'id_front.jpg',
+      encoding: '7bit',
+      mimetype: 'image/jpeg',
+      size: 12_000,
+      buffer: Buffer.from('edited-image'),
+      destination: '',
+      filename: '',
+      path: '',
+      stream: null as unknown as import('stream').Readable,
+    };
+
+    it('keeps the original object and points fileKey at the edited image', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(makeDocument());
+      mockStorage.upload.mockResolvedValue({
+        key: 'kyc-documents/cust-1/edited.jpg',
+        bucket: 'gold-kyc-documents',
+        originalName: 'id_front.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 12_000,
+      });
+      mockDocRepo.replaceFile.mockResolvedValue(
+        makeDocument({
+          fileKey: 'kyc-documents/cust-1/edited.jpg',
+          originalFileKey: 'kyc-documents/cust-1/abc.jpg',
+        }),
+      );
+
+      const result = await service.replaceStaffDocumentImage(
+        'cust-1',
+        'doc-1',
+        imageFile,
+        'reviewer-1',
+      );
+
+      expect(mockDocRepo.replaceFile).toHaveBeenCalledWith(
+        'doc-1',
+        expect.objectContaining({
+          fileKey: 'kyc-documents/cust-1/edited.jpg',
+          originalFileKey: 'kyc-documents/cust-1/abc.jpg',
+          processedFileKey: null,
+        }),
+      );
+      expect(mockStorage.delete).not.toHaveBeenCalled();
+      expect(result.hasOriginalFile).toBe(true);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_DOCUMENT_IMAGE_EDITED' }),
+      );
+    });
+  });
+
+  describe('saveProcessedPersonalPhoto', () => {
+    const pngFile: Express.Multer.File = {
+      fieldname: 'file',
+      originalname: 'photo-cutout.png',
+      encoding: '7bit',
+      mimetype: 'image/png',
+      size: 8_000,
+      buffer: Buffer.from('png'),
+      destination: '',
+      filename: '',
+      path: '',
+      stream: null as unknown as import('stream').Readable,
+    };
+
+    it('stores a PNG cutout without replacing the review original', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ documentType: 'personal_photo', fileMimeType: 'image/jpeg' }),
+      );
+      mockStorage.upload.mockResolvedValue({
+        key: 'kyc-documents/cust-1/processed/cutout.png',
+        bucket: 'gold-kyc-documents',
+        originalName: 'photo-cutout.png',
+        mimeType: 'image/png',
+        sizeBytes: 8_000,
+      });
+      mockDocRepo.updateProcessedFile.mockResolvedValue(
+        makeDocument({
+          documentType: 'personal_photo',
+          processedFileKey: 'kyc-documents/cust-1/processed/cutout.png',
+        }),
+      );
+
+      const result = await service.saveProcessedPersonalPhoto(
+        'cust-1',
+        'doc-1',
+        pngFile,
+        'reviewer-1',
+      );
+
+      expect(mockDocRepo.replaceFile).not.toHaveBeenCalled();
+      expect(mockDocRepo.updateProcessedFile).toHaveBeenCalledWith(
+        'doc-1',
+        'kyc-documents/cust-1/processed/cutout.png',
+      );
+      expect(result.hasProcessedFile).toBe(true);
+      expect(result.fileName).toBe('id_front.jpg');
+    });
+
+    it('does not process national-id images', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(makeDocument());
+
+      await expect(
+        service.saveProcessedPersonalPhoto('cust-1', 'doc-1', pngFile, 'reviewer-1'),
+      ).rejects.toMatchObject({ message: expect.stringContaining('عکس پرسنلی') });
+    });
   });
 
   describe('readDocumentFile', () => {
-    it('returns the stored file and audits the view', async () => {
+    it('marks a pending document as viewed and audits the staff view', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
       mockDocRepo.findById.mockResolvedValue(makeDocument());
       mockStorage.getObject.mockResolvedValue(Buffer.from('image'));
@@ -404,10 +716,26 @@ describe('KycService', () => {
         'kyc-documents/cust-1/abc.jpg',
         'gold-kyc-documents',
       );
+      expect(mockDocRepo.updateStatus).toHaveBeenCalledWith(
+        'doc-1',
+        VerificationStatus.UNDER_REVIEW,
+        'reviewer-1',
+      );
       expect(file.mimeType).toBe('image/jpeg');
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'KYC_DOCUMENT_VIEWED' }),
       );
+    });
+
+    it('does not mark a document viewed when its owner opens the preview', async () => {
+      mockCustomerRepo.findByUserId.mockResolvedValue(makeCustomer());
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(makeDocument());
+      mockStorage.getObject.mockResolvedValue(Buffer.from('image'));
+
+      await service.readOwnDocumentFile('user-1', 'doc-1');
+
+      expect(mockDocRepo.updateStatus).not.toHaveBeenCalled();
     });
   });
 

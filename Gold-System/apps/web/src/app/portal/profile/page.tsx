@@ -1,18 +1,15 @@
 'use client';
 
 import useSWR from 'swr';
-import { ApiClientError, customerApi, ordersApi, tradesApi } from '@/lib/api';
+import { ApiClientError, customerApi } from '@/lib/api';
 import { Alert } from '@/components/ui/alert';
 import { PageSpinner } from '@/components/ui/spinner';
-import { AccountStatsCard } from '@/components/portal/profile/account-stats-card';
 import { BankAccountsCard } from '@/components/portal/profile/bank-accounts-card';
-import { DeleteAccountCard } from '@/components/portal/profile/delete-account-card';
 import { PersonalInformationCard } from '@/components/portal/profile/personal-information-card';
 import { ProfileCreditCard } from '@/components/portal/profile/profile-credit-card';
 import { ProfileHero } from '@/components/portal/profile/profile-hero';
 import { ProfileKycCard } from '@/components/portal/profile/profile-kyc-card';
 import { ProfilePreferences } from '@/components/portal/profile/profile-preferences';
-import { readListTotal } from '@/components/portal/profile/read-list-total';
 import { SecurityCard } from '@/components/portal/profile/security-card';
 
 export default function ProfilePage() {
@@ -28,18 +25,6 @@ export default function ProfilePage() {
     error: accountError,
     isLoading: accountLoading,
   } = useSWR('customer/me/account', () => customerApi.getMyAccount());
-
-  const {
-    data: orders,
-    error: ordersError,
-    isLoading: ordersLoading,
-  } = useSWR('profile/orders-count', () => ordersApi.list({ limit: 1 }));
-
-  const {
-    data: trades,
-    error: tradesError,
-    isLoading: tradesLoading,
-  } = useSWR('profile/trades-count', () => tradesApi.list({ limit: 1 }));
 
   if (customerLoading) return <PageSpinner />;
   if (customerError instanceof ApiClientError && customerError.isNotFound) {
@@ -65,14 +50,6 @@ export default function ProfilePage() {
               !(accountError instanceof ApiClientError && accountError.isNotFound)
             }
           />
-          <AccountStatsCard
-            orders={orders}
-            trades={trades}
-            ordersLoading={ordersLoading}
-            tradesLoading={tradesLoading}
-            ordersError={Boolean(ordersError)}
-            tradesError={Boolean(tradesError)}
-          />
         </div>
 
         <div className="order-1 xl:order-2 xl:col-span-6">
@@ -82,12 +59,6 @@ export default function ProfilePage() {
         <div className="order-3 flex flex-col gap-4 xl:order-3 xl:col-span-3">
           <SecurityCard />
           <BankAccountsCard />
-          <DeleteAccountCard
-            account={account}
-            orderCount={ordersError ? null : readListTotal(orders)}
-            tradeCount={tradesError ? null : readListTotal(trades)}
-            countsLoading={ordersLoading || tradesLoading || accountLoading}
-          />
         </div>
       </div>
 

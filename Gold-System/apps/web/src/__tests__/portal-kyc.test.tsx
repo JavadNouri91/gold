@@ -1,8 +1,15 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { validateKycFile, kycSteps, primaryCta, uploadErrorMessage } from '@/lib/kyc-present';
+import { fireEvent, render, screen } from '@testing-library/react';
+import {
+  DOCUMENT_STATUS_LABEL,
+  validateKycFile,
+  kycSteps,
+  primaryCta,
+  uploadErrorMessage,
+} from '@/lib/kyc-present';
 import { clampCrop, resizeCrop } from '@/lib/kyc-image-edit';
 import { KycExperience } from '@/components/portal/kyc/kyc-experience';
+import { KycUploadDialog } from '@/components/portal/kyc/kyc-upload-dialog';
 import type { OwnKycOverview } from '@/lib/api';
 
 jest.mock('@/lib/api', () => {
@@ -72,6 +79,7 @@ describe('kyc presentation', () => {
   it('marks document review as the current step after submission', () => {
     const steps = kycSteps('UNDER_REVIEW', true);
     expect(steps.map((step) => step.state)).toEqual(['done', 'done', 'current', 'upcoming']);
+    expect(DOCUMENT_STATUS_LABEL.UNDER_REVIEW).toBe('مشاهده شده');
   });
 
   it('does not surface a raw server message', () => {
@@ -149,5 +157,30 @@ describe('KycExperience', () => {
     render(<KycExperience overview={rejected} onChanged={async () => undefined} />);
     expect(screen.getByRole('button', { name: 'بارگذاری مجدد' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'حذف مدرک' })).not.toBeInTheDocument();
+  });
+});
+
+describe('KycUploadDialog', () => {
+  it('accepts a valid document by drag and drop', () => {
+    const file = new File(['pdf'], 'مدرک.pdf', { type: 'application/pdf' });
+    render(
+      <KycUploadDialog
+        open
+        label="عکس پرسنلی"
+        policy={{ maxBytes: 10 * 1024 * 1024, mimeTypes: ['image/jpeg', 'application/pdf'] }}
+        submitting={false}
+        serverError={null}
+        onClose={() => undefined}
+        onSubmit={() => undefined}
+      />,
+    );
+
+    const dropZone = screen.getByLabelText('ناحیه کشیدن و رها کردن فایل مدرک');
+    fireEvent.dragEnter(dropZone, { dataTransfer: { files: [file] } });
+    expect(screen.getByText('فایل را اینجا رها کنید')).toBeInTheDocument();
+    fireEvent.drop(dropZone, { dataTransfer: { files: [file] } });
+
+    expect(screen.getByText('مدرک.pdf')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'ارسال مدرک' })).toBeInTheDocument();
   });
 });

@@ -445,6 +445,7 @@ export interface OwnKycFile {
   fileName: string;
   fileMimeType: string;
   fileSizeBytes: number;
+  hasProcessedFile?: boolean;
   status: string;
   rejectionReason: string | null;
   createdAt: string;
@@ -489,8 +490,10 @@ export const kycApi = {
     return request('/customers/me/kyc');
   },
 
-  getOwnDocumentFile(documentId: string): Promise<Blob> {
-    return fetchBlob(`/customers/me/documents/${documentId}/file`);
+  getOwnDocumentFile(documentId: string, processed = false): Promise<Blob> {
+    return fetchBlob(
+      `/customers/me/documents/${documentId}/file${processed ? '?processed=true' : ''}`,
+    );
   },
 
   getDocuments(customerId: string): Promise<KycDocument[]> {

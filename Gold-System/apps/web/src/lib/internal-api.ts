@@ -34,10 +34,10 @@ export interface StaffCustomer {
   address: string | null;
   type: string | null;
   gender: string | null;
-  level: string | null;
   postalCode: string | null;
   phone: string | null;
   referenceSource: string | null;
+  referrerId?: string | null;
   companyName: string | null;
   companyNationalId: string | null;
   companyEconomicId: string | null;
@@ -152,8 +152,11 @@ export interface KycDocumentRecord {
   status?: string;
   verificationStatus: string;
   rejectionReason?: string | null;
+  hasOriginalFile?: boolean;
+  hasProcessedFile?: boolean;
   signedUrl?: string;
   createdAt: string;
+  updatedAt?: string;
   reviewedAt?: string | null;
 }
 
@@ -164,6 +167,32 @@ export interface KycHistoryRecord {
   decisionReason?: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export type KycStaffBucket = 'verified' | 'unverified' | 'awaiting';
+
+export interface KycReviewQueueItem {
+  id: string;
+  customerNumber: string;
+  fullName: string;
+  mobile: string;
+  status: string;
+  bucket?: KycStaffBucket;
+  pendingDocuments: number;
+  viewedDocuments: number;
+  latestSubmittedAt: string;
+}
+
+export interface KycReviewQueueSummary {
+  verified: number;
+  unverified: number;
+  awaiting: number;
+}
+
+export interface KycReviewQueue {
+  items: KycReviewQueueItem[];
+  summary?: KycReviewQueueSummary;
+  meta: PageMeta;
 }
 
 export interface StaffOrder {
@@ -826,7 +855,7 @@ export const internalCustomersApi = {
     lastName: string;
     nationalId: string;
     mobile: string;
-    password: string;
+    password?: string;
     email?: string;
     address?: string;
   }>): Promise<{ created: number; failed: number; errors: Array<{ row: number; message: string }> }> {
@@ -874,14 +903,14 @@ export const internalCustomersApi = {
     email?: string;
     dateOfBirth?: string;
     address?: string;
-    password: string;
+    password?: string;
     // Extended staff registration fields
     type?: string;
     gender?: string;
-    level?: string;
     postalCode?: string;
     phone?: string;
     referenceSource?: string;
+    referrerId?: string;
     internalNote?: string;
     initialAccountStatus?: string;
     companyName?: string;
@@ -917,6 +946,16 @@ export const internalCustomersApi = {
 };
 
 export const internalKycApi = {
+  queue(params: {
+    page?: number;
+    limit?: number;
+    bucket?: KycStaffBucket;
+    status?: string;
+    search?: string;
+  }): Promise<KycReviewQueue> {
+    return request(`/customers/kyc/queue${toQuery(params)}`);
+  },
+
   getDocuments(customerId: string, withUrls = false): Promise<KycDocumentRecord[]> {
     return request<KycDocumentRecord[]>(
       `/customers/${customerId}/documents${toQuery({ withUrls })}`,
@@ -927,8 +966,37 @@ export const internalKycApi = {
       })),
     );
   },
-  getDocumentFile(customerId: string, documentId: string): Promise<Blob> {
-    return fetchBlob(`/customers/${customerId}/documents/${documentId}/file`);
+  getDocumentFile(
+    customerId: string,
+    documentId: string,
+    options: { original?: boolean; processed?: boolean } = {},
+  ): Promise<Blob> {
+    return fetchBlob(
+      `/customers/${customerId}/documents/${documentId}/file${toQuery({
+        original: options.original || undefined,
+        processed: options.processed || undefined,
+      })}`,
+    );
+  },
+  saveProcessedPersonalPhoto(
+    customerId: string,
+    documentId: string,
+    file: File,
+  ): Promise<KycDocumentRecord> {
+    const body = new FormData();
+    body.append('file', file);
+    return request(`/customers/${customerId}/documents/${documentId}/processed-file`, {
+      method: 'POST',
+      body,
+    });
+  },
+  replaceDocumentImage(customerId: string, documentId: string, file: File): Promise<KycDocumentRecord> {
+    const body = new FormData();
+    body.append('file', file);
+    return request(`/customers/${customerId}/documents/${documentId}/file`, {
+      method: 'POST',
+      body,
+    });
   },
   decideDocument(
     customerId: string,

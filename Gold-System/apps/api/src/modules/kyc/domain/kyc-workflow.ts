@@ -17,6 +17,8 @@ import {
  * SUBMITTED until a reviewer starts a new review.
  */
 
+export type KycStaffBucket = 'verified' | 'awaiting' | 'unverified';
+
 export type KycPhase =
   | 'NOT_STARTED'
   | 'IN_PROGRESS'
@@ -39,16 +41,14 @@ export interface KycRequirementDefinition {
 export const KYC_REQUIREMENTS: KycRequirementDefinition[] = [
   { type: 'national_id_front', label: 'روی کارت ملی', requiredFor: 'all' },
   { type: 'national_id_back', label: 'پشت کارت ملی', requiredFor: 'all' },
-  { type: 'birth_certificate', label: 'شناسنامه', requiredFor: 'all' },
-  { type: 'proof_of_address', label: 'مدرک محل سکونت', requiredFor: 'all' },
-  { type: 'selfie_with_id', label: 'سلفی همراه با مدرک شناسایی', requiredFor: 'all' },
+  { type: 'birth_certificate', label: 'صفحه اول شناسنامه', requiredFor: 'all' },
   { type: 'personal_photo', label: 'عکس پرسنلی', requiredFor: 'all' },
   { type: 'business_registration', label: 'جواز کسب', requiredFor: 'PARTNER' },
 ];
 
 const LEGACY_LABELS: Record<string, string> = {
   NATIONAL_ID: 'کارت ملی',
-  BIRTH_CERTIFICATE: 'شناسنامه',
+  BIRTH_CERTIFICATE: 'صفحه اول شناسنامه',
   PASSPORT: 'پاسپورت',
   DRIVER_LICENSE: 'گواهینامه',
   UTILITY_BILL: 'قبض آب، برق یا گاز',
@@ -67,19 +67,13 @@ export function requiredKycTypes(
   );
 }
 
-const VERIFIED_CUSTOMER_STATUSES = new Set<string>([
-  CustomerStatus.APPROVED,
-  CustomerStatus.ACTIVE,
-  CustomerStatus.SUSPENDED,
-  CustomerStatus.BLOCKED,
-]);
-
 export interface WorkflowDocument {
   id: string;
   documentType: string;
   fileName: string;
   fileMimeType: string;
   fileSizeBytes: number;
+  hasProcessedFile?: boolean;
   status: VerificationStatus;
   rejectionReason: string | null;
   createdAt: Date;
@@ -117,6 +111,7 @@ export interface OwnKycDocumentView {
     fileName: string;
     fileMimeType: string;
     fileSizeBytes: number;
+    hasProcessedFile?: boolean;
     status: VerificationStatus;
     rejectionReason: string | null;
     createdAt: string;
@@ -159,22 +154,28 @@ export function deriveKycPhase(input: {
   const anyMissing = states.some((status) => status === null);
   const anyUploaded = states.some((status) => status !== null);
   const allPresent = states.length > 0 && !anyMissing;
+  const allApproved =
+    allPresent && states.every((status) => status === VerificationStatus.APPROVED);
   const resubmitted =
     allPresent &&
-    states.some((status) => status === VerificationStatus.PENDING) &&
+    states.some(
+      (status) =>
+        status === VerificationStatus.PENDING || status === VerificationStatus.UNDER_REVIEW,
+    ) &&
     states.every(
-      (status) => status === VerificationStatus.PENDING || status === VerificationStatus.APPROVED,
+      (status) =>
+        status === VerificationStatus.PENDING ||
+        status === VerificationStatus.UNDER_REVIEW ||
+        status === VerificationStatus.APPROVED,
     );
 
-  // A closed account status must not hide documents that were never sent.
-  if (!anyMissing) {
-    if (
-      VERIFIED_CUSTOMER_STATUSES.has(customerStatus) ||
-      verificationStatus === VerificationStatus.APPROVED
-    ) {
-      return 'VERIFIED';
-    }
+  // Account activation is not a KYC decision. Verification is complete only
+  // after the case and every currently-required document are approved.
+  if (verificationStatus === VerificationStatus.APPROVED && allApproved) {
+    return 'VERIFIED';
+  }
 
+  if (!anyMissing) {
     if (
       customerStatus === CustomerStatus.UNDER_REVIEW ||
       verificationStatus === VerificationStatus.PENDING ||
@@ -199,18 +200,42 @@ export function deriveKycPhase(input: {
   return 'SUBMITTED';
 }
 
+/** Staff directory buckets: verified, awaiting a decision, or not verified. */
+export function kycStaffBucket(input: {
+  verificationStatus: VerificationStatus | null;
+  requiredTypes: string[];
+  latestStatusByType: Map<string, VerificationStatus>;
+}): KycStaffBucket {
+  const states = input.requiredTypes.map((type) => input.latestStatusByType.get(type) ?? null);
+  const allApproved =
+    states.length > 0 &&
+    states.every((status) => status === VerificationStatus.APPROVED);
+  if (input.verificationStatus === VerificationStatus.APPROVED && allApproved) {
+    return 'verified';
+  }
+  if (
+    states.some(
+      (status) =>
+        status === VerificationStatus.PENDING || status === VerificationStatus.UNDER_REVIEW,
+    )
+  ) {
+    return 'awaiting';
+  }
+  return 'unverified';
+}
+
 export function documentDisplayStatus(
   status: VerificationStatus | null,
   phase: KycPhase,
 ): KycDocumentDisplayStatus {
   if (!status) return 'NOT_UPLOADED';
   if (status === VerificationStatus.APPROVED) return 'APPROVED';
+  if (status === VerificationStatus.UNDER_REVIEW) return 'UNDER_REVIEW';
   if (status === VerificationStatus.REJECTED) {
     return phase === 'NEEDS_CORRECTION' || phase === 'IN_PROGRESS' || phase === 'SUBMITTED'
       ? 'NEEDS_CORRECTION'
       : 'REJECTED';
   }
-  if (phase === 'UNDER_REVIEW') return 'UNDER_REVIEW';
   return 'SUBMITTED';
 }
 
@@ -289,6 +314,7 @@ function toFileView(document: WorkflowDocument): OwnKycDocumentView['file'] {
     fileName: document.fileName,
     fileMimeType: document.fileMimeType,
     fileSizeBytes: document.fileSizeBytes,
+    hasProcessedFile: Boolean(document.hasProcessedFile),
     status: document.status,
     rejectionReason: document.rejectionReason,
     createdAt: document.createdAt.toISOString(),
@@ -336,6 +362,7 @@ export function buildOwnKycView(input: {
   });
 
   for (const [type, file] of latest) {
+    if (type === 'selfie_with_id' || type === 'proof_of_address') continue;
     if (requirements.some((item) => item.type === type)) continue;
     documents.push({
       type,

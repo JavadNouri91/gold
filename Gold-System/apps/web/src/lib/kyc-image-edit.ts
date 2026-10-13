@@ -76,7 +76,12 @@ async function loadBitmap(file: File): Promise<ImageBitmap> {
   }
 }
 
-function drawOriented(bitmap: ImageBitmap, turns: number, flip: boolean): HTMLCanvasElement {
+function drawOriented(
+  bitmap: ImageBitmap,
+  turns: number,
+  flip: boolean,
+  transparent = false,
+): HTMLCanvasElement {
   const quarter = normalizeTurns(turns);
   const swap = quarter % 2 === 1;
   const canvas = document.createElement('canvas');
@@ -84,8 +89,10 @@ function drawOriented(bitmap: ImageBitmap, turns: number, flip: boolean): HTMLCa
   canvas.height = swap ? bitmap.width : bitmap.height;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('تصویر قابل خواندن نیست.');
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  if (!transparent) {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
   context.save();
   context.translate(canvas.width / 2, canvas.height / 2);
   context.rotate((quarter * Math.PI) / 2);
@@ -95,7 +102,7 @@ function drawOriented(bitmap: ImageBitmap, turns: number, flip: boolean): HTMLCa
   return canvas;
 }
 
-function cropCanvas(source: HTMLCanvasElement, crop: NormCrop): HTMLCanvasElement {
+function cropCanvas(source: HTMLCanvasElement, crop: NormCrop, transparent = false): HTMLCanvasElement {
   const frame = clampCrop(crop);
   const sx = Math.round(frame.x * source.width);
   const sy = Math.round(frame.y * source.height);
@@ -106,13 +113,15 @@ function cropCanvas(source: HTMLCanvasElement, crop: NormCrop): HTMLCanvasElemen
   canvas.height = sh;
   const context = canvas.getContext('2d');
   if (!context) throw new Error('تصویر قابل خواندن نیست.');
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, sw, sh);
+  if (!transparent) {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, sw, sh);
+  }
   context.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
   return canvas;
 }
 
-function limitEdge(source: HTMLCanvasElement, maxEdge: number): HTMLCanvasElement {
+function limitEdge(source: HTMLCanvasElement, maxEdge: number, transparent = false): HTMLCanvasElement {
   const longest = Math.max(source.width, source.height);
   if (longest <= maxEdge) return source;
   const scale = maxEdge / longest;
@@ -121,14 +130,16 @@ function limitEdge(source: HTMLCanvasElement, maxEdge: number): HTMLCanvasElemen
   canvas.height = Math.max(1, Math.round(source.height * scale));
   const context = canvas.getContext('2d');
   if (!context) return source;
-  context.fillStyle = '#ffffff';
-  context.fillRect(0, 0, canvas.width, canvas.height);
+  if (!transparent) {
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, canvas.width, canvas.height);
+  }
   context.drawImage(source, 0, 0, canvas.width, canvas.height);
   return canvas;
 }
 
-function canvasToBlob(canvas: HTMLCanvasElement, quality: number): Promise<Blob | null> {
-  return new Promise((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+function canvasToBlob(canvas: HTMLCanvasElement, quality: number, type = 'image/jpeg'): Promise<Blob | null> {
+  return new Promise((resolve) => canvas.toBlob(resolve, type, type === 'image/png' ? undefined : quality));
 }
 
 async function blobWithinLimit(canvas: HTMLCanvasElement, maxBytes: number): Promise<Blob> {
@@ -158,25 +169,34 @@ export async function exportEditedImage(
   crop: NormCrop,
   maxBytes: number,
 ): Promise<File> {
+  const asPng = file.type === 'image/png';
   const bitmap = await loadBitmap(file);
   try {
-    const oriented = drawOriented(bitmap, turns, flip);
-    const cropped = cropCanvas(oriented, crop);
-    const limited = limitEdge(cropped, 2400);
-    const blob = await blobWithinLimit(limited, maxBytes);
+    const oriented = drawOriented(bitmap, turns, flip, asPng);
+    const cropped = cropCanvas(oriented, crop, asPng);
+    const limited = limitEdge(cropped, 2400, asPng);
+    const blob = asPng
+      ? await canvasToBlob(limited, 1, 'image/png')
+      : await blobWithinLimit(limited, maxBytes);
+    if (!blob || blob.size <= 0) throw new Error('آماده‌سازی تصویر انجام نشد.');
+    if (blob.size > maxBytes) throw new Error('حجم فایل بیش از حد مجاز است.');
     const base = file.name.replace(/\.[^.]+$/, '') || 'document';
-    return new File([blob], `${base}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+    return new File([blob], asPng ? `${base}.png` : `${base}.jpg`, {
+      type: asPng ? 'image/png' : 'image/jpeg',
+      lastModified: Date.now(),
+    });
   } finally {
     bitmap.close?.();
   }
 }
 
-/** Smaller JPEG used only for the on-screen editor, not for upload. */
+/** Smaller preview used only for the on-screen editor, not for upload. */
 export async function orientedPreviewUrl(file: File, turns: number, flip: boolean): Promise<string> {
+  const asPng = file.type === 'image/png';
   const bitmap = await loadBitmap(file);
   try {
-    const oriented = limitEdge(drawOriented(bitmap, turns, flip), 960);
-    const blob = await canvasToBlob(oriented, 0.82);
+    const oriented = limitEdge(drawOriented(bitmap, turns, flip, asPng), 960, asPng);
+    const blob = await canvasToBlob(oriented, 0.82, asPng ? 'image/png' : 'image/jpeg');
     if (!blob) throw new Error('تصویر قابل خواندن نیست.');
     return URL.createObjectURL(blob);
   } finally {

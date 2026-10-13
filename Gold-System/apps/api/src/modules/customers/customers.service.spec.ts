@@ -181,6 +181,73 @@ describe('CustomersService', () => {
         expect.objectContaining({ action: 'CUSTOMER_REGISTERED' }),
       );
       expect(result.customerNumber).toBe('CUST-000001');
+      expect(mockUsersService.createCustomerUser).toHaveBeenCalledWith(
+        expect.objectContaining({ password: dto.password }),
+        expect.anything(),
+      );
+    });
+
+    it('uses national ID as the portal password when none is provided', async () => {
+      mockCustomerRepo.findByMobile.mockResolvedValue(null);
+      mockCustomerRepo.findByNationalId.mockResolvedValue(null);
+      mockUsersService.findByMobile.mockResolvedValue(null);
+      mockPrisma.role.findUnique.mockResolvedValue({ id: 'role-customer' });
+
+      const createdRow = {
+        id: 'cust-1',
+        customerNumber: 'CUST-000001',
+        userId: 'user-1',
+        mobile: dto.mobile,
+        nationalId: dto.nationalId,
+        status: 'PENDING',
+      };
+
+      mockPrisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
+        mockCustomerRepo.nextCustomerNumber.mockResolvedValue('CUST-000001');
+        mockUsersService.createCustomerUser.mockResolvedValue({
+          id: 'user-1',
+          name: 'علی محمدی',
+          mobile: dto.mobile,
+        });
+        return fn({
+          user: {
+            create: jest
+              .fn()
+              .mockResolvedValue({ id: 'user-1', name: 'علی محمدی', mobile: dto.mobile }),
+          },
+          customer: {
+            create: jest.fn().mockResolvedValue(createdRow),
+            count: jest.fn().mockResolvedValue(0),
+          },
+        });
+      });
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+
+      await service.register({
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        nationalId: dto.nationalId,
+        mobile: dto.mobile,
+      });
+
+      expect(mockUsersService.createCustomerUser).toHaveBeenCalledWith(
+        expect.objectContaining({ password: dto.nationalId }),
+        expect.anything(),
+      );
+    });
+
+    it('rejects registration when the referrer does not exist', async () => {
+      mockCustomerRepo.findByMobile.mockResolvedValue(null);
+      mockCustomerRepo.findByNationalId.mockResolvedValue(null);
+      mockUsersService.findByMobile.mockResolvedValue(null);
+      mockCustomerRepo.findById.mockResolvedValue(null);
+
+      await expect(
+        service.register({
+          ...dto,
+          referrerId: 'missing-referrer',
+        }),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
