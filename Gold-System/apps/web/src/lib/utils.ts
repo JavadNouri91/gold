@@ -394,8 +394,6 @@ export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   HOUSEHOLD: 'خانگی',
   PARTNER: 'همکار',
   VIP: 'VIP',
-  WHOLESALE: 'عمده‌فروش',
-  CORPORATE: 'شرکت',
 };
 
 /** Badge label for the signed-in customer. Household keeps the «مشتری» prefix. */
@@ -424,7 +422,6 @@ export const CUSTOMER_VERIFICATION_LABELS: Record<string, string> = {
 export const CUSTOMER_SEGMENT_LABELS: Record<string, string> = {
   REGULAR: 'عادی',
   VIP: 'VIP',
-  WHOLESALE: 'عمده‌فروش',
   PARTNER: 'همکار',
   NEW: 'مشتری جدید',
   LEGACY: 'مشتری قدیمی',

@@ -14,7 +14,6 @@ import { MobileInput } from '@/components/ui/mobile-input';
 import { NationalIdInput } from '@/components/ui/national-id-input';
 import { PostalCodeInput } from '@/components/ui/postal-code-input';
 import {
-  Building2,
   User,
   Phone,
   FileText,
@@ -41,11 +40,6 @@ interface RegisterCustomerFormValues {
   gender: string;
   type: string;
   initialAccountStatus: string;
-  companyName: string;
-  companyNationalId: string;
-  companyEconomicId: string;
-  contactName: string;
-  contactTitle: string;
   // Step 2 — Contact
   phone: string;
   province: string;
@@ -374,11 +368,6 @@ export function RegisterCustomerButton({
       gender: '',
       type: 'HOUSEHOLD',
       initialAccountStatus: 'ACTIVE',
-      companyName: '',
-      companyNationalId: '',
-      companyEconomicId: '',
-      contactName: '',
-      contactTitle: '',
       phone: '',
       province: 'مازندران',
       city: '',
@@ -441,11 +430,9 @@ export function RegisterCustomerButton({
 
   // ── Watched values ──────────────────────────────────────────────────────────
 
-  const watchedType = watch('type');
   const watchedProvince = watch('province');
   const watchedAddress = watch('address');
   const watchedInternalNote = watch('internalNote');
-  const isCorporate = watchedType === 'CORPORATE';
 
   const cityOptions = getCitiesForProvince(watchedProvince);
 
@@ -481,7 +468,6 @@ export function RegisterCustomerButton({
     'email', 'phone',
     'province', 'city', 'postalCode', 'address',
     'type', 'initialAccountStatus',
-    ...(isCorporate ? (['companyName', 'contactName'] as const) : []),
   ];
 
   // ── Navigation ──────────────────────────────────────────────────────────────
@@ -524,13 +510,6 @@ export function RegisterCustomerButton({
         type: data.type || undefined,
         gender: data.gender || undefined,
         initialAccountStatus: data.initialAccountStatus || undefined,
-        ...(isCorporate && {
-          companyName: data.companyName.trim() || undefined,
-          companyNationalId: data.companyNationalId.trim() || undefined,
-          companyEconomicId: data.companyEconomicId.trim() || undefined,
-          contactName: data.contactName.trim() || undefined,
-          contactTitle: data.contactTitle.trim() || undefined,
-        }),
         phone: data.phone.trim() || undefined,
         province: data.province || undefined,
         city: data.city || undefined,
@@ -767,7 +746,7 @@ export function RegisterCustomerButton({
                       />
                       <InputWithIcon
                         icon={Phone}
-                        label={isCorporate ? 'تلفن مسئول' : 'تلفن ثابت'}
+                        label="تلفن ثابت"
                         dir="ltr"
                         inputMode="numeric"
                         hint="اختیاری"
@@ -811,8 +790,6 @@ export function RegisterCustomerButton({
                         <option value="HOUSEHOLD">🏠 خانگی</option>
                         <option value="VIP">⭐ VIP</option>
                         <option value="PARTNER">🤝 همکار</option>
-                        <option value="WHOLESALE">📦 عمده‌فروش</option>
-                        <option value="CORPORATE">🏢 شرکت</option>
                       </SelectField>
 
                       <SelectField
@@ -826,57 +803,10 @@ export function RegisterCustomerButton({
                       </SelectField>
                     </div>
 
-                    {isCorporate && (
-                      <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-4 space-y-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <Building2 className="h-4 w-4 text-amber-700" />
-                          <p className="text-sm font-semibold text-amber-800">اطلاعات شرکت</p>
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <Input
-                            label="نام شرکت"
-                            required
-                            error={errors.companyName?.message}
-                            {...register('companyName', {
-                              validate: (v) => !isCorporate || v.trim().length >= 2 || 'نام شرکت الزامی است',
-                            })}
-                          />
-                          <Input
-                            label="شناسه ملی شرکت"
-                            dir="ltr"
-                            inputMode="numeric"
-                            placeholder="10 رقم"
-                            error={errors.companyNationalId?.message}
-                            {...register('companyNationalId', {
-                              validate: (v) => !v.trim() || /^\d{10,15}$/.test(v.trim()) || 'شناسه ملی معتبر نیست',
-                            })}
-                          />
-                        </div>
-                        <div className="grid gap-3 sm:grid-cols-2">
-                          <Input
-                            label="شماره اقتصادی"
-                            dir="ltr"
-                            inputMode="numeric"
-                            hint="اختیاری"
-                            {...register('companyEconomicId')}
-                          />
-                          <Input
-                            label="نام مسئول"
-                            required
-                            error={errors.contactName?.message}
-                            {...register('contactName', {
-                              validate: (v) => !isCorporate || v.trim().length >= 2 || 'نام مسئول الزامی است',
-                            })}
-                          />
-                        </div>
-                        <Input label="سمت مسئول" hint="اختیاری" {...register('contactTitle')} />
-                      </div>
-                    )}
-
                     <CardSection
                       icon={MapPin}
-                      title={isCorporate ? 'آدرس شرکت' : 'آدرس محل سکونت'}
-                      desc={isCorporate ? 'آدرس دقیق محل شرکت' : 'آدرس دقیق محل سکونت مشتری'}
+                      title="آدرس محل سکونت"
+                      desc="آدرس دقیق محل سکونت مشتری"
                     >
                       <div className="grid gap-3 sm:grid-cols-3">
                         <SearchableSelect

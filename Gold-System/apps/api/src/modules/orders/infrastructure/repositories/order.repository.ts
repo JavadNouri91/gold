@@ -103,6 +103,8 @@ export class OrderRepository {
       customerAccountId: string;
       pricingCalculationId: string;
       totalAmountRial: Decimal;
+      goldAmountRial: Decimal;
+      feeAmountRial: Decimal;
       weightGrams: Decimal;
       purityRatio: Decimal;
       customerType: CustomerType | null;
@@ -123,6 +125,8 @@ export class OrderRepository {
         pricingCalculationId: data.pricingCalculationId,
         status: 'DRAFT',
         totalAmountRial: data.totalAmountRial,
+        goldAmountRial: data.goldAmountRial,
+        feeAmountRial: data.feeAmountRial,
         reservedAmountRial: new Decimal(0),
         weightGrams: data.weightGrams,
         purityRatio: data.purityRatio,
@@ -240,6 +244,8 @@ export class OrderRepository {
       pricingCalculationId: row.pricingCalculationId ?? null,
       status: row.status as OrderStatus,
       totalAmountRial: new Decimal(row.totalAmountRial.toString()),
+      goldAmountRial: new Decimal((row.goldAmountRial ?? row.totalAmountRial).toString()),
+      feeAmountRial: new Decimal((row.feeAmountRial ?? 0).toString()),
       reservedAmountRial: new Decimal(row.reservedAmountRial.toString()),
       weightGrams: new Decimal(row.weightGrams.toString()),
       purityRatio: new Decimal(row.purityRatio.toString()),

@@ -48,8 +48,6 @@ const TYPE_CLASS: Record<string, string> = {
   HOUSEHOLD: 'bg-sky-100 text-sky-800',
   PARTNER: 'bg-amber-100 text-amber-800',
   VIP: 'bg-violet-100 text-violet-800',
-  WHOLESALE: 'bg-orange-100 text-orange-800',
-  CORPORATE: 'bg-slate-100 text-slate-800',
 };
 
 export function TypeBadge({ type }: { type: string | null }) {
@@ -82,8 +80,8 @@ export function Toast({
       role="status"
       className={
         tone === 'error'
-          ? 'fixed bottom-4 left-4 z-50 max-w-sm rounded-lg border border-red-200 bg-white px-4 py-3 text-sm shadow-lg'
-          : 'fixed bottom-4 left-4 z-50 max-w-sm rounded-lg border border-emerald-200 bg-white px-4 py-3 text-sm shadow-lg'
+          ? 'fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-red-200 bg-white px-4 py-3 text-sm shadow-lg'
+          : 'fixed bottom-4 right-4 z-50 max-w-sm rounded-lg border border-emerald-200 bg-white px-4 py-3 text-sm shadow-lg'
       }
     >
       {message}

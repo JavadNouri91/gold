@@ -42,8 +42,6 @@ export enum CustomerType {
   HOUSEHOLD = 'HOUSEHOLD',
   PARTNER = 'PARTNER',
   VIP = 'VIP',
-  WHOLESALE = 'WHOLESALE',
-  CORPORATE = 'CORPORATE',
 }
 
 export enum CustomerGender {
@@ -160,6 +158,27 @@ export enum AdjustmentMode {
 export enum AdjustmentDirection {
   INCREASE = 'INCREASE',
   DECREASE = 'DECREASE',
+}
+
+export enum TradeSide {
+  BUY = 'BUY',
+  SELL = 'SELL',
+}
+
+export enum FeeMode {
+  NONE = 'NONE',
+  FIXED = 'FIXED',
+  PERCENTAGE = 'PERCENTAGE',
+}
+
+export enum FeeCalculationBase {
+  GOLD_VALUE_STEP4 = 'GOLD_VALUE_STEP4',
+  AFTER_GROUP_RULE_STEP5 = 'AFTER_GROUP_RULE_STEP5',
+  GOLD_COMMERCIAL_TOTAL = 'GOLD_COMMERCIAL_TOTAL',
+}
+
+export enum FeeChargeCode {
+  TRANSACTION_FEE = 'TRANSACTION_FEE',
 }
 
 export enum LedgerDirection {

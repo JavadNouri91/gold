@@ -16,18 +16,15 @@ import { PriceSnapshotRepository } from './infrastructure/repositories/price-sna
 import { PriceAdjustmentRepository } from './infrastructure/repositories/price-adjustment.repository';
 import { PricingRuleRepository } from './infrastructure/repositories/pricing-rule.repository';
 import { PricingCalculationRepository } from './infrastructure/repositories/pricing-calculation.repository';
+import { FeePolicyRepository } from './infrastructure/repositories/fee-policy.repository';
+import { TransactionFeeService } from './application/transaction-fee.service';
 
 @Module({
   controllers: [PricingController],
   providers: [
-    // ?? Application layer ??????????????????????????????????
     PricingService,
     PricingEngineService,
-
-    // ?? Provider port � swap for real adapter in production ?
-    // When �13.1 is resolved and a real provider is selected:
-    //   Replace MockPriceProviderAdapter with the concrete adapter
-    //   Replace MockPriceNormalizerAdapter with the correct normalizer
+    TransactionFeeService,
     {
       provide: PRICE_PROVIDER_TOKEN,
       useClass: MockPriceProviderAdapter,
@@ -36,19 +33,20 @@ import { PricingCalculationRepository } from './infrastructure/repositories/pric
       provide: PRICE_NORMALIZER_TOKEN,
       useClass: MockPriceNormalizerAdapter,
     },
-
-    // ?? Repositories ???????????????????????????????????????
     PriceSourceRepository,
     PriceSnapshotRepository,
     PriceAdjustmentRepository,
     PricingRuleRepository,
     PricingCalculationRepository,
+    FeePolicyRepository,
   ],
   exports: [
     PricingService,
     PricingEngineService,
+    TransactionFeeService,
     PriceSnapshotRepository,
     PricingCalculationRepository,
+    FeePolicyRepository,
   ],
 })
 export class PricingModule {}

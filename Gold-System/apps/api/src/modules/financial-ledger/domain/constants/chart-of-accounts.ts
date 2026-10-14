@@ -157,10 +157,18 @@ export const FINANCIAL_ACCOUNTS: Record<string, AccountDefinition> = {
     // Note: sub-categories OPEN — docs/21-business-decisions.md §13.5
     // FA-15 is confirmed; sub-categories not yet defined.
   },
+  'FA-16': {
+    code: 'FA-16',
+    name: 'Transaction Fee Income',
+    nameFa: 'درآمد کارمزد معامله',
+    type: AccountType.REVENUE,
+    active: true,
+    // Customer-type BUY/SELL fees (separate from wage/اجرت). See feature plan.
+  },
 } as const;
 
 /** Wage Income account is explicitly NOT required for molten gold MVP. §1.6 */
-// No FA-16 or Wage Income account — deliberately excluded
+// Wage is folded into Sales Revenue when configured; FA-16 is transaction fee income only.
 
 /**
  * Retrieves an account definition by code.

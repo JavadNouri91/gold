@@ -130,6 +130,8 @@ export class TradeRepository {
       pricingCalculationId: string;
       status: TradeStatus;
       totalAmountRial: Decimal;
+      goldAmountRial: Decimal;
+      feeAmountRial: Decimal;
       weightGrams: Decimal;
       purityRatio: Decimal;
       unitPriceRial: Decimal;
@@ -162,6 +164,8 @@ export class TradeRepository {
         pricingCalculationId: data.pricingCalculationId,
         status: data.status,
         totalAmountRial: data.totalAmountRial,
+        goldAmountRial: data.goldAmountRial,
+        feeAmountRial: data.feeAmountRial,
         weightGrams: data.weightGrams,
         purityRatio: data.purityRatio,
         unitPriceRial: data.unitPriceRial,
@@ -204,6 +208,8 @@ export class TradeRepository {
       pricingCalculationId: row.pricingCalculationId,
       status: row.status as TradeStatus,
       totalAmountRial: new Decimal(row.totalAmountRial.toString()),
+      goldAmountRial: new Decimal((row.goldAmountRial ?? row.totalAmountRial).toString()),
+      feeAmountRial: new Decimal((row.feeAmountRial ?? 0).toString()),
       weightGrams: new Decimal(row.weightGrams.toString()),
       purityRatio: new Decimal(row.purityRatio.toString()),
       unitPriceRial: new Decimal(row.unitPriceRial.toString()),

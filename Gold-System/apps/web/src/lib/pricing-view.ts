@@ -1,4 +1,4 @@
-import type { PricingCalculationResult } from '@/lib/api';
+import type { PricingCalculationResult, PricingChargeLine } from '@/lib/api';
 import { compareDecimal, isZeroDecimal, subtractDecimal } from '@/lib/decimal-string';
 
 /** Display fields taken from the pricing pipeline. No client-side price formula. */
@@ -16,7 +16,16 @@ export interface PricingView {
   taxAmount: string | null;
   discountAmount: string | null;
   roundingAmount: string | null;
+  /** Gold commercial (pipeline.finalPrice) — excludes transaction fees */
   finalPrice: string;
+  charges: PricingChargeLine[];
+  feeTotalRial: string;
+  goldCommercialRial: string;
+  /** BUY payable / SELL receivable */
+  customerTotalRial: string;
+  payableRial: string | null;
+  receivableRial: string | null;
+  side: 'BUY' | 'SELL';
 }
 
 function presentAmount(value: string | null | undefined): string | null {
@@ -26,6 +35,10 @@ function presentAmount(value: string | null | undefined): string | null {
 
 export function toPricingView(result: PricingCalculationResult): PricingView {
   const goldValue = result.pipeline.step4_afterWeight;
+  const goldCommercial =
+    result.goldCommercialRial ?? result.pipeline.finalPrice;
+  const customerTotal =
+    result.customerTotalRial ?? result.pipeline.finalPrice;
   return {
     calculationId: result.calculationId,
     snapshotId: result.meta.snapshotId,
@@ -41,6 +54,13 @@ export function toPricingView(result: PricingCalculationResult): PricingView {
     discountAmount: presentAmount(result.pipeline.discountAmount),
     roundingAmount: presentAmount(result.pipeline.roundingAmount),
     finalPrice: result.pipeline.finalPrice,
+    charges: (result.charges ?? []).filter((c) => !isZeroDecimal(c.amount)),
+    feeTotalRial: result.feeTotalRial ?? '0.00',
+    goldCommercialRial: goldCommercial,
+    customerTotalRial: customerTotal,
+    payableRial: result.payableRial ?? null,
+    receivableRial: result.receivableRial ?? null,
+    side: result.side ?? 'BUY',
   };
 }
 

@@ -31,6 +31,7 @@ import { CustomerActivityService } from './application/customer-activity.service
 import { OrderRepository } from './infrastructure/repositories/order.repository';
 import { CustomerAccountRepository } from '../customer-accounts/infrastructure/repositories/customer-account.repository';
 import { PricingEngineService } from '../pricing/application/pricing-engine.service';
+import { TransactionFeeService } from '../pricing/application/transaction-fee.service';
 import { AuditService } from '../audit/application/audit.service';
 import { NotificationService } from '../notifications/application/notification.service';
 import { TradingPolicyService } from '../trading-policy/application/trading-policy.service';
@@ -97,6 +98,8 @@ function makeOrder(
     pricingCalculationId: PRICING_CALC_ID,
     status: overrides.status ?? OrderStatus.DRAFT,
     totalAmountRial: overrides.totalAmountRial ?? TOTAL_AMOUNT,
+    goldAmountRial: overrides.totalAmountRial ?? TOTAL_AMOUNT,
+    feeAmountRial: new Decimal(0),
     reservedAmountRial: overrides.reservedAmountRial ?? new Decimal(0),
     weightGrams: overrides.weightGrams ?? new Decimal('10'),
     purityRatio: overrides.purityRatio ?? new Decimal('0.750'),
@@ -235,6 +238,28 @@ describe('OrdersService', () => {
         {
           provide: PricingEngineService,
           useValue: { calculate: jest.fn() },
+        },
+        {
+          provide: TransactionFeeService,
+          useValue: {
+            compute: jest.fn().mockImplementation(
+              async (
+                _type: unknown,
+                side: string,
+                bases: { goldCommercialRial: Decimal },
+              ) => ({
+                side,
+                goldCommercialRial: bases.goldCommercialRial,
+                charges: [],
+                feeTotalRial: new Decimal(0),
+                customerTotalRial: bases.goldCommercialRial,
+                payableRial: side === 'BUY' ? bases.goldCommercialRial : null,
+                receivableRial: side === 'SELL' ? bases.goldCommercialRial : null,
+              }),
+            ),
+            persistSnapshots: jest.fn().mockResolvedValue(undefined),
+            listSnapshotsForOrder: jest.fn().mockResolvedValue([]),
+          },
         },
         {
           provide: AuditService,

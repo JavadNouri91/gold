@@ -72,21 +72,27 @@ describe('weight input', () => {
       { label: '۸۰ میلیون', rial: '800000000' },
       { label: '۱۰۰ میلیون', rial: '1000000000' },
     ]);
-    // Uneven fifths floor each slice to a whole million toman.
-    expect(quickTomanStepsFromRial('1370000000')).toEqual([
-      { label: '۲۷ میلیون', rial: '270000000' },
-      { label: '۵۴ میلیون', rial: '540000000' },
-      { label: '۸۲ میلیون', rial: '820000000' },
-      { label: '۱۰۹ میلیون', rial: '1090000000' },
-      { label: '۱۳۷ میلیون', rial: '1370000000' },
+    // ≥۱۰ میلیون → floor to a multiple of ۱۰ میلیون (۱۰۳ → ۱۰۰).
+    expect(quickTomanStepsFromRial('1030000000')).toEqual([
+      { label: '۲۰ میلیون', rial: '200000000' },
+      { label: '۴۰ میلیون', rial: '400000000' },
+      { label: '۶۰ میلیون', rial: '600000000' },
+      { label: '۸۰ میلیون', rial: '800000000' },
+      { label: '۱۰۰ میلیون', rial: '1000000000' },
     ]);
-    // 3,165,200 toman fifth → «۳ میلیون».
+    expect(quickTomanStepsFromRial('1370000000')).toEqual([
+      { label: '۲۰ میلیون', rial: '200000000' },
+      { label: '۵۰ میلیون', rial: '500000000' },
+      { label: '۸۰ میلیون', rial: '800000000' },
+      { label: '۱۰۰ میلیون', rial: '1000000000' },
+      { label: '۱۳۰ میلیون', rial: '1300000000' },
+    ]);
+    // Below ۱۰ میلیون keep whole millions (۳٬۱۶۵٬۲۰۰ → ۳).
     expect(quickTomanStepsFromRial('158260000')).toEqual([
       { label: '۳ میلیون', rial: '30000000' },
       { label: '۶ میلیون', rial: '60000000' },
       { label: '۹ میلیون', rial: '90000000' },
-      { label: '۱۲ میلیون', rial: '120000000' },
-      { label: '۱۵ میلیون', rial: '150000000' },
+      { label: '۱۰ میلیون', rial: '100000000' },
     ]);
     expect(quickTomanStepsFromRial('5000000')).toEqual([]);
     expect(quickTomanStepsFromRial('0')).toEqual([]);

@@ -14,7 +14,7 @@ import {
  *                          └→ REJECTED
  *   ACTIVE  → SUSPENDED | BLOCKED
  *
- * BR-C02: type ∈ {HOUSEHOLD, PARTNER, VIP, WHOLESALE, CORPORATE}
+ * BR-C02: type ∈ {HOUSEHOLD, PARTNER, VIP}
  * BR-C03: type changes must be audited
  */
 export class CustomerEntity {

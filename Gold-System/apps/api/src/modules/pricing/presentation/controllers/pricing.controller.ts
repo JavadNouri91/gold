@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -15,9 +16,13 @@ import { PricingService } from '../../application/pricing.service';
 import { CalculatePriceDto } from '../../application/dto/calculate-price.dto';
 import { CreatePricingRuleDto } from '../../application/dto/create-pricing-rule.dto';
 import { CreatePriceAdjustmentDto } from '../../application/dto/create-price-adjustment.dto';
+import {
+  CreateFeePolicyDto,
+  UpdateFeePolicyDto,
+} from '../../application/dto/create-fee-policy.dto';
 import { RequirePermissions } from '../../../../common/decorators/permissions.decorator';
 import { CurrentUser, CurrentUserData } from '../../../../common/decorators/current-user.decorator';
-import { CustomerType } from '@gold/shared-types';
+import { CustomerType, TradeSide } from '@gold/shared-types';
 
 @ApiTags('pricing')
 @ApiBearerAuth()
@@ -64,7 +69,7 @@ export class PricingController {
     @CurrentUser() user: CurrentUserData,
     @Req() req: Request,
   ) {
-    return this.service.calculate(dto, user.userId, req.ip ?? undefined);
+    return this.service.calculate(dto, user, req.ip ?? undefined);
   }
 
   // ── Get calculation by ID (for Order/Quotation reference) ────────────────
@@ -107,5 +112,35 @@ export class PricingController {
   @ApiOperation({ summary: 'Create a global seller price adjustment (+/- % or fixed)' })
   createAdjustment(@Body() dto: CreatePriceAdjustmentDto, @CurrentUser() user: CurrentUserData) {
     return this.service.createAdjustment(dto, user.userId);
+  }
+
+  // ── Customer-type BUY/SELL fee policies ───────────────────────────────────
+  @Get('fee-policies')
+  @RequirePermissions('pricing.fees.manage')
+  @ApiOperation({ summary: 'List customer-type BUY/SELL transaction fee policies' })
+  listFeePolicies(
+    @Query('customerType') customerType?: CustomerType,
+    @Query('side') side?: TradeSide,
+  ) {
+    return this.service.listFeePolicies({ customerType, side });
+  }
+
+  @Post('fee-policies')
+  @HttpCode(HttpStatus.CREATED)
+  @RequirePermissions('pricing.fees.manage')
+  @ApiOperation({ summary: 'Create a customer-type BUY/SELL transaction fee policy' })
+  createFeePolicy(@Body() dto: CreateFeePolicyDto, @CurrentUser() user: CurrentUserData) {
+    return this.service.createFeePolicy(dto, user.userId);
+  }
+
+  @Patch('fee-policies/:id')
+  @RequirePermissions('pricing.fees.manage')
+  @ApiOperation({ summary: 'Update a customer-type fee policy' })
+  updateFeePolicy(
+    @Param('id') id: string,
+    @Body() dto: UpdateFeePolicyDto,
+    @CurrentUser() user: CurrentUserData,
+  ) {
+    return this.service.updateFeePolicy(id, dto, user.userId);
   }
 }

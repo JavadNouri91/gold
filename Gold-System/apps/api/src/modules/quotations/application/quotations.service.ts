@@ -26,6 +26,8 @@ export interface GenerateQuotationInput {
   customerType: string | null;
   pricingCalculationId: string;
   totalAmountRial: Decimal;
+  goldAmountRial: Decimal;
+  feeAmountRial: Decimal;
   weightGrams: Decimal;
   purityRatio: Decimal;
   /** From PricingCalculation.step1BasePrice */
@@ -151,6 +153,8 @@ export class QuotationsService {
         pricingCalculationId: input.pricingCalculationId,
         version: 1,
         totalAmountRial: input.totalAmountRial,
+        goldAmountRial: input.goldAmountRial,
+        feeAmountRial: input.feeAmountRial,
         weightGrams: input.weightGrams,
         purityRatio: input.purityRatio,
         step1BasePrice: input.step1BasePrice,

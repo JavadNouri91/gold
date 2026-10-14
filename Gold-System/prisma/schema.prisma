@@ -83,6 +83,7 @@ model User {
   validatedPayments  Payment[]           @relation("PaymentValidatedBy")
   priceAdjustments   PriceAdjustment[]   @relation("AdjustmentActor")
   pricingRules       PricingRule[]       @relation("PricingRuleActor")
+  feePolicies        CustomerTypeFeePolicy[] @relation("FeePolicyActor")
   cancelledPurchases Purchase[]          @relation("PurchaseCancelledBy")
   confirmedPurchases Purchase[]          @relation("PurchaseConfirmedBy")
   recordedPurchases  Purchase[]          @relation("PurchaseRecordedBy")
@@ -461,6 +462,53 @@ model PricingRule {
   @@map("pricing_rules")
 }
 
+/// Independent BUY/SELL transaction fee policy per customer type (not wage).
+model CustomerTypeFeePolicy {
+  id               String              @id @default(cuid())
+  customerType     CustomerType?       @map("customer_type")
+  side             TradeSide
+  code             FeeChargeCode       @default(TRANSACTION_FEE)
+  labelFa          String              @default("کارمزد معامله") @map("label_fa")
+  mode             FeeMode             @default(NONE)
+  value            Decimal             @default(0) @db.Decimal(20, 6)
+  calculationBase  FeeCalculationBase? @map("calculation_base")
+  enabled          Boolean             @default(true)
+  priority         Int                 @default(0)
+  activeFrom       DateTime            @map("active_from")
+  activeTo         DateTime?           @map("active_to")
+  status           String              @default("ACTIVE")
+  createdBy        String?             @map("created_by")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
+  actor            User?               @relation("FeePolicyActor", fields: [createdBy], references: [id])
+
+  @@index([customerType, side])
+  @@index([status])
+  @@index([activeFrom])
+  @@map("customer_type_fee_policies")
+}
+
+/// Immutable per-order charge line (fees etc.) locked at order create.
+model TransactionChargeSnapshot {
+  id               String              @id @default(cuid())
+  orderId          String              @map("order_id")
+  code             FeeChargeCode       @default(TRANSACTION_FEE)
+  labelFa          String              @map("label_fa")
+  side             TradeSide
+  mode             FeeMode
+  rateValue        Decimal             @default(0) @map("rate_value") @db.Decimal(20, 6)
+  calculationBase  FeeCalculationBase? @map("calculation_base")
+  baseAmount       Decimal             @default(0) @map("base_amount") @db.Decimal(20, 2)
+  amount           Decimal             @db.Decimal(20, 2)
+  policyId         String?             @map("policy_id")
+  sortOrder        Int                 @default(0) @map("sort_order")
+  createdAt        DateTime            @default(now()) @map("created_at")
+  order            Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@map("transaction_charge_snapshots")
+}
+
 model PricingCalculation {
   id                     String           @id @default(cuid())
   referenceType          String?          @map("reference_type")
@@ -509,6 +557,10 @@ model Order {
   pricingCalculationId String?             @unique @map("pricing_calculation_id")
   status               OrderStatus         @default(DRAFT)
   totalAmountRial      Decimal             @map("total_amount_rial") @db.Decimal(20, 2)
+  /// Gold commercial = PricingCalculation.finalPrice (excludes transaction fees)
+  goldAmountRial       Decimal             @default(0) @map("gold_amount_rial") @db.Decimal(20, 2)
+  /// Sum of transaction fees (BUY: added; SELL: deducted from gold)
+  feeAmountRial        Decimal             @default(0) @map("fee_amount_rial") @db.Decimal(20, 2)
   reservedAmountRial   Decimal             @default(0) @map("reserved_amount_rial") @db.Decimal(20, 2)
   weightGrams          Decimal             @map("weight_grams") @db.Decimal(12, 6)
   purityRatio          Decimal             @map("purity_ratio") @db.Decimal(8, 6)
@@ -524,6 +576,7 @@ model Order {
   updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
   assignments          Assignment[]
   items                OrderItem[]
+  chargeSnapshots      TransactionChargeSnapshot[]
   cancelledByUser      User?               @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id])
   customerAccount      CustomerAccount     @relation(fields: [customerAccountId], references: [id])
   customer             Customer            @relation(fields: [customerId], references: [id])
@@ -564,6 +617,8 @@ model Quotation {
   version              Int                @default(1)
   status               QuotationStatus    @default(ACTIVE)
   totalAmountRial      Decimal            @map("total_amount_rial") @db.Decimal(20, 2)
+  goldAmountRial       Decimal            @default(0) @map("gold_amount_rial") @db.Decimal(20, 2)
+  feeAmountRial        Decimal            @default(0) @map("fee_amount_rial") @db.Decimal(20, 2)
   weightGrams          Decimal            @map("weight_grams") @db.Decimal(12, 6)
   purityRatio          Decimal            @map("purity_ratio") @db.Decimal(8, 6)
   step1BasePrice       Decimal?           @map("step1_base_price") @db.Decimal(20, 6)
@@ -616,6 +671,8 @@ model Trade {
   pricingCalculationId String              @map("pricing_calculation_id")
   status               TradeStatus         @default(CONFIRMED)
   totalAmountRial      Decimal             @map("total_amount_rial") @db.Decimal(20, 2)
+  goldAmountRial       Decimal             @default(0) @map("gold_amount_rial") @db.Decimal(20, 2)
+  feeAmountRial        Decimal             @default(0) @map("fee_amount_rial") @db.Decimal(20, 2)
   weightGrams          Decimal             @map("weight_grams") @db.Decimal(12, 6)
   purityRatio          Decimal             @map("purity_ratio") @db.Decimal(8, 6)
   unitPriceRial        Decimal             @map("unit_price_rial") @db.Decimal(20, 6)
@@ -1086,6 +1143,27 @@ enum RoundingMethod {
 enum GroupAdjMode {
   NONE
   PERCENTAGE
+}
+
+enum TradeSide {
+  BUY
+  SELL
+}
+
+enum FeeMode {
+  NONE
+  FIXED
+  PERCENTAGE
+}
+
+enum FeeCalculationBase {
+  GOLD_VALUE_STEP4
+  AFTER_GROUP_RULE_STEP5
+  GOLD_COMMERCIAL_TOTAL
+}
+
+enum FeeChargeCode {
+  TRANSACTION_FEE
 }
 
 enum SupplierStatus {

@@ -11,8 +11,9 @@ const MILLION = 1_000_000n;
 
 /**
  * Five rounded slices of available credit for buy-tab quick amounts:
- * 20%, 40%, 60%, 80%, and 100% of the balance, each floored to a whole million toman.
- * Example: 3,165,200 → «۳ میلیون».
+ * 20%, 40%, 60%, 80%, and 100% of the balance.
+ * Floors to whole millions, then for ≥۱۰ میلیون floors to a multiple of ۱۰ میلیون
+ * (e.g. ۱۰۳ میلیون → ۱۰۰ میلیون).
  */
 export function quickTomanStepsFromRial(availableRial: string | null | undefined): QuickTomanStep[] {
   if (availableRial == null || isZeroDecimal(availableRial)) return [];
@@ -22,16 +23,16 @@ export function quickTomanStepsFromRial(availableRial: string | null | undefined
   const total = floorWholeToman(toman);
   if (total < MILLION) return [];
 
-  const totalMillions = floorToMillion(total);
-  if (totalMillions < MILLION) return [];
+  const totalRounded = roundQuickToman(total);
+  if (totalRounded < MILLION) return [];
 
   const seen = new Set<string>();
   const steps: QuickTomanStep[] = [];
   for (let n = 1; n <= 5; n += 1) {
     const raw = n === 5 ? total : (total * BigInt(n)) / 5n;
-    const rounded = floorToMillion(raw);
+    const rounded = roundQuickToman(raw);
     if (rounded < MILLION) continue;
-    const capped = rounded > totalMillions ? totalMillions : rounded;
+    const capped = rounded > totalRounded ? totalRounded : rounded;
     const tomanWhole = capped.toString();
     if (seen.has(tomanWhole)) continue;
     seen.add(tomanWhole);
@@ -50,10 +51,15 @@ function floorWholeToman(toman: string): bigint {
   return BigInt(intPart || '0');
 }
 
-/** Drop amounts below one million toman (e.g. 3,165,200 → 3,000,000). */
-function floorToMillion(toman: bigint): bigint {
+/**
+ * Floor to a whole million, then for amounts ≥ ۱۰ میلیون floor the million-count
+ * to a multiple of ۱۰ so chips stay round (۱۰۳ → ۱۰۰).
+ */
+function roundQuickToman(toman: bigint): bigint {
   if (toman < MILLION) return 0n;
-  return (toman / MILLION) * MILLION;
+  const millions = toman / MILLION;
+  if (millions < 10n) return millions * MILLION;
+  return (millions / 10n) * 10n * MILLION;
 }
 
 /** Compact chip label: whole millions as «X میلیون». */

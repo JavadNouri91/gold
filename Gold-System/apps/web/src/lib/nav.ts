@@ -18,6 +18,7 @@ import {
   Bell,
   Clock,
   Shield,
+  Percent,
 } from 'lucide-react';
 import { hasPermission } from './permissions';
 
@@ -155,6 +156,13 @@ export const DASHBOARD_NAV: NavItem[] = [
     label: 'اعلان‌ها',
     icon: Bell,
     anyOf: [],
+    group: 'سیستم',
+  },
+  {
+    href: '/dashboard/settings/fees',
+    label: 'کارمزد معاملات',
+    icon: Percent,
+    anyOf: ['pricing.fees.manage'],
     group: 'سیستم',
   },
   {

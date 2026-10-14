@@ -111,6 +111,8 @@ export class QuotationRepository {
       pricingCalculationId: string;
       version: number;
       totalAmountRial: Decimal;
+      goldAmountRial: Decimal;
+      feeAmountRial: Decimal;
       weightGrams: Decimal;
       purityRatio: Decimal;
       step1BasePrice: Decimal | null;
@@ -138,6 +140,8 @@ export class QuotationRepository {
         version: data.version,
         status: 'ACTIVE',
         totalAmountRial: data.totalAmountRial,
+        goldAmountRial: data.goldAmountRial,
+        feeAmountRial: data.feeAmountRial,
         weightGrams: data.weightGrams,
         purityRatio: data.purityRatio,
         step1BasePrice: data.step1BasePrice ?? undefined,
@@ -207,6 +211,8 @@ export class QuotationRepository {
       version: row.version,
       status: row.status as QuotationStatus,
       totalAmountRial: new Decimal(row.totalAmountRial.toString()),
+      goldAmountRial: new Decimal((row.goldAmountRial ?? row.totalAmountRial).toString()),
+      feeAmountRial: new Decimal((row.feeAmountRial ?? 0).toString()),
       weightGrams: new Decimal(row.weightGrams.toString()),
       purityRatio: new Decimal(row.purityRatio.toString()),
       step1BasePrice: row.step1BasePrice ? new Decimal(row.step1BasePrice.toString()) : null,
@@ -234,6 +240,8 @@ export class QuotationRepository {
       version: row.version,
       status: row.status as QuotationStatus,
       totalAmountRial: new Decimal(row.totalAmountRial.toString()),
+      goldAmountRial: new Decimal((row.goldAmountRial ?? row.totalAmountRial).toString()),
+      feeAmountRial: new Decimal((row.feeAmountRial ?? 0).toString()),
       weightGrams: new Decimal(row.weightGrams.toString()),
       purityRatio: new Decimal(row.purityRatio.toString()),
       step1BasePrice: row.step1BasePrice ? new Decimal(row.step1BasePrice.toString()) : null,

@@ -143,7 +143,7 @@ export default function OrderDetailPage() {
               {activity.unitPriceRial ? (
                 <DetailRow label="قیمت واحد" value={`${formatMoney(activity.unitPriceRial)} / گرم`} />
               ) : null}
-              {activity.wageAmount ? <DetailRow label="کارمزد" value={formatMoney(activity.wageAmount)} /> : null}
+              {activity.wageAmount ? <DetailRow label="اجرت" value={formatMoney(activity.wageAmount)} /> : null}
               {activity.taxAmount ? <DetailRow label="مالیات" value={formatMoney(activity.taxAmount)} /> : null}
               <DetailRow label="مبلغ نهایی" value={formatMoney(activity.totalAmountRial)} />
               <DetailRow label="وزن" value={formatWeight(activity.weightGrams)} />

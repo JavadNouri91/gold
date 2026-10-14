@@ -76,7 +76,6 @@ interface Filters {
   verificationStatus: string;
   page: number;
   limit: number;
-  more: boolean;
 }
 
 const EMPTY_FILTERS: Filters = {
@@ -88,7 +87,6 @@ const EMPTY_FILTERS: Filters = {
   verificationStatus: '',
   page: 1,
   limit: 10,
-  more: false,
 };
 
 function parseFilters(params: URLSearchParams): Filters {
@@ -103,7 +101,6 @@ function parseFilters(params: URLSearchParams): Filters {
     verificationStatus: params.get('verificationStatus') ?? '',
     page: Number.isFinite(page) && page > 0 ? page : 1,
     limit: [10, 20, 50].includes(limit) ? limit : 10,
-    more: params.get('more') === '1',
   };
 }
 
@@ -122,7 +119,6 @@ function writeFilters(filters: Filters): string {
   }
   if (filters.page > 1) query.set('page', String(filters.page));
   if (filters.limit !== 10) query.set('limit', String(filters.limit));
-  if (filters.more) query.set('more', '1');
   const text = query.toString();
   return text ? `/dashboard/customers?${text}` : '/dashboard/customers';
 }
@@ -156,10 +152,10 @@ function SelectFilter({
   items: Array<{ value: string; label: string }>;
 }) {
   return (
-    <label className="space-y-1 text-sm">
-      <span className="font-medium">{label}</span>
+    <label className="min-w-[8.5rem] flex-1 space-y-1 text-sm">
+      <span className="block whitespace-nowrap font-medium">{label}</span>
       <select
-        className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+        className="h-10 w-full min-w-0 rounded-md border border-input bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
         value={value}
         onChange={(event) => onChange(event.target.value)}
       >
@@ -180,7 +176,6 @@ export function CustomerDirectory() {
   const searchParams = useSearchParams();
   const applied = useMemo(() => parseFilters(searchParams), [searchParams]);
   const [draft, setDraft] = useState(applied);
-  const [more, setMore] = useState(applied.more);
   const [visible, setVisible] = useState<ColumnKey[]>([...ALL_COLUMNS]);
   const [selected, setSelected] = useState<string[]>([]);
   const [menuId, setMenuId] = useState<string | null>(null);
@@ -205,12 +200,10 @@ export function CustomerDirectory() {
     applied.segment,
     applied.financialStatus,
     applied.verificationStatus,
-    applied.more,
   ].join('\0');
 
   useEffect(() => {
     setDraft(appliedRef.current);
-    setMore(appliedRef.current.more);
   }, [filterKey]);
 
   useEffect(() => {
@@ -265,10 +258,17 @@ export function CustomerDirectory() {
       searchTimer.current = null;
     }
     const search = next.search.trim();
+    const resolved = { ...next, search };
+    appliedRef.current = resolved;
     pushedSearch.current = search;
+    setDraft(resolved);
     setSearchText(search);
     setSelected([]);
-    router.replace(writeFilters({ ...next, search }));
+    router.replace(writeFilters(resolved));
+  };
+
+  const applySelect = (patch: Partial<Filters>) => {
+    go({ ...appliedRef.current, ...patch, search: searchText, page: 1 });
   };
 
   if (!allowed) return <ForbiddenNotice permission="customer.read" />;
@@ -519,61 +519,43 @@ export function CustomerDirectory() {
         })}
       </div>
 
-      <form
-        className="space-y-3 rounded-xl border bg-white p-4"
-        onSubmit={(event) => {
-          event.preventDefault();
-          go({ ...draft, search: searchText, more, page: 1, limit: applied.limit });
-        }}
-      >
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
-          <Input
-            label="جستجو"
-            placeholder="نام، موبایل، کد ملی یا کد مشتری"
-            value={toPersianDigits(searchText)}
-            hint={
-              searchText.trim() !== applied.search.trim() || (list.isValidating && Boolean(applied.search.trim()))
-                ? 'در حال جستجو…'
-                : undefined
-            }
-            onChange={(event) => setSearchText(toLatinDigits(event.target.value))}
-          />
-          <SelectFilter label="نوع مشتری" value={draft.type} onChange={(type) => setDraft({ ...draft, type })} items={options(CUSTOMER_TYPE_LABELS)} />
-          <SelectFilter label="وضعیت مشتری" value={draft.accountStatus} onChange={(accountStatus) => setDraft({ ...draft, accountStatus })} items={options(CUSTOMER_ACCOUNT_STATUS_LABELS).filter((item) => item.value !== 'DEBTOR')} />
-          <SelectFilter label="سطح مشتری" value={draft.segment} onChange={(segment) => setDraft({ ...draft, segment })} items={options(CUSTOMER_SEGMENT_LABELS)} />
-          {canFinance ? (
-            <SelectFilter label="وضعیت مالی" value={draft.financialStatus} onChange={(financialStatus) => setDraft({ ...draft, financialStatus })} items={options(CUSTOMER_FINANCIAL_LABELS)} />
-          ) : null}
-        </div>
-        {more ? (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-            <SelectFilter
-              label="وضعیت احراز"
-              value={draft.verificationStatus}
-              onChange={(verificationStatus) => setDraft({ ...draft, verificationStatus })}
-              items={options(CUSTOMER_VERIFICATION_LABELS)}
+      <div className="rounded-xl border bg-white p-4">
+        <div className="flex items-end gap-2 overflow-x-auto">
+          <div className="min-w-[12rem] flex-[1.4]">
+            <Input
+              label="جستجو"
+              placeholder="نام، موبایل، کد ملی یا کد مشتری"
+              value={toPersianDigits(searchText)}
+              hint={
+                searchText.trim() !== applied.search.trim() || (list.isValidating && Boolean(applied.search.trim()))
+                  ? 'در حال جستجو…'
+                  : undefined
+              }
+              onChange={(event) => setSearchText(toLatinDigits(event.target.value))}
             />
           </div>
-        ) : null}
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="button" variant="outline" onClick={() => setMore((current) => !current)}>
-            فیلترهای بیشتر
-          </Button>
-          <Button type="submit">اعمال فیلتر</Button>
+          <SelectFilter label="نوع مشتری" value={draft.type} onChange={(type) => applySelect({ type })} items={options(CUSTOMER_TYPE_LABELS)} />
+          <SelectFilter label="وضعیت مشتری" value={draft.accountStatus} onChange={(accountStatus) => applySelect({ accountStatus })} items={options(CUSTOMER_ACCOUNT_STATUS_LABELS).filter((item) => item.value !== 'DEBTOR')} />
+          <SelectFilter label="سطح مشتری" value={draft.segment} onChange={(segment) => applySelect({ segment })} items={options(CUSTOMER_SEGMENT_LABELS)} />
+          {canFinance ? (
+            <SelectFilter label="وضعیت مالی" value={draft.financialStatus} onChange={(financialStatus) => applySelect({ financialStatus })} items={options(CUSTOMER_FINANCIAL_LABELS)} />
+          ) : null}
+          <SelectFilter
+            label="وضعیت احراز"
+            value={draft.verificationStatus}
+            onChange={(verificationStatus) => applySelect({ verificationStatus })}
+            items={options(CUSTOMER_VERIFICATION_LABELS)}
+          />
           <Button
             type="button"
             variant="outline"
-            onClick={() => {
-              setDraft(EMPTY_FILTERS);
-              setMore(false);
-              setSearchText('');
-              go(EMPTY_FILTERS);
-            }}
+            className="shrink-0"
+            onClick={() => go(EMPTY_FILTERS)}
           >
             پاک کردن
           </Button>
         </div>
-      </form>
+      </div>
 
       {selected.length ? (
         <p className="text-sm text-muted-foreground">{selected.length.toLocaleString('fa-IR')} مشتری در این صفحه انتخاب شده است.</p>

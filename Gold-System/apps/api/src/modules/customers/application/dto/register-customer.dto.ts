@@ -130,7 +130,7 @@ export class RegisterCustomerDto {
   @IsEnum(CustomerAccountStatus)
   initialAccountStatus?: CustomerAccountStatus;
 
-  // ── Company / corporate fields (only for type = CORPORATE) ──────────────────
+  // ── Company fields (legacy; no longer selectable as a customer type) ─────────
 
   @ApiPropertyOptional({ description: 'Company name (for corporate customers)' })
   @IsOptional()

@@ -1,6 +1,6 @@
 import { IsString, IsOptional, IsEnum, Matches } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { CustomerType } from '@gold/shared-types';
+import { CustomerType, TradeSide } from '@gold/shared-types';
 
 /**
  * DTO for price calculation request.
@@ -57,4 +57,14 @@ export class CalculatePriceDto {
     message: 'orderLevelDiscountAmount must be a positive numeric string',
   })
   orderLevelDiscountAmount?: string;
+
+  @ApiPropertyOptional({
+    description:
+      'Trade side for customer-type transaction fees. Defaults to BUY. Does not change gold pricing pipeline.',
+    enum: TradeSide,
+    default: TradeSide.BUY,
+  })
+  @IsOptional()
+  @IsEnum(TradeSide)
+  side?: TradeSide;
 }

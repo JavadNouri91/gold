@@ -541,6 +541,17 @@ export interface CurrentPrice {
   ttlSeconds?: number | null;
 }
 
+export interface PricingChargeLine {
+  code: string;
+  labelFa: string;
+  side: string;
+  mode: string;
+  rateValue: string;
+  calculationBase: string | null;
+  baseAmount: string;
+  amount: string;
+}
+
 /** Canonical calculate response from PricingService. */
 export interface PricingCalculationResult {
   calculationId: string;
@@ -556,8 +567,16 @@ export interface PricingCalculationResult {
     discountAmount: string;
     priceBeforeRounding: string;
     roundingAmount: string;
+    /** Gold commercial — excludes transaction fees */
     finalPrice: string;
   };
+  charges: PricingChargeLine[];
+  goldCommercialRial: string;
+  feeTotalRial: string;
+  customerTotalRial: string;
+  payableRial: string | null;
+  receivableRial: string | null;
+  side: 'BUY' | 'SELL';
   isComplete: boolean;
   blockedSteps: string[];
   meta: {
@@ -570,6 +589,22 @@ export interface PricingCalculationResult {
   };
 }
 
+export interface FeePolicy {
+  id: string;
+  customerType: string | null;
+  side: 'BUY' | 'SELL';
+  code: string;
+  labelFa: string;
+  mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
+  value: string;
+  calculationBase: string | null;
+  enabled: boolean;
+  priority: number;
+  activeFrom: string;
+  activeTo: string | null;
+  status: string;
+}
+
 export const pricingApi = {
   getCurrentPrice(): Promise<CurrentPrice> {
     return request('/pricing/current-price');
@@ -580,10 +615,59 @@ export const pricingApi = {
     purityRatio: string;
     customerType?: string;
     priceSnapshotId?: string;
+    side?: 'BUY' | 'SELL';
   }): Promise<PricingCalculationResult> {
     return request('/pricing/calculate', {
       method: 'POST',
       body: JSON.stringify(input),
+    });
+  },
+
+  listFeePolicies(params?: { customerType?: string; side?: string }): Promise<FeePolicy[]> {
+    const q = new URLSearchParams();
+    if (params?.customerType) q.set('customerType', params.customerType);
+    if (params?.side) q.set('side', params.side);
+    const qs = q.toString();
+    return request(`/pricing/fee-policies${qs ? `?${qs}` : ''}`);
+  },
+
+  createFeePolicy(body: {
+    customerType?: string | null;
+    side: 'BUY' | 'SELL';
+    labelFa?: string;
+    mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
+    value: string;
+    calculationBase?: string | null;
+    enabled?: boolean;
+    priority?: number;
+    activeFrom: string;
+    activeTo?: string;
+  }): Promise<FeePolicy> {
+    return request('/pricing/fee-policies', {
+      method: 'POST',
+      body: JSON.stringify(body),
+    });
+  },
+
+  updateFeePolicy(
+    id: string,
+    body: Partial<{
+      customerType: string | null;
+      side: 'BUY' | 'SELL';
+      labelFa: string;
+      mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
+      value: string;
+      calculationBase: string | null;
+      enabled: boolean;
+      priority: number;
+      activeFrom: string;
+      activeTo: string | null;
+      status: string;
+    }>,
+  ): Promise<FeePolicy> {
+    return request(`/pricing/fee-policies/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
     });
   },
 };
@@ -596,6 +680,8 @@ export interface Order {
   customerId: string;
   status: string;
   totalAmountRial: string;
+  goldAmountRial?: string;
+  feeAmountRial?: string;
   weightGrams: string;
   purityRatio: string;
   customerType?: string;
@@ -606,6 +692,7 @@ export interface Order {
   rejectedAt?: string;
   cancellationReason?: string;
   createdAt: string;
+  charges?: PricingChargeLine[];
 }
 
 export interface CustomerHolding {

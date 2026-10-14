@@ -35,6 +35,8 @@ export class QuotationEntity {
 
   // ── Financial snapshot — immutable once set ───────────────────
   readonly totalAmountRial: Decimal;
+  readonly goldAmountRial: Decimal;
+  readonly feeAmountRial: Decimal;
   readonly weightGrams: Decimal;
   readonly purityRatio: Decimal;
 
@@ -78,6 +80,8 @@ export class QuotationEntity {
     version: number;
     status: QuotationStatus;
     totalAmountRial: Decimal;
+    goldAmountRial: Decimal;
+    feeAmountRial: Decimal;
     weightGrams: Decimal;
     purityRatio: Decimal;
     step1BasePrice: Decimal | null;

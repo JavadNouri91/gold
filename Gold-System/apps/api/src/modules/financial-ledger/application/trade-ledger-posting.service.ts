@@ -115,69 +115,104 @@ export class TradeLedgerPostingService {
       id: string;
       tradeNumber: string;
       totalAmountRial: Decimal;
+      goldAmountRial: Decimal;
+      feeAmountRial: Decimal;
       weightGrams: Decimal;
       purityRatio: Decimal;
       discountAmount: Decimal | null;
       customerId: string;
+      side: 'BUY' | 'SELL';
     },
     actorUserId: string,
   ): Promise<void> {
     const finKey = TradeLedgerPostingService.financialKeyForConfirm(trade.id);
     const goldKey = TradeLedgerPostingService.goldKeyForConfirm(trade.id);
+    const gold = trade.goldAmountRial;
+    const fee = trade.feeAmountRial;
+    const net = trade.totalAmountRial;
+    const selling = trade.side === 'SELL';
 
-    // ─── Financial Ledger Posting ─────────────────────────────────────────────
-    //
-    // Documented posting for Trade Confirmed (docs/14-accounting.md):
-    //   DR FA-02 (Customer Prepaid/Deposit) : totalAmountRial
-    //   CR FA-06 (Sales Revenue)            : totalAmountRial
-    //
-    // BLOCKED: FA-07 (profit) — §13.2; FA-09 (tax) — §13.3; FA-10 (discount) — rule unclear
-    //
+    // BUY: DR FA-02 net; CR FA-06 gold; CR FA-16 fees
+    // SELL: DR FA-08 gold; CR FA-02 net (customer deposit ↑); CR FA-16 fees
+    const finEntries = selling
+      ? [
+          {
+            accountCode: 'FA-08',
+            debit: gold,
+            credit: new Decimal(0),
+            description: `Trade ${trade.tradeNumber}: gold purchase cost (SELL)`,
+          },
+          ...(fee.gt(0)
+            ? [
+                {
+                  accountCode: 'FA-16',
+                  debit: new Decimal(0),
+                  credit: fee,
+                  description: `Trade ${trade.tradeNumber}: sell fee income`,
+                },
+              ]
+            : []),
+          {
+            accountCode: 'FA-02',
+            debit: new Decimal(0),
+            credit: net,
+            description: `Trade ${trade.tradeNumber}: net proceeds credited to customer deposit`,
+          },
+        ]
+      : [
+          {
+            accountCode: 'FA-02',
+            debit: net,
+            credit: new Decimal(0),
+            description: `Trade ${trade.tradeNumber}: customer prepaid balance consumed`,
+          },
+          {
+            accountCode: 'FA-06',
+            debit: new Decimal(0),
+            credit: gold,
+            description: `Trade ${trade.tradeNumber}: sales revenue (gold commercial)`,
+          },
+          ...(fee.gt(0)
+            ? [
+                {
+                  accountCode: 'FA-16',
+                  debit: new Decimal(0),
+                  credit: fee,
+                  description: `Trade ${trade.tradeNumber}: buy fee income`,
+                },
+              ]
+            : []),
+        ];
+
     const { wasAlreadyPosted: finAlreadyPosted } = await this.financialLedger.postJournalInTx(tx, {
       idempotencyKey: finKey,
       sourceType: 'TRADE_CONFIRM',
       sourceId: trade.id,
-      description: `Trade ${trade.tradeNumber} confirmed — customer prepaid debit / sales revenue credit`,
+      description: selling
+        ? `Trade ${trade.tradeNumber} confirmed SELL — purchase cost / payable / fee income`
+        : `Trade ${trade.tradeNumber} confirmed BUY — prepaid / sales / fee income`,
       postedByUserId: actorUserId,
-      entries: [
-        {
-          // DR FA-02: Customer Prepaid/Deposit (Liability ↓ = Debit)
-          accountCode: 'FA-02',
-          debit: trade.totalAmountRial,
-          credit: new Decimal(0),
-          description: `Trade ${trade.tradeNumber}: customer prepaid balance consumed`,
-        },
-        {
-          // CR FA-06: Sales Revenue (Revenue ↑ = Credit)
-          accountCode: 'FA-06',
-          debit: new Decimal(0),
-          credit: trade.totalAmountRial,
-          description: `Trade ${trade.tradeNumber}: sales revenue recognized`,
-        },
-      ],
+      entries: finEntries,
     });
 
-    // ─── Gold Ledger Posting ──────────────────────────────────────────────────
-    //
-    // Documented posting for Trade Confirmed (docs/21-business-decisions.md §6.2):
-    //   GA-02 IN: gold obligation created (store commits to deliver weightGrams)
-    //
-    // BLOCKED: GA-01 posting — when GA-01 changes at Trade confirmation vs delivery
-    //          is not documented (open-questions.md #39).
-    //
+    // BUY: GA-02 IN (obligation to deliver). SELL: GA-02 OUT (customer gold returned).
     const { wasAlreadyPosted: goldAlreadyPosted } = await this.goldLedger.postJournalInTx(tx, {
       idempotencyKey: goldKey,
       sourceType: 'TRADE_CONFIRM',
       sourceId: trade.id,
-      description: `Trade ${trade.tradeNumber} confirmed — gold obligation created`,
+      description: selling
+        ? `Trade ${trade.tradeNumber} confirmed — customer gold obligation reduced (SELL)`
+        : `Trade ${trade.tradeNumber} confirmed — gold obligation created (BUY)`,
       postedByUserId: actorUserId,
       entries: [
         {
           accountCode: 'GA-02',
-          direction: 'IN',
+          direction: selling ? 'OUT' : 'IN',
           quantity: trade.weightGrams,
           purity: trade.purityRatio,
-          description: `Trade ${trade.tradeNumber}: gold obligation to customer`,
+          description: selling
+            ? `Trade ${trade.tradeNumber}: gold received from customer (SELL)`
+            : `Trade ${trade.tradeNumber}: gold obligation to customer (BUY)`,
         },
       ],
     });
@@ -189,9 +224,9 @@ export class TradeLedgerPostingService {
       );
     } else {
       this.logger.log(
-        `[TradeLedger] Trade ${trade.tradeNumber}: financial and gold ledger postings created. ` +
-          `FA-02 DR ${trade.totalAmountRial.toFixed(2)} / FA-06 CR ${trade.totalAmountRial.toFixed(2)} | ` +
-          `GA-02 IN ${trade.weightGrams.toFixed(6)}g purity=${trade.purityRatio.toFixed(4)}`,
+        `[TradeLedger] Trade ${trade.tradeNumber} (${trade.side}): ` +
+          `gold=${gold.toFixed(2)} fee=${fee.toFixed(2)} net=${net.toFixed(2)} | ` +
+          `GA-02 ${selling ? 'OUT' : 'IN'} ${trade.weightGrams.toFixed(6)}g`,
       );
     }
   }
@@ -218,54 +253,95 @@ export class TradeLedgerPostingService {
       id: string;
       tradeNumber: string;
       totalAmountRial: Decimal;
+      goldAmountRial?: Decimal;
+      feeAmountRial?: Decimal;
       weightGrams: Decimal;
       purityRatio: Decimal;
+      side?: 'BUY' | 'SELL';
     },
     actorUserId: string,
     reason: string,
   ): Promise<void> {
     const finKey = TradeLedgerPostingService.financialKeyForReversal(trade.id);
     const goldKey = TradeLedgerPostingService.goldKeyForReversal(trade.id);
+    const gold = trade.goldAmountRial ?? trade.totalAmountRial;
+    const fee = trade.feeAmountRial ?? new Decimal(0);
+    const net = trade.totalAmountRial;
+    const selling = trade.side === 'SELL';
 
-    // ─── Financial Reversal ───────────────────────────────────────────────────
+    const finEntries = selling
+      ? [
+          {
+            accountCode: 'FA-02',
+            debit: net,
+            credit: new Decimal(0),
+            description: `Trade ${trade.tradeNumber} reversal: customer deposit debit reversed`,
+          },
+          ...(fee.gt(0)
+            ? [
+                {
+                  accountCode: 'FA-16',
+                  debit: fee,
+                  credit: new Decimal(0),
+                  description: `Trade ${trade.tradeNumber} reversal: sell fee income reversed`,
+                },
+              ]
+            : []),
+          {
+            accountCode: 'FA-08',
+            debit: new Decimal(0),
+            credit: gold,
+            description: `Trade ${trade.tradeNumber} reversal: purchase cost reversed`,
+          },
+        ]
+      : [
+          {
+            accountCode: 'FA-06',
+            debit: gold,
+            credit: new Decimal(0),
+            description: `Trade ${trade.tradeNumber} reversal: sales revenue reversed`,
+          },
+          ...(fee.gt(0)
+            ? [
+                {
+                  accountCode: 'FA-16',
+                  debit: fee,
+                  credit: new Decimal(0),
+                  description: `Trade ${trade.tradeNumber} reversal: buy fee income reversed`,
+                },
+              ]
+            : []),
+          {
+            accountCode: 'FA-02',
+            debit: new Decimal(0),
+            credit: net,
+            description: `Trade ${trade.tradeNumber} reversal: customer prepaid balance restored`,
+          },
+        ];
+
     const { wasAlreadyPosted: finAlreadyPosted } = await this.financialLedger.postJournalInTx(tx, {
       idempotencyKey: finKey,
       sourceType: 'TRADE_REVERSAL',
       sourceId: trade.id,
       description: `Trade ${trade.tradeNumber} REVERSED — reason: ${reason}`,
       postedByUserId: actorUserId,
-      entries: [
-        {
-          // DR FA-06: Sales Revenue reversal (Revenue ↓ = Debit)
-          accountCode: 'FA-06',
-          debit: trade.totalAmountRial,
-          credit: new Decimal(0),
-          description: `Trade ${trade.tradeNumber} reversal: sales revenue reversed`,
-        },
-        {
-          // CR FA-02: Customer Prepaid/Deposit restored (Liability ↑ = Credit)
-          accountCode: 'FA-02',
-          debit: new Decimal(0),
-          credit: trade.totalAmountRial,
-          description: `Trade ${trade.tradeNumber} reversal: customer prepaid balance restored`,
-        },
-      ],
+      entries: finEntries,
     });
 
-    // ─── Gold Reversal ────────────────────────────────────────────────────────
+    // Reverse gold: BUY confirm was IN → OUT; SELL confirm was OUT → IN
     const { wasAlreadyPosted: goldAlreadyPosted } = await this.goldLedger.postJournalInTx(tx, {
       idempotencyKey: goldKey,
       sourceType: 'TRADE_REVERSAL',
       sourceId: trade.id,
-      description: `Trade ${trade.tradeNumber} REVERSED — gold obligation released`,
+      description: `Trade ${trade.tradeNumber} REVERSED — gold ledger reversed`,
       postedByUserId: actorUserId,
       entries: [
         {
           accountCode: 'GA-02',
-          direction: 'OUT',
+          direction: selling ? 'IN' : 'OUT',
           quantity: trade.weightGrams,
           purity: trade.purityRatio,
-          description: `Trade ${trade.tradeNumber} reversal: gold obligation released`,
+          description: `Trade ${trade.tradeNumber} reversal: gold direction reversed`,
         },
       ],
     });

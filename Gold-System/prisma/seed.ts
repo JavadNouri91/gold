@@ -50,6 +50,7 @@ const PERMISSIONS = [
   { key: 'customer.account.read', module: 'customer-accounts', description: 'Read any customer account' },
   // Pricing
   { key: 'pricing.rules.manage', module: 'pricing', description: 'Manage pricing rules and adjustments' },
+  { key: 'pricing.fees.manage', module: 'pricing', description: 'Manage customer-type BUY/SELL transaction fees' },
   // Customer group / credit
   { key: 'customer.group.assign', module: 'customers', description: 'Assign customer type/group' },
   { key: 'credit.manage', module: 'customer-accounts', description: 'Manage customer credit' },

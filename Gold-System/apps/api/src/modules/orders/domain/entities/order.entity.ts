@@ -29,8 +29,17 @@ export class OrderEntity {
 
   status: OrderStatus;
 
-  /** Total order amount in Rial — from PricingEngineResult.finalPrice. Never Float. */
+  /**
+   * Customer-facing net total in Rial (BUY payable / SELL receivable).
+   * Includes transaction fees. Never Float.
+   */
   readonly totalAmountRial: Decimal;
+
+  /** Gold commercial = PricingCalculation.finalPrice (excludes transaction fees). */
+  readonly goldAmountRial: Decimal;
+
+  /** Sum of transaction fees (BUY added / SELL deducted). */
+  readonly feeAmountRial: Decimal;
 
   /**
    * Amount reserved from CustomerAccount.reservedCreditRial.
@@ -67,6 +76,8 @@ export class OrderEntity {
     pricingCalculationId: string | null;
     status: OrderStatus;
     totalAmountRial: Decimal;
+    goldAmountRial: Decimal;
+    feeAmountRial: Decimal;
     reservedAmountRial: Decimal;
     weightGrams: Decimal;
     purityRatio: Decimal;

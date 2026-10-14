@@ -39,6 +39,8 @@ export class TradeEntity {
   // NEVER update after creation. §4.2 reversal + new Trade for corrections.
 
   readonly totalAmountRial: Decimal;
+  readonly goldAmountRial: Decimal;
+  readonly feeAmountRial: Decimal;
   readonly weightGrams: Decimal;
   readonly purityRatio: Decimal;
   readonly unitPriceRial: Decimal;
@@ -87,6 +89,8 @@ export class TradeEntity {
     pricingCalculationId: string;
     status: TradeStatus;
     totalAmountRial: Decimal;
+    goldAmountRial: Decimal;
+    feeAmountRial: Decimal;
     weightGrams: Decimal;
     purityRatio: Decimal;
     unitPriceRial: Decimal;
@@ -116,6 +120,8 @@ export class TradeEntity {
     this.pricingCalculationId = params.pricingCalculationId;
     this.status = params.status;
     this.totalAmountRial = params.totalAmountRial;
+    this.goldAmountRial = params.goldAmountRial;
+    this.feeAmountRial = params.feeAmountRial;
     this.weightGrams = params.weightGrams;
     this.purityRatio = params.purityRatio;
     this.unitPriceRial = params.unitPriceRial;

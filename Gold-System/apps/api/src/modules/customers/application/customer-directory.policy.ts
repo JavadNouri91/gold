@@ -7,7 +7,6 @@ export const LEGACY_CUSTOMER_DAYS = 365;
 export enum CustomerSegment {
   REGULAR = 'REGULAR',
   VIP = 'VIP',
-  WHOLESALE = 'WHOLESALE',
   PARTNER = 'PARTNER',
   NEW = 'NEW',
   LEGACY = 'LEGACY',
@@ -99,8 +98,6 @@ export function matchesSegment(
       return isLegacyCustomer(customer.createdAt, now);
     case CustomerSegment.VIP:
       return customer.type === CustomerType.VIP;
-    case CustomerSegment.WHOLESALE:
-      return customer.type === CustomerType.WHOLESALE;
     case CustomerSegment.PARTNER:
       return customer.type === CustomerType.PARTNER;
     case CustomerSegment.REGULAR:
@@ -119,7 +116,6 @@ export function primarySegment(
   if (isNewCustomer(customer.createdAt, now)) return CustomerSegment.NEW;
   if (isLegacyCustomer(customer.createdAt, now)) return CustomerSegment.LEGACY;
   if (customer.type === CustomerType.VIP) return CustomerSegment.VIP;
-  if (customer.type === CustomerType.WHOLESALE) return CustomerSegment.WHOLESALE;
   if (customer.type === CustomerType.PARTNER) return CustomerSegment.PARTNER;
   return CustomerSegment.REGULAR;
 }

@@ -1,10 +1,11 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import Decimal from 'decimal.js';
-import { CustomerType, CustomerStatus, OrderStatus } from '@gold/shared-types';
+import { CustomerType, CustomerStatus, OrderStatus, TradeSide } from '@gold/shared-types';
 
 import { PrismaService } from '../../../database/prisma.service';
 import { AuditService } from '../../audit/application/audit.service';
 import { PricingEngineService } from '../../pricing/application/pricing-engine.service';
+import { TransactionFeeService } from '../../pricing/application/transaction-fee.service';
 import { OrderRepository } from '../infrastructure/repositories/order.repository';
 import { CustomerAccountRepository } from '../../customer-accounts/infrastructure/repositories/customer-account.repository';
 import { QuotationsService } from '../../quotations/application/quotations.service';
@@ -43,6 +44,7 @@ export class OrdersService {
     private readonly orderRepo: OrderRepository,
     private readonly accountRepo: CustomerAccountRepository,
     private readonly pricingEngine: PricingEngineService,
+    private readonly feeService: TransactionFeeService,
     private readonly audit: AuditService,
     @Inject(forwardRef(() => QuotationsService))
     private readonly quotationsService: QuotationsService,
@@ -87,6 +89,7 @@ export class OrdersService {
 
     // ── 3. Call Pricing Engine ────────────────────────────────────
     // The engine persists a PricingCalculation record and returns its ID.
+    // Transaction fees are computed separately (not inside finalPrice).
     const pricing = await this.pricingEngine.calculate({
       weightGrams,
       purityRatio,
@@ -95,23 +98,37 @@ export class OrdersService {
       referenceType: 'ORDER',
     });
 
-    const totalAmountRial = pricing.finalPrice;
+    const side = (dto.side ?? 'BUY') as TradeSide;
+    const fees = await this.feeService.compute(
+      customer.type as CustomerType | null,
+      side,
+      {
+        step4AfterWeight: pricing.step4AfterWeight,
+        step5AfterGroupRule: pricing.step5AfterGroupRule,
+        goldCommercialRial: pricing.finalPrice,
+      },
+    );
+
+    const goldAmountRial = fees.goldCommercialRial;
+    const feeAmountRial = fees.feeTotalRial;
+    const totalAmountRial = fees.customerTotalRial;
 
     // Derive unit price per gram from the pricing pipeline result.
     // step4AfterWeight = price per gram × weight; so unit price = step4AfterWeight / weight.
-    // We store this as the per-gram price for the OrderItem.
     const unitPriceRial = pricing.step4AfterWeight.dividedBy(weightGrams);
 
-    // ── 4. Create Order + OrderItem atomically ────────────────────
+    // ── 4. Create Order + OrderItem + fee snapshots atomically ────
     const order = await this.prisma.$transaction(async (tx) => {
       const orderNumber = await this.orderRepo.nextOrderNumber(tx);
 
-      return this.orderRepo.createInTx(tx, {
+      const created = await this.orderRepo.createInTx(tx, {
         orderNumber,
         customerId: customer.id,
         customerAccountId: account.id,
         pricingCalculationId: pricing.calculationId,
         totalAmountRial,
+        goldAmountRial,
+        feeAmountRial,
         weightGrams,
         purityRatio,
         customerType: customer.type as CustomerType | null,
@@ -123,6 +140,9 @@ export class OrdersService {
           ...(dto.side ? { metadata: { side: dto.side } } : {}),
         },
       });
+
+      await this.feeService.persistSnapshots(tx, created.id, fees);
+      return created;
     });
 
     await this.audit.log({
@@ -134,6 +154,9 @@ export class OrdersService {
       after: {
         orderNumber: order.orderNumber,
         status: order.status,
+        side,
+        goldAmountRial: goldAmountRial.toFixed(2),
+        feeAmountRial: feeAmountRial.toFixed(2),
         totalAmountRial: order.totalAmountRial.toFixed(2),
         weightGrams: order.weightGrams.toFixed(6),
         purityRatio: order.purityRatio.toFixed(6),
@@ -143,10 +166,20 @@ export class OrdersService {
 
     this.logger.log(
       `Order created: ${order.orderNumber} for customer ${customer.id} ` +
-        `(total: ${totalAmountRial.toFixed(2)} Rial)`,
+        `(gold: ${goldAmountRial.toFixed(2)}, fees: ${feeAmountRial.toFixed(2)}, ` +
+        `total: ${totalAmountRial.toFixed(2)} Rial, side: ${side})`,
     );
 
-    return this.toResponse(order, []);
+    return this.toResponse(order, [], fees.charges.map((c) => ({
+      code: c.code,
+      labelFa: c.labelFa,
+      side: c.side,
+      mode: c.mode,
+      rateValue: c.rateValue.toFixed(6),
+      calculationBase: c.calculationBase,
+      baseAmount: c.baseAmount.toFixed(2),
+      amount: c.amount.toFixed(2),
+    })));
   }
 
   // ─── Submit Order (DRAFT → SUBMITTED + credit reservation) ───
@@ -299,6 +332,8 @@ export class OrdersService {
         customerType: customer.type,
         pricingCalculationId: order.pricingCalculationId,
         totalAmountRial: order.totalAmountRial,
+        goldAmountRial: order.goldAmountRial,
+        feeAmountRial: order.feeAmountRial,
         weightGrams: order.weightGrams,
         purityRatio: order.purityRatio,
         step1BasePrice: new Decimal(calc?.step1BasePrice?.toString() ?? '0'),
@@ -307,8 +342,8 @@ export class OrdersService {
         roundingAmount: new Decimal(calc?.roundingAmount?.toString() ?? '0'),
         isComplete: calc?.isComplete ?? false,
         blockedSteps: Array.isArray(calc?.blockedSteps) ? (calc.blockedSteps as string[]) : [],
-        // Unit price per gram: total ÷ weight (from the locked calculation)
-        unitPriceRial: order.totalAmountRial.dividedBy(order.weightGrams),
+        // Unit price per gram from gold commercial ÷ weight
+        unitPriceRial: order.goldAmountRial.dividedBy(order.weightGrams),
         actorId: actorUserId,
       });
     }
@@ -758,13 +793,15 @@ export class OrdersService {
     if (isStaff) {
       const order = await this.orderRepo.findById(orderId);
       if (!order) throw new OrderNotFoundException(orderId);
-      return this.toResponse(order, []);
+      const charges = await this.loadChargeDtos(orderId);
+      return this.toResponse(order, [], charges);
     }
 
     const { customer } = await this.resolveCustomerAndAccount(actorUserId);
     const order = await this.orderRepo.findByIdForCustomer(orderId, customer.id);
     if (!order) throw new OrderNotFoundException(orderId);
-    return this.toResponse(order, []);
+    const charges = await this.loadChargeDtos(orderId);
+    return this.toResponse(order, [], charges);
   }
 
   // ─── Private helpers ──────────────────────────────────────────
@@ -840,7 +877,25 @@ export class OrdersService {
 
   // ─── Response mapping ─────────────────────────────────────────
 
-  private toResponse(order: OrderEntity, _items: OrderItemEntity[]): OrderResponseDto {
+  private async loadChargeDtos(orderId: string) {
+    const charges = await this.feeService.listSnapshotsForOrder(orderId);
+    return charges.map((c) => ({
+      code: c.code,
+      labelFa: c.labelFa,
+      side: c.side,
+      mode: c.mode,
+      rateValue: c.rateValue.toFixed(6),
+      calculationBase: c.calculationBase,
+      baseAmount: c.baseAmount.toFixed(2),
+      amount: c.amount.toFixed(2),
+    }));
+  }
+
+  private toResponse(
+    order: OrderEntity,
+    _items: OrderItemEntity[],
+    charges?: OrderResponseDto['charges'],
+  ): OrderResponseDto {
     const dto = new OrderResponseDto();
     dto.id = order.id;
     dto.orderNumber = order.orderNumber;
@@ -849,6 +904,8 @@ export class OrdersService {
     dto.pricingCalculationId = order.pricingCalculationId;
     dto.status = order.status;
     dto.totalAmountRial = order.totalAmountRial.toFixed(2);
+    dto.goldAmountRial = order.goldAmountRial.toFixed(2);
+    dto.feeAmountRial = order.feeAmountRial.toFixed(2);
     dto.reservedAmountRial = order.reservedAmountRial.toFixed(2);
     dto.weightGrams = order.weightGrams.toFixed(6);
     dto.purityRatio = order.purityRatio.toFixed(6);
@@ -861,6 +918,7 @@ export class OrdersService {
     dto.createdAt = order.createdAt;
     dto.updatedAt = order.updatedAt;
     dto.items = [];
+    if (charges) dto.charges = charges;
     return dto;
   }
 }

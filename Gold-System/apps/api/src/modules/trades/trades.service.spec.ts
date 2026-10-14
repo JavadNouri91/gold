@@ -139,6 +139,8 @@ function makeQuotation(
     version: 1,
     status: overrides.status ?? QuotationStatus.ACTIVE,
     totalAmountRial: TOTAL_AMOUNT,
+    goldAmountRial: TOTAL_AMOUNT,
+    feeAmountRial: new Decimal(0),
     weightGrams: WEIGHT_GRAMS,
     purityRatio: PURITY_RATIO,
     step1BasePrice: STEP1_BASE_PRICE,
@@ -170,6 +172,8 @@ function makeOrder(
     pricingCalculationId: PRICING_CALC_ID,
     status: overrides.status ?? OrderStatus.APPROVED,
     totalAmountRial: TOTAL_AMOUNT,
+    goldAmountRial: TOTAL_AMOUNT,
+    feeAmountRial: new Decimal(0),
     reservedAmountRial: overrides.reservedAmountRial ?? RESERVED_AMOUNT,
     weightGrams: WEIGHT_GRAMS,
     purityRatio: PURITY_RATIO,
@@ -201,6 +205,8 @@ function makeTrade(
     pricingCalculationId: PRICING_CALC_ID,
     status: overrides.status ?? TradeStatus.CONFIRMED,
     totalAmountRial: TOTAL_AMOUNT,
+    goldAmountRial: TOTAL_AMOUNT,
+    feeAmountRial: new Decimal(0),
     weightGrams: WEIGHT_GRAMS,
     purityRatio: PURITY_RATIO,
     unitPriceRial: UNIT_PRICE,
@@ -253,6 +259,9 @@ describe('TradesService', () => {
       findUnique: jest.fn(),
       update: jest.fn(),
     },
+    orderItem: {
+      findFirst: jest.fn().mockResolvedValue({ metadata: { side: 'BUY' } }),
+    },
     quotation: {
       updateMany: jest.fn(),
     },
@@ -287,6 +296,11 @@ describe('TradesService', () => {
         creditTransaction: { create: jest.Mock };
       }
     ).order.findUnique = jest.fn().mockResolvedValue({ status: 'APPROVED' });
+    (
+      fakeTx as unknown as {
+        orderItem: { findFirst: jest.Mock };
+      }
+    ).orderItem.findFirst = jest.fn().mockResolvedValue({ metadata: { side: 'BUY' } });
     (
       fakeTx as unknown as {
         order: { findUnique: jest.Mock; update: jest.Mock };
@@ -616,7 +630,7 @@ describe('TradesService', () => {
       expect(snapshot.orderId).toBe(ORDER_ID);
       expect(snapshot.quotationId).toBe(QUOTATION_ID);
       expect(snapshot.confirmedByUserId).toBe(ACTOR_USER_ID);
-      expect(snapshot.version).toBe('1.0');
+      expect(snapshot.version).toBe('2.0');
     });
   });
 

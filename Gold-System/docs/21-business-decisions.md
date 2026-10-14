@@ -106,6 +106,23 @@ Rounding applies to the **final total** after all pipeline steps.
 The specific rounding method (up, nearest, down) and precision (nearest 1,000 Toman, etc.)
 must be set by the Store Manager in PricingRule configuration before the system goes live.
 
+### 1.8 Transaction Fees (کارمزد) — DECIDED (Customer-Type, Side-Specific)
+
+Transaction fees are **independent of wage (اجرت)** and of the gold pricing pipeline.
+
+- Configured per `CustomerType` (with null = default fallback) and per side (`BUY` / `SELL`).
+- Modes: `NONE`, `FIXED` (Rial), `PERCENTAGE` with an explicit calculation base:
+  - `GOLD_VALUE_STEP4`
+  - `AFTER_GROUP_RULE_STEP5`
+  - `GOLD_COMMERCIAL_TOTAL` (default) = `PricingCalculation.finalPrice`
+- `PricingCalculation.finalPrice` / wage remain unchanged; fees are layered after gold commercial.
+- **BUY payable** = gold commercial + buy fees → this amount is reserved in rial credit.
+- **SELL receivable** = gold commercial − sell fees → fees are deducted from proceeds; **no** extra rial reservation on SELL.
+- Fee income posts to **FA-16** (Transaction Fee Income / درآمد کارمزد معامله).
+- Snapshots are immutable on Order / Quotation / Trade so historical totals survive policy changes.
+
+See `docs/features/customer-fee-management/IMPLEMENTATION_PLAN.md`.
+
 ---
 
 ## 2. PRICE LOCK & QUOTATION
@@ -318,6 +335,7 @@ The Financial Ledger must support the following conceptual accounts:
 | FA-13 | Supplier Settlement (تسویه بالادستی) | Clearing | DEFERRED — not in MVP |
 | FA-14 | Reversal / Adjustment (برگشت / تعدیل) | Clearing | Reversal and correction entries |
 | FA-15 | Operating Expenses (هزینه‌های عمومی) | Expense | General operating costs |
+| FA-16 | Transaction Fee Income (درآمد کارمزد معامله) | Revenue | Customer-type BUY/SELL fees (§1.8); separate from wage |
 
 **Not required in MVP:**
 - Wage Income (درآمد اجرت) — wage not applicable to molten gold at this stage

@@ -128,32 +128,40 @@ export class TradesService {
       // Generate sequential trade number (count + 1 within tx)
       const tradeNumber = await this.tradeRepo.nextTradeNumber(tx);
 
+      const goldAmountRial = order.goldAmountRial;
+      const feeAmountRial = order.feeAmountRial;
+      const sideItem = await tx.orderItem.findFirst({
+        where: { orderId },
+        orderBy: { createdAt: 'asc' },
+        select: { metadata: true },
+      });
+      const meta = sideItem?.metadata as { side?: string } | null;
+      const side = meta?.side === 'SELL' ? 'SELL' : 'BUY';
+
       // Build the locked terms snapshot for Phase 4 reference
       const lockedTermsSnapshot: Record<string, unknown> = {
-        version: '1.0',
+        version: '2.0',
         lockedAt: confirmedAt.toISOString(),
         orderId,
         orderNumber: order.orderNumber,
         quotationId: activeQuotation.id,
         quotationNumber: activeQuotation.quotationNumber,
         pricingCalculationId: activeQuotation.pricingCalculationId,
+        side,
         pricing: {
           step1BasePrice: activeQuotation.step1BasePrice?.toString() ?? null,
           wageAmount: activeQuotation.wageAmount?.toString() ?? null,
           discountAmount: activeQuotation.discountAmount?.toString() ?? null,
           roundingAmount: activeQuotation.roundingAmount?.toString() ?? null,
-          // profitAmount and taxAmount are BLOCKED (§13.2, §13.3) — stored as null
+          goldAmountRial: goldAmountRial.toFixed(2),
+          feeAmountRial: feeAmountRial.toFixed(2),
+          customerTotalRial: activeQuotation.totalAmountRial.toFixed(2),
           profitAmount: null,
           taxAmount: null,
           isComplete: activeQuotation.isComplete,
         },
         confirmedByUserId: actorUserId,
         notes: notes ?? null,
-        // ACCOUNTING INTEGRATION BOUNDARY (Phase 4):
-        // This snapshot serves as the immutable source for:
-        //   FinancialLedgerEntry (source_type='TRADE', source_id=<trade.id>)
-        //   GoldLedgerEntry
-        //   Settlement records
         accountingBoundary: 'PHASE_4_DEFERRED',
       };
 
@@ -166,14 +174,15 @@ export class TradesService {
         pricingCalculationId: activeQuotation.pricingCalculationId,
         status: TradeStatus.CONFIRMED,
         totalAmountRial: activeQuotation.totalAmountRial,
+        goldAmountRial,
+        feeAmountRial,
         weightGrams: activeQuotation.weightGrams,
         purityRatio: activeQuotation.purityRatio,
-        // unitPriceRial: from the first QuotationItem (MVP: single-item orders)
         unitPriceRial: activeQuotation.items[0]?.unitPriceRial ?? new Decimal(0),
         step1BasePrice: activeQuotation.step1BasePrice,
         wageAmount: activeQuotation.wageAmount,
-        profitAmount: null, // null = BLOCKED §13.2 (profit base undefined in this phase)
-        taxAmount: null, // null = BLOCKED §13.3 (tax rules undefined in this phase)
+        profitAmount: null,
+        taxAmount: null,
         discountAmount: activeQuotation.discountAmount,
         roundingAmount: activeQuotation.roundingAmount,
         isComplete: activeQuotation.isComplete,
@@ -232,10 +241,13 @@ export class TradesService {
           id: created.id,
           tradeNumber: created.tradeNumber,
           totalAmountRial: created.totalAmountRial,
+          goldAmountRial: created.goldAmountRial,
+          feeAmountRial: created.feeAmountRial,
           weightGrams: created.weightGrams,
           purityRatio: created.purityRatio,
           discountAmount: created.discountAmount,
           customerId: created.customerId,
+          side: side as 'BUY' | 'SELL',
         },
         actorUserId,
       );
@@ -397,14 +409,19 @@ export class TradesService {
       // Documented per docs/21-business-decisions.md §4.2:
       //   Financial: DR FA-06 / CR FA-02 for totalAmountRial
       //   Gold:      GA-02 OUT for weightGrams/purityRatio
+      const sideMeta = trade.lockedTermsSnapshot?.side;
+      const side = sideMeta === 'SELL' ? 'SELL' : 'BUY';
       await this.tradeLedger.postTradeReversalInTx(
         tx,
         {
           id: trade.id,
           tradeNumber: trade.tradeNumber,
           totalAmountRial: trade.totalAmountRial,
+          goldAmountRial: trade.goldAmountRial,
+          feeAmountRial: trade.feeAmountRial,
           weightGrams: trade.weightGrams,
           purityRatio: trade.purityRatio,
+          side,
         },
         actorUserId,
         dto.reason,

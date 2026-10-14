@@ -120,10 +120,13 @@ const testTrade = {
   id: 'trade-abc-123',
   tradeNumber: 'TRD-000001',
   totalAmountRial: new Decimal('15000000'),
+  goldAmountRial: new Decimal('15000000'),
+  feeAmountRial: new Decimal('0'),
   weightGrams: new Decimal('5.500000'),
   purityRatio: new Decimal('0.750000'),
   discountAmount: new Decimal('0'),
   customerId: 'cust-1',
+  side: 'BUY' as const,
 };
 
 // ─── Tests ────────────────────────────────────────────────────────────────────
@@ -160,7 +163,7 @@ describe('TradeLedgerPostingService', () => {
   // ─── 1. Trade confirmation creates correct postings ──────────────────────
 
   describe('postTradeConfirmInTx — correct postings', () => {
-    it('posts DR FA-02 / CR FA-06 for totalAmountRial', async () => {
+    it('posts DR FA-02 / CR FA-06 for BUY with zero fee', async () => {
       await service.postTradeConfirmInTx(tx, testTrade, 'user-1');
 
       expect(finLedger.postJournalInTx).toHaveBeenCalledTimes(1);
@@ -169,7 +172,7 @@ describe('TradeLedgerPostingService', () => {
       expect(finCall.sourceType).toBe('TRADE_CONFIRM');
       expect(finCall.sourceId).toBe(testTrade.id);
 
-      // Must have exactly 2 entries: DR FA-02 and CR FA-06
+      // Zero fee: DR FA-02 net + CR FA-06 gold (no FA-16)
       const drEntry = finCall.entries.find((e: any) => e.accountCode === 'FA-02')!;
       const crEntry = finCall.entries.find((e: any) => e.accountCode === 'FA-06')!;
 
@@ -179,6 +182,25 @@ describe('TradeLedgerPostingService', () => {
       expect(drEntry.credit.toString()).toBe('0');
       expect(crEntry.credit.toString()).toBe('15000000');
       expect(crEntry.debit.toString()).toBe('0');
+      expect(finCall.entries.map((e: any) => e.accountCode)).not.toContain('FA-16');
+    });
+
+    it('splits BUY fee to FA-16 when fee > 0', async () => {
+      await service.postTradeConfirmInTx(
+        tx,
+        {
+          ...testTrade,
+          totalAmountRial: new Decimal('15150000'),
+          goldAmountRial: new Decimal('15000000'),
+          feeAmountRial: new Decimal('150000'),
+        },
+        'user-1',
+      );
+      const finCall = finLedger.postJournalInTx.mock.calls[0][1];
+      const feeEntry = finCall.entries.find((e: any) => e.accountCode === 'FA-16')!;
+      expect(feeEntry.credit.toString()).toBe('150000');
+      const sales = finCall.entries.find((e: any) => e.accountCode === 'FA-06')!;
+      expect(sales.credit.toString()).toBe('15000000');
     });
 
     it('posts GA-02 IN for weightGrams', async () => {

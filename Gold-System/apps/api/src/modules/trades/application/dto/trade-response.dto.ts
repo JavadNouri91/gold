@@ -58,6 +58,8 @@ export class TradeResponseDto {
 
   // Immutable commercial terms (snapshot at confirmation)
   totalAmountRial: string;
+  goldAmountRial: string;
+  feeAmountRial: string;
   weightGrams: string;
   purityRatio: string;
   unitPriceRial: string;
@@ -97,6 +99,8 @@ export class TradeResponseDto {
     dto.pricingCalculationId = entity.pricingCalculationId;
     dto.status = entity.status;
     dto.totalAmountRial = entity.totalAmountRial.toFixed(2);
+    dto.goldAmountRial = entity.goldAmountRial.toFixed(2);
+    dto.feeAmountRial = entity.feeAmountRial.toFixed(2);
     dto.weightGrams = entity.weightGrams.toFixed(6);
     dto.purityRatio = entity.purityRatio.toFixed(6);
     dto.unitPriceRial = entity.unitPriceRial.toFixed(6);

@@ -19,10 +19,25 @@ export class OrderResponseDto {
   pricingCalculationId: string | null;
   status: OrderStatus;
 
-  /** Order total in Rial — serialized as string to preserve Decimal precision */
+  /** Customer-facing net (BUY payable / SELL receivable) */
   totalAmountRial: string;
+  /** Gold commercial (PricingCalculation.finalPrice) */
+  goldAmountRial: string;
+  /** Transaction fee total */
+  feeAmountRial: string;
   /** Credit reserved from CustomerAccount — 0 until SUBMITTED */
   reservedAmountRial: string;
+  /** Locked charge line items (fees) */
+  charges?: Array<{
+    code: string;
+    labelFa: string;
+    side: string;
+    mode: string;
+    rateValue: string;
+    calculationBase: string | null;
+    baseAmount: string;
+    amount: string;
+  }>;
 
   weightGrams: string; // Decimal as string
   purityRatio: string; // Decimal as string

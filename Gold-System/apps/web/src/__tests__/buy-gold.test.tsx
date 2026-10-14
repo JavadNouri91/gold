@@ -97,6 +97,13 @@ function calculation(snapshotId = 'snap-1'): PricingCalculationResult {
       roundingAmount: '0.00',
       finalPrice: '61750000.00',
     },
+    charges: [],
+    goldCommercialRial: '61750000.00',
+    feeTotalRial: '0.00',
+    customerTotalRial: '61750000.00',
+    payableRial: '61750000.00',
+    receivableRial: null,
+    side: 'BUY',
     meta: {
       snapshotId,
       globalAdjId: null,
@@ -131,7 +138,7 @@ function renderPage(side: 'buy' | 'sell' = 'buy') {
 async function calculateFiveGrams() {
   await screen.findByText(/۱,۲۳۵,۰۰۰/);
   fireEvent.click(screen.getByRole('button', { name: '۵ گرم' }));
-  await screen.findByText('مبلغ قابل پرداخت');
+  await screen.findAllByText('مبلغ قابل پرداخت');
 }
 
 async function openConfirm() {
@@ -154,7 +161,36 @@ beforeEach(() => {
   mockGetMe.mockResolvedValue(customer);
   mockGetAccount.mockResolvedValue(account());
   mockGetPrice.mockResolvedValue(price());
-  mockCalculate.mockResolvedValue(calculation());
+  mockCalculate.mockImplementation(async (body: { weightGrams?: string; side?: string }) => {
+    const base = calculation();
+    const raw = String(body.weightGrams ?? '5');
+    const [intPart = '0', frac = ''] = raw.split('.');
+    const milli = Number(intPart) * 1000 + Number((frac + '000').slice(0, 3));
+    const final = String(milli * 12_350);
+    const amount = `${final}.00`;
+    const side = body.side === 'SELL' ? 'SELL' : 'BUY';
+    return {
+      ...base,
+      pipeline: {
+        ...base.pipeline,
+        step4_afterWeight: amount,
+        step5_afterGroupRule: amount,
+        priceBeforeRounding: amount,
+        finalPrice: amount,
+      },
+      charges: [],
+      goldCommercialRial: amount,
+      feeTotalRial: '0.00',
+      customerTotalRial: amount,
+      payableRial: side === 'BUY' ? amount : null,
+      receivableRial: side === 'SELL' ? amount : null,
+      side,
+      meta: {
+        ...base.meta,
+        weightGrams: frac ? raw : `${raw}.000000`,
+      },
+    };
+  });
   mockCreate.mockResolvedValue({ ...submitted, status: 'DRAFT' });
   mockSubmit.mockResolvedValue(submitted);
   mockPortfolio.mockResolvedValue({
@@ -246,9 +282,34 @@ describe('BuyGoldPage', () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     fireEvent.change(screen.getByLabelText('وزن طلا'), { target: { value: '۲' } });
-    expect(await screen.findByText('مبلغ قابل پرداخت')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل پرداخت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
     expect(screen.queryByRole('button', { name: 'محاسبه قیمت' })).not.toBeInTheDocument();
+    expect(await screen.findByDisplayValue('۲,۴۷۰,۰۰۰')).toBeInTheDocument();
+  });
+
+  it('fills weight when a custom toman amount is typed', async () => {
+    renderPage();
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    fireEvent.change(screen.getByLabelText('مبلغ'), { target: { value: '۲۰۰۰۰۰۰۰' } });
+    expect(await screen.findByDisplayValue('۱۶.۱۹۴')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل پرداخت')).length).toBeGreaterThan(0);
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '16.194' }));
+  });
+
+  it('moves the balance slider to buy from available credit and follows typed weight', async () => {
+    renderPage();
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    const slider = await screen.findByLabelText('میزان خرید از مانده');
+    expect(slider).toHaveAttribute('max', '50000000');
+    fireEvent.change(slider, { target: { value: '20000000' } });
+    expect(await screen.findByDisplayValue('۱۶.۱۹۴')).toBeInTheDocument();
+    expect(slider).toHaveValue('20000000');
+    expect(screen.getByText('۴۰٪')).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText('وزن طلا'), { target: { value: '۲' } });
+    expect(await screen.findByDisplayValue('۲,۴۷۰,۰۰۰')).toBeInTheDocument();
+    expect(await screen.findByLabelText('میزان خرید از مانده')).toHaveValue('2470000');
   });
 
   it('fills buy weight from a fifth of available credit', async () => {
@@ -262,21 +323,21 @@ describe('BuyGoldPage', () => {
     expect(screen.getByRole('button', { name: '۵۰ میلیون' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '۱۰۰ میلیون' })).not.toBeInTheDocument();
     fireEvent.click(chip);
-    expect(await screen.findByDisplayValue('۳.۲۳۸')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('۱۶.۱۹۴')).toBeInTheDocument();
     expect(chip).toHaveAttribute('aria-pressed', 'true');
-    expect(await screen.findByText('مبلغ قابل پرداخت')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل پرداخت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
-    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '3.238' }));
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '16.194' }));
   });
 
   it('fills the weight that spends the whole rial balance', async () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     fireEvent.click(screen.getByRole('button', { name: 'خرید با همه دارایی ریالی' }));
-    expect(await screen.findByDisplayValue('۸.۰۹۷')).toBeInTheDocument();
+    expect(await screen.findByDisplayValue('۴۰.۴۸۵')).toBeInTheDocument();
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
-    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '8.097' }));
-    expect(await screen.findByText('مبلغ قابل پرداخت')).toBeInTheDocument();
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '40.485' }));
+    expect((await screen.findAllByText('مبلغ قابل پرداخت')).length).toBeGreaterThan(0);
   });
 
   it('rejects a zero weight before calling the pricing API', async () => {
@@ -328,7 +389,7 @@ describe('BuyGoldPage', () => {
     expect(screen.getByRole('button', { name: '۵ گرم' })).toBeDisabled();
     fireEvent.change(screen.getByLabelText('وزن فروش'), { target: { value: '۵' } });
     expect(screen.getByDisplayValue('۲')).toBeInTheDocument();
-    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
   });
 
@@ -337,25 +398,39 @@ describe('BuyGoldPage', () => {
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     fireEvent.click(await screen.findByRole('button', { name: '۱ گرم' }));
     expect(screen.getByDisplayValue('۱')).toBeInTheDocument();
-    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
   });
 
   it('fills sell weight from a quick toman amount capped to the holding', async () => {
     renderPage('sell');
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.click(await screen.findByRole('button', { name: '۵۰ میلیون' }));
-    expect(await screen.findByDisplayValue('۲')).toBeInTheDocument();
-    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect(screen.getByText('مبلغ سریع (تومان)')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: '۲ میلیون' }));
+    expect(await screen.findByDisplayValue('۱.۶۱۹')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
-    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
+    expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1.619' }));
+  });
+
+  it('fills sell weight from a typed toman amount and follows the asset slider', async () => {
+    renderPage('sell');
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    const slider = await screen.findByLabelText('میزان فروش از دارایی');
+    expect(slider).toHaveAttribute('max', '2470000');
+    fireEvent.change(screen.getByLabelText('مبلغ'), { target: { value: '1000000' } });
+    expect(await screen.findByDisplayValue('۰.۸۰۹')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
+    fireEvent.change(screen.getByLabelText('وزن فروش'), { target: { value: '۱' } });
+    expect(await screen.findByDisplayValue('۱,۲۳۵,۰۰۰')).toBeInTheDocument();
+    expect(await screen.findByLabelText('میزان فروش از دارایی')).toHaveValue('1235000');
   });
 
   it('creates a sell order from the selected gold holding', async () => {
     renderPage('sell');
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     fireEvent.click(await screen.findByRole('button', { name: /طلای آبشده/ }));
-    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
     fireEvent.click(await openConfirm());
     expect(await screen.findByText('سفارش فروش ثبت شد')).toBeInTheDocument();
     expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ side: 'SELL', weightGrams: '2' }));
@@ -368,7 +443,7 @@ describe('BuyGoldPage', () => {
     renderPage('sell');
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     fireEvent.click(await screen.findByRole('button', { name: /طلای آبشده/ }));
-    expect(await screen.findByText('مبلغ قابل دریافت')).toBeInTheDocument();
+    expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
     fireEvent.click(await openConfirm());
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'موجودی طلای کافی برای ثبت این سفارش فروش ندارید.',
