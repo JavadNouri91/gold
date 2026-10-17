@@ -227,7 +227,7 @@ describe('BuyGoldPage', () => {
     await screen.findByRole('status');
     expect(screen.getByText('سفارش خرید ثبت شد')).toBeInTheDocument();
     expect(screen.getByText('ORD-000125')).toBeInTheDocument();
-    expect(screen.getByText('قیمت‌گذاری شده')).toBeInTheDocument();
+    expect(screen.getByText('در حال بررسی')).toBeInTheDocument();
     expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(mockCreate).toHaveBeenCalledWith({
       weightGrams: '5',

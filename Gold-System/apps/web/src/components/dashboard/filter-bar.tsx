@@ -38,7 +38,7 @@ export function FilterBar({
           <label key={field.key} className="space-y-1 text-sm">
             <span className="font-medium">{field.label}</span>
             <select
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
+              className="h-10 w-full rounded-md border border-input bg-background px-3 font-sans text-sm"
               value={values[field.key] ?? ''}
               onChange={(event) => onChange(field.key, event.target.value)}
             >

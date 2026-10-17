@@ -47,6 +47,7 @@ beforeEach(() => {
   mockListOrders.mockReset();
   mockListTrades.mockReset();
   mockPortfolio.mockReset();
+  mockGetAccount.mockRejectedValue(new ApiClientError('NOT_FOUND', 'missing', 404));
   mockGetPrice.mockResolvedValue(null);
   mockListOrders.mockResolvedValue({ data: [] });
   mockListTrades.mockResolvedValue({ data: [] });
@@ -56,7 +57,6 @@ beforeEach(() => {
 describe('portal dashboard customer profile', () => {
   it('does not treat a missing customer profile as a load failure', async () => {
     mockGetMe.mockRejectedValue(new ApiClientError('NOT_FOUND', 'missing', 404));
-    mockGetAccount.mockRejectedValue(new ApiClientError('NOT_FOUND', 'missing', 404));
 
     renderPage();
 
@@ -68,7 +68,6 @@ describe('portal dashboard customer profile', () => {
 
   it('still reports unexpected customer API failures', async () => {
     mockGetMe.mockRejectedValue(new ApiClientError('INTERNAL_ERROR', 'boom', 500));
-    mockGetAccount.mockRejectedValue(new ApiClientError('NOT_FOUND', 'missing', 404));
 
     renderPage();
 

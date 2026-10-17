@@ -18,7 +18,8 @@ import {
   formatPurity,
   formatMoney,
   formatWeight,
-  ORDER_STATUS_LABELS,
+  feeLineLabel,
+  orderStatusPresentation,
   PAYMENT_METHOD_LABELS,
   SETTLEMENT_STATUS_LABELS,
 } from '@/lib/utils';
@@ -94,10 +95,7 @@ export default function OrderDetailPage() {
           <h1 className="text-2xl font-bold" dir="ltr">{order.orderNumber}</h1>
           <p className="text-sm text-muted-foreground">{formatDate(order.createdAt)}</p>
         </div>
-        <StatusBadge
-          status={order.status}
-          label={ORDER_STATUS_LABELS[order.status] ?? order.status}
-        />
+        <StatusBadge {...orderStatusPresentation(order.status)} />
       </div>
 
       <Card>
@@ -114,7 +112,23 @@ export default function OrderDetailPage() {
           <dl className="divide-y divide-border text-sm">
             <DetailRow label="وزن" value={formatGrams(order.weightGrams)} />
             <DetailRow label="عیار" value={formatPurity(order.purityRatio)} />
-            <DetailRow label="مبلغ کل" value={formatRial(order.totalAmountRial)} />
+            <DetailRow
+              label="قیمت لحظه‌ای ثبت سفارش"
+              value={`${formatRial(order.step1BasePrice)} / گرم`}
+            />
+            {(order.charges ?? []).length > 0 ? (
+              (order.charges ?? []).map((charge) => (
+                <DetailRow
+                  key={`${charge.code}-${charge.side}`}
+                  label={feeLineLabel(charge.labelFa, charge.mode, charge.rateValue)}
+                  value={formatRial(charge.amount)}
+                />
+              ))
+            ) : (
+              <DetailRow label="کارمزد" value={formatRial(order.feeAmountRial ?? '0')} />
+            )}
+            <DetailRow label="اجرت" value={formatRial(order.wageAmount ?? '0')} />
+            <DetailRow label="جمع کل" value={formatRial(order.totalAmountRial)} />
             <DetailRow label="رزرو شده" value={formatRial(order.reservedAmountRial)} />
             {order.submittedAt && (
               <DetailRow label="تاریخ ارسال" value={formatDate(order.submittedAt)} />

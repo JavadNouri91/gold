@@ -14,6 +14,8 @@ export const CUSTOMER_SELF_PERMISSIONS = [
   'customer.quotation.download_own',
   'customer.payment.read_own',
   'customer.account.read_own',
+  'customer.pickup.create',
+  'customer.pickup.read_own',
 ] as const;
 
 export function hasPermission(

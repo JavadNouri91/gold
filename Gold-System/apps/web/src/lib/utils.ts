@@ -214,6 +214,23 @@ export function formatMoney(value: string | number | null | undefined): string {
   return formatAuthoritativeDecimal(toman, 'تومان');
 }
 
+/**
+ * Format a Rial amount as whole Toman. Fractional toman are dropped, not rounded,
+ * so the shown purchasing power never exceeds the stored balance.
+ */
+export function formatWholeMoney(value: string | number | null | undefined): string {
+  const toman = rialToToman(value);
+  if (toman == null) {
+    if (value == null || value === '') return '—';
+    return formatAuthoritativeDecimal(value, 'تومان');
+  }
+  const negative = toman.startsWith('-');
+  const unsigned = negative ? toman.slice(1) : toman;
+  const whole = (unsigned.split('.')[0] ?? '0').replace(/^0+(?=\d)/, '') || '0';
+  const body = negative && whole !== '0' ? `-${whole}` : whole;
+  return formatAuthoritativeDecimal(body, 'تومان');
+}
+
 export function formatWeight(value: string | number | null | undefined): string {
   return formatAuthoritativeDecimal(value, 'گرم');
 }
@@ -221,6 +238,28 @@ export function formatWeight(value: string | number | null | undefined): string 
 /** Alias of formatMoney — Rial storage, Toman display. */
 export function formatRial(value: string | number | null | undefined): string {
   return formatMoney(value);
+}
+
+/** Percentage or fixed rate locked on a transaction charge snapshot. */
+export function formatFeeRate(mode?: string | null, rateValue?: string | null): string | null {
+  if (!mode || mode === 'NONE' || rateValue == null || rateValue === '') return null;
+  if (mode === 'PERCENTAGE') {
+    const trimmed = String(rateValue).replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '');
+    if (!trimmed) return null;
+    return `${toPersianDigits(trimmed)}٪`;
+  }
+  if (mode === 'FIXED') return 'مبلغ ثابت';
+  return null;
+}
+
+export function feeLineLabel(
+  labelFa?: string | null,
+  mode?: string | null,
+  rateValue?: string | null,
+): string {
+  const base = labelFa?.trim() || 'کارمزد';
+  const rate = formatFeeRate(mode, rateValue);
+  return rate ? `${base} (${rate})` : base;
 }
 
 /**
@@ -332,20 +371,51 @@ export function formatTime(iso: string | null | undefined): string {
 
 // ─── Status labels ────────────────────────────────────────────────────────────
 
-export const ORDER_STATUS_LABELS: Record<string, string> = {
+export const ORDER_STATUS_GROUP_LABELS: Record<string, string> = {
   DRAFT: 'پیش‌نویس',
-  SUBMITTED: 'ثبت شده',
-  QUOTED: 'قیمت‌گذاری شده',
-  ASSIGNED: 'در دست بررسی',
-  UNDER_REVIEW: 'در حال بررسی',
+  IN_REVIEW: 'در حال بررسی',
   REVISION_REQUESTED: 'نیاز به اصلاح',
-  REJECTED: 'رد شده',
-  APPROVED: 'تأیید شده',
-  TRADE_CREATED: 'معامله ایجاد شد',
-  SETTLING: 'در حال تسویه',
-  COMPLETED: 'تکمیل شده',
-  CANCELLED: 'لغو شده',
+  COMPLETED: 'پایان‌یافته',
+  CLOSED: 'رد / لغو شده',
 };
+
+const ORDER_STATUS_TO_GROUP: Record<string, string> = {
+  DRAFT: 'DRAFT',
+  SUBMITTED: 'IN_REVIEW',
+  QUOTED: 'IN_REVIEW',
+  ASSIGNED: 'IN_REVIEW',
+  UNDER_REVIEW: 'IN_REVIEW',
+  AWAITING_REVIEW: 'IN_REVIEW',
+  REVISION_REQUESTED: 'REVISION_REQUESTED',
+  APPROVED: 'COMPLETED',
+  TRADE_CREATED: 'COMPLETED',
+  SETTLING: 'COMPLETED',
+  COMPLETED: 'COMPLETED',
+  REJECTED: 'CLOSED',
+  CANCELLED: 'CLOSED',
+};
+
+export const ORDER_STATUS_FILTER_OPTIONS = Object.keys(ORDER_STATUS_GROUP_LABELS).map((value) => ({
+  value,
+  label: ORDER_STATUS_GROUP_LABELS[value]!,
+}));
+
+/** Raw machine statuses and display groups share the five Persian labels. */
+export const ORDER_STATUS_LABELS: Record<string, string> = {
+  ...ORDER_STATUS_GROUP_LABELS,
+  ...Object.fromEntries(
+    Object.entries(ORDER_STATUS_TO_GROUP).map(([status, group]) => [
+      status,
+      ORDER_STATUS_GROUP_LABELS[group] ?? status,
+    ]),
+  ),
+};
+
+export function orderStatusPresentation(status: string): { status: string; label: string } {
+  const group = ORDER_STATUS_GROUP_LABELS[status] ? status : ORDER_STATUS_TO_GROUP[status];
+  if (!group) return { status, label: status };
+  return { status: group, label: ORDER_STATUS_GROUP_LABELS[group] ?? status };
+}
 
 export const TRADE_STATUS_LABELS: Record<string, string> = {
   PENDING_CONFIRMATION: 'در انتظار تأیید',
@@ -483,6 +553,14 @@ export const PURCHASE_STATUS_LABELS: Record<string, string> = {
   CONFIRMED: 'تأیید شده',
 };
 
+export const PICKUP_STATUS_LABELS: Record<string, string> = {
+  REQUESTED: 'ثبت‌شده',
+  PREPARING: 'در حال آماده‌سازی',
+  READY: 'آماده تحویل',
+  DELIVERED: 'تحویل‌شده',
+  CANCELLED: 'لغو شده',
+};
+
 export const SUPPLIER_STATUS_LABELS: Record<string, string> = {
   ACTIVE: 'فعال',
   SUSPENDED: 'معلق',
@@ -515,9 +593,30 @@ export function getStatusColor(status: string): string {
     'VALIDATED',
     'ALLOCATED',
     'SETTLED',
+    'TRADE_CREATED',
   ];
-  const red = ['REJECTED', 'CANCELLED', 'FAILED', 'REVERSED', 'SUSPENDED', 'BLOCKED', 'DEBTOR'];
-  const yellow = ['PENDING', 'UNDER_REVIEW', 'SUBMITTED', 'SETTLING', 'QUOTED', 'PARTIAL'];
+  const red = [
+    'REJECTED',
+    'CANCELLED',
+    'FAILED',
+    'REVERSED',
+    'SUSPENDED',
+    'BLOCKED',
+    'DEBTOR',
+    'CLOSED',
+  ];
+  const yellow = [
+    'PENDING',
+    'UNDER_REVIEW',
+    'SUBMITTED',
+    'SETTLING',
+    'QUOTED',
+    'PARTIAL',
+    'ASSIGNED',
+    'AWAITING_REVIEW',
+    'IN_REVIEW',
+    'REVISION_REQUESTED',
+  ];
   if (green.includes(status)) return 'green';
   if (red.includes(status)) return 'red';
   if (yellow.includes(status)) return 'yellow';

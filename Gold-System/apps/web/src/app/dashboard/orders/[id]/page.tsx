@@ -11,7 +11,14 @@ import { ApiErrorState } from '@/components/dashboard/states';
 import { ReviewContextPanel } from '@/components/dashboard/review-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { ORDER_STATUS_LABELS, formatDateTime, formatMoney, statusLabel } from '@/lib/utils';
+import {
+  feeLineLabel,
+  formatDateTime,
+  formatMoney,
+  formatPurity,
+  formatWeight,
+  orderStatusPresentation,
+} from '@/lib/utils';
 
 export default function OrderDetailPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
@@ -33,17 +40,31 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
       <PageHeader title="جزئیات سفارش" description={order.data?.orderNumber} />
       {order.error ? <ApiErrorState error={order.error} onRetry={() => void order.mutate()} /> : null}
       {order.data ? (
-        <Card>
-          <CardHeader><CardTitle>خلاصه</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <StatusBadge status={order.data.status} label={statusLabel(ORDER_STATUS_LABELS, order.data.status)} />
-            <p>مبلغ: {formatMoney(order.data.totalAmountRial)}</p>
-            <p>اعتبار رزروشده: {formatMoney(order.data.reservedAmountRial)}</p>
-            <p>شناسه محاسبه قیمت: <span dir="ltr">{order.data.pricingCalculationId ?? '—'}</span></p>
-            <p>{formatDateTime(order.data.createdAt)}</p>
-            <Link className="text-gold-800" href={`/dashboard/customers/${order.data.customerId}`}>مشتری</Link>
-          </CardContent>
-        </Card>
+        <>
+          <Card>
+            <CardHeader><CardTitle>خلاصه</CardTitle></CardHeader>
+            <CardContent className="space-y-2 text-sm">
+              <StatusBadge {...orderStatusPresentation(order.data.status)} />
+              <p>وزن: {formatWeight(order.data.weightGrams)}</p>
+              <p>عیار: {formatPurity(order.data.purityRatio)}</p>
+              <p>اعتبار رزروشده: {formatMoney(order.data.reservedAmountRial)}</p>
+              <p>{formatDateTime(order.data.createdAt)}</p>
+              <Link className="text-gold-800" href={`/dashboard/customers/${order.data.customerId}`}>مشتری</Link>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader><CardTitle>جزئیات قیمت ثبت سفارش</CardTitle></CardHeader>
+            <CardContent>
+              <OrderPriceBreakdown
+                step1BasePrice={order.data.step1BasePrice}
+                wageAmount={order.data.wageAmount}
+                feeAmountRial={order.data.feeAmountRial}
+                totalAmountRial={order.data.totalAmountRial}
+                charges={order.data.charges}
+              />
+            </CardContent>
+          </Card>
+        </>
       ) : null}
       <Card>
         <CardHeader><CardTitle>پیش‌فاکتورها</CardTitle></CardHeader>
@@ -69,6 +90,59 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           }}
         />
       ) : null}
+    </div>
+  );
+}
+
+function OrderPriceBreakdown({
+  step1BasePrice,
+  wageAmount,
+  feeAmountRial,
+  totalAmountRial,
+  charges,
+}: {
+  step1BasePrice?: string | null;
+  wageAmount?: string | null;
+  feeAmountRial?: string;
+  totalAmountRial: string;
+  charges?: Array<{
+    code: string;
+    labelFa: string;
+    side: string;
+    amount: string;
+    mode?: string;
+    rateValue?: string;
+  }>;
+}) {
+  const lines = charges ?? [];
+  return (
+    <dl className="divide-y divide-border text-sm">
+      <DetailRow
+        label="قیمت لحظه‌ای ثبت سفارش"
+        value={`${formatMoney(step1BasePrice)} / گرم`}
+      />
+      {lines.length > 0 ? (
+        lines.map((charge) => (
+          <DetailRow
+            key={`${charge.code}-${charge.side}`}
+            label={feeLineLabel(charge.labelFa, charge.mode, charge.rateValue)}
+            value={formatMoney(charge.amount)}
+          />
+        ))
+      ) : (
+        <DetailRow label="کارمزد" value={formatMoney(feeAmountRial ?? '0')} />
+      )}
+      <DetailRow label="اجرت" value={formatMoney(wageAmount ?? '0')} />
+      <DetailRow label="جمع کل" value={formatMoney(totalAmountRial)} />
+    </dl>
+  );
+}
+
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between py-2.5">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="tabular-nums font-medium">{value}</dd>
     </div>
   );
 }

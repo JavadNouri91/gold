@@ -10,6 +10,7 @@ import { AuditModule } from '../audit/audit.module';
 import { QuotationsModule } from '../quotations/quotations.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { TradingPolicyModule } from '../trading-policy/trading-policy.module';
+import { TradesModule } from '../trades/trades.module';
 
 /**
  * Orders module � Phase 3.3 / 3.4
@@ -35,9 +36,10 @@ import { TradingPolicyModule } from '../trading-policy/trading-policy.module';
     forwardRef(() => QuotationsModule),
     NotificationsModule,
     TradingPolicyModule,
+    forwardRef(() => TradesModule),
   ],
   controllers: [OrdersController],
   providers: [OrdersService, CustomerActivityService, OrderRepository],
-  exports: [OrdersService, OrderRepository],
+  exports: [OrdersService, OrderRepository, CustomerActivityService],
 })
 export class OrdersModule {}

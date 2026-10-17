@@ -57,18 +57,29 @@ describe('CustomerActivityService ownership', () => {
     );
   });
 
-  it('sellable weight is booked buys minus booked sells', async () => {
-    const findMany = jest.fn().mockResolvedValue([
+  it('sellable weight is booked buys minus booked sells and pickups', async () => {
+    const orderFindMany = jest.fn().mockResolvedValue([
       booked('buy-1', 'BUY', '5.000000'),
       booked('sell-1', 'SELL', '2.000000'),
       { ...booked('draft-1', 'SELL', '9.000000'), status: 'DRAFT' },
     ]);
-    const service = new CustomerActivityService({ order: { findMany } } as never);
-    const db = { order: { findMany } };
+    const pickupFindMany = jest.fn().mockResolvedValue([
+      { weightGrams: { toString: () => '1.000000' }, status: 'REQUESTED' },
+    ]);
+    const service = new CustomerActivityService({
+      order: { findMany: orderFindMany },
+      physicalGoldPickup: { findMany: pickupFindMany },
+    } as never);
+    const db = {
+      order: { findMany: orderFindMany },
+      physicalGoldPickup: { findMany: pickupFindMany },
+    };
 
     const grams = await service.sellableWeightGrams('customer-1', db as never);
-    expect(grams.toFixed(6)).toBe('3.000000');
-    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { customerId: 'customer-1' } }));
+    expect(grams.toFixed(6)).toBe('2.000000');
+    expect(orderFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { customerId: 'customer-1' } }),
+    );
   });
 });
 

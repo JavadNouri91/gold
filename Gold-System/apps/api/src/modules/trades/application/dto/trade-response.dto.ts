@@ -71,6 +71,7 @@ export class TradeResponseDto {
   roundingAmount: string | null;
   isComplete: boolean;
   customerType: string | null;
+  side: 'BUY' | 'SELL' | null;
 
   /** Full locked snapshot — for Phase 4 accounting integration reference */
   lockedTermsSnapshot: Record<string, unknown>;
@@ -112,6 +113,8 @@ export class TradeResponseDto {
     dto.roundingAmount = entity.roundingAmount ? entity.roundingAmount.toFixed(2) : null;
     dto.isComplete = entity.isComplete;
     dto.customerType = entity.customerType;
+    const snapshotSide = entity.lockedTermsSnapshot?.side;
+    dto.side = snapshotSide === 'BUY' || snapshotSide === 'SELL' ? snapshotSide : null;
     dto.lockedTermsSnapshot = entity.lockedTermsSnapshot;
     dto.confirmedByUserId = entity.confirmedByUserId;
     dto.confirmedAt = entity.confirmedAt;

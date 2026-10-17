@@ -21,6 +21,8 @@ const PERMISSIONS = [
   { key: 'customer.quotation.download_own', module: 'quotations', description: 'Download own quotations' },
   { key: 'customer.payment.read_own', module: 'payments', description: 'Read own payments' },
   { key: 'customer.account.read_own', module: 'customer-accounts', description: 'Read own account' },
+  { key: 'customer.pickup.create', module: 'pickups', description: 'Request in-store melted-gold pickup' },
+  { key: 'customer.pickup.read_own', module: 'pickups', description: 'Read own physical gold pickup requests' },
   // Orders
   { key: 'order.read', module: 'orders', description: 'Read any order' },
   { key: 'order.assign', module: 'orders', description: 'Assign order to reviewer' },
@@ -94,6 +96,11 @@ const PERMISSIONS = [
   { key: 'trading.limits.manage', module: 'trading', description: 'Configure trading limits' },
   { key: 'trading.holidays.manage', module: 'trading', description: 'Manage trading holidays and daily exceptions' },
   { key: 'trading.audit.view', module: 'trading', description: 'View trading schedule audit history' },
+  // Physical gold pickup (staff)
+  { key: 'pickup.read', module: 'pickups', description: 'List and read physical gold pickup requests' },
+  { key: 'pickup.prepare', module: 'pickups', description: 'Mark pickup as preparing or ready' },
+  { key: 'pickup.deliver', module: 'pickups', description: 'Mark pickup as delivered at the store' },
+  { key: 'pickup.cancel', module: 'pickups', description: 'Cancel a physical gold pickup request' },
 ] as const;
 
 // ─── Role definitions ─────────────────────────────────────────
@@ -110,6 +117,7 @@ const ROLES: Array<{ name: string; description: string; permissions: string[] }>
       'order.read', 'quotation.read', 'customer.read',
       'trade.read', 'trade.review', 'trade.comment', 'trade.approve', 'trade.reject',
       'trade.request_revision', 'customer.account.read',
+      'pickup.read', 'pickup.prepare', 'pickup.deliver', 'pickup.cancel',
     ],
   },
   {
@@ -120,6 +128,7 @@ const ROLES: Array<{ name: string; description: string; permissions: string[] }>
       'trade.read', 'trade.review', 'trade.request_revision',
       'notification.manage', 'notification.read', 'notification.admin',
       'purchase.create', 'purchase.read', 'purchase.confirm',
+      'pickup.read', 'pickup.prepare', 'pickup.deliver', 'pickup.cancel',
     ],
   },
   {
@@ -155,6 +164,7 @@ const ROLES: Array<{ name: string; description: string; permissions: string[] }>
       'customer.order.read_own', 'customer.quotation.read_own',
       'customer.quotation.download_own', 'customer.payment.read_own',
       'customer.account.read_own',
+      'customer.pickup.create', 'customer.pickup.read_own',
     ],
   },
   {

@@ -1,4 +1,4 @@
-import { formatRial, toPersianDigits } from '@/lib/utils';
+import { formatRial, formatWholeMoney, toPersianDigits } from '@/lib/utils';
 
 export type MoneyTone = 'positive' | 'negative' | 'neutral';
 
@@ -28,9 +28,22 @@ export function formatSignedRial(value: string | null | undefined): string {
   return body;
 }
 
-export function formatSignedPercent(value: string | null | undefined, tone: MoneyTone): string {
+/** Signed Toman with the fractional part dropped, not rounded. */
+export function formatSignedWholeRial(value: string | null | undefined): string {
+  if (value == null || value.trim() === '') return '—';
+  const tone = moneyTone(value);
+  const body = formatWholeMoney(value.trim().replace(/^-/, ''));
+  if (body === '—' || body === '۰ تومان' || tone !== 'negative') return body;
+  return `−${body}`;
+}
+
+export function formatSignedPercent(
+  value: string | null | undefined,
+  tone: MoneyTone,
+  options?: { plus?: boolean },
+): string {
   if (value == null || value.trim() === '') return '';
   const body = toPersianDigits(value.trim().replace(/^-/, ''));
-  const prefix = tone === 'positive' ? '+' : tone === 'negative' ? '−' : '';
+  const prefix = tone === 'negative' ? '−' : tone === 'positive' && options?.plus !== false ? '+' : '';
   return `(${prefix}${body}٪)`;
 }

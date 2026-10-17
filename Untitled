@@ -1,0 +1,2 @@
+cd "D:\Projects\40.05.1.1- Gold\Gold-System"
+pnpm dev:web

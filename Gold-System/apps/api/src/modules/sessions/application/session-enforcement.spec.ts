@@ -27,6 +27,8 @@ function harness(global: {
   limitType: 'LIMITED' | 'UNLIMITED';
   maxSessions: number | null;
   loginBehavior: 'BLOCK' | 'REVOKE_OLDEST' | 'REQUIRE_CONFIRMATION';
+  idleTimeoutMinutes?: number | null;
+  maxSessionDurationMinutes?: number | null;
 }) {
   const rows: Row[] = [];
   const tickets: Array<{
@@ -73,7 +75,13 @@ function harness(global: {
     user: {
       findUnique: async () => ({ roles: state.roleIds.map((roleId) => ({ roleId })) }),
     },
-    sessionSetting: { findUnique: async () => global },
+    sessionSetting: {
+      findUnique: async () => ({
+        ...global,
+        idleTimeoutMinutes: global.idleTimeoutMinutes ?? null,
+        maxSessionDurationMinutes: global.maxSessionDurationMinutes ?? null,
+      }),
+    },
     roleSessionPolicy: { findMany: async () => state.rolePolicies },
     refreshToken: {
       findMany: async () =>
@@ -176,10 +184,33 @@ function harness(global: {
         holder.release();
       }
     },
+    sessionSetting: {
+      findUnique: async () => ({
+        ...global,
+        idleTimeoutMinutes: global.idleTimeoutMinutes ?? null,
+        maxSessionDurationMinutes: global.maxSessionDurationMinutes ?? null,
+      }),
+    },
     refreshToken: {
       findUnique: async ({ where }: { where: { id: string } }) =>
         rows.find((row) => row.id === where.id) ?? null,
-      updateMany: async () => ({ count: 0 }),
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: { id?: string; revokedAt?: null; lastActivityAt?: { lt: Date } };
+        data: Partial<Row>;
+      }) => {
+        let count = 0;
+        for (const row of rows) {
+          if (where.id && row.id !== where.id) continue;
+          if (where.revokedAt === null && row.revokedAt) continue;
+          if (where.lastActivityAt?.lt && row.lastActivityAt >= where.lastActivityAt.lt) continue;
+          Object.assign(row, data);
+          count += 1;
+        }
+        return { count };
+      },
     },
   };
 
@@ -358,6 +389,39 @@ describe('session enforcement', () => {
     const row = box.rows.find((item) => item.id === opened.sessionId);
     if (!row) throw new Error('session missing');
     row.expiresAt = new Date(Date.now() - 1000);
+    await expect(box.service.assertActive(opened.sessionId, 'user-1')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+  });
+
+  it('rejects a session that exceeded the idle timeout', async () => {
+    const box = harness({
+      limitType: 'LIMITED',
+      maxSessions: 1,
+      loginBehavior: 'BLOCK',
+      idleTimeoutMinutes: 30,
+    });
+    const opened = await box.service.openLoginSession(login);
+    const row = box.rows.find((item) => item.id === opened.sessionId);
+    if (!row) throw new Error('session missing');
+    row.lastActivityAt = new Date(Date.now() - 31 * 60 * 1000);
+    await expect(box.service.assertActive(opened.sessionId, 'user-1')).rejects.toBeInstanceOf(
+      UnauthorizedException,
+    );
+    expect(row.revokedAt).not.toBeNull();
+  });
+
+  it('rejects a session that exceeded the maximum duration from login', async () => {
+    const box = harness({
+      limitType: 'LIMITED',
+      maxSessions: 1,
+      loginBehavior: 'BLOCK',
+      maxSessionDurationMinutes: 60,
+    });
+    const opened = await box.service.openLoginSession(login);
+    const row = box.rows.find((item) => item.id === opened.sessionId);
+    if (!row) throw new Error('session missing');
+    row.createdAt = new Date(Date.now() - 61 * 60 * 1000);
     await expect(box.service.assertActive(opened.sessionId, 'user-1')).rejects.toBeInstanceOf(
       UnauthorizedException,
     );

@@ -106,3 +106,26 @@ SETTLED           ← DEFERRED: not operational in MVP
 > Decision ref: docs/21-business-decisions.md §8.4
 > Supplier settlement workflow is explicitly excluded from MVP.
 > States SETTLING and SETTLED are scaffolded but not implemented in MVP.
+
+## Physical Gold Pickup
+
+```text
+REQUESTED          ← customer requests weight; grams reserved immediately
+  ↓
+PREPARING          ← staff starts preparing the bar
+  ↓
+READY              ← ready for in-store handover
+  ↓
+DELIVERED          ← handed over at the store; GA-02 OUT posted
+```
+
+Cancel (releases reserved grams; no ledger posting):
+
+```text
+REQUESTED → CANCELLED   (customer or staff)
+PREPARING → CANCELLED   (customer or staff)
+READY     → CANCELLED   (staff only)
+```
+
+> Decision ref: docs/21-business-decisions.md §15
+> Not part of Order → Quotation → Trade. Jewelry catalog and multi-store are out of scope.

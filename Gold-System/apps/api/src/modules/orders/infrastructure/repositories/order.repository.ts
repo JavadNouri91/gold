@@ -5,6 +5,7 @@ import { OrderStatus, CustomerType } from '@gold/shared-types';
 import { PrismaService } from '../../../../database/prisma.service';
 import { OrderEntity } from '../../domain/entities/order.entity';
 import { OrderItemEntity } from '../../domain/entities/order-item.entity';
+import { readOrderSide } from '../../application/customer-activity.math';
 
 type OrderRow = Prisma.OrderGetPayload<{ include: { items: true } }>;
 type ItemRow = Prisma.OrderItemGetPayload<Record<string, never>>;
@@ -55,11 +56,13 @@ export class OrderRepository {
     page: number;
     limit: number;
     status?: OrderStatus;
+    statuses?: OrderStatus[];
     customerId?: string;
   }): Promise<{ orders: OrderEntity[]; total: number }> {
     const skip = (opts.page - 1) * opts.limit;
     const where: Prisma.OrderWhereInput = {};
-    if (opts.status) where.status = opts.status;
+    if (opts.statuses?.length) where.status = { in: opts.statuses };
+    else if (opts.status) where.status = opts.status;
     if (opts.customerId) where.customerId = opts.customerId;
 
     const [rows, total] = await this.prisma.$transaction([
@@ -236,6 +239,9 @@ export class OrderRepository {
   // ─── Mapping ─────────────────────────────────────────────────
 
   private toDomain(row: OrderRow): OrderEntity {
+    const firstItem = [...row.items].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime(),
+    )[0];
     return new OrderEntity({
       id: row.id,
       orderNumber: row.orderNumber,
@@ -250,6 +256,7 @@ export class OrderRepository {
       weightGrams: new Decimal(row.weightGrams.toString()),
       purityRatio: new Decimal(row.purityRatio.toString()),
       customerType: (row.customerType as CustomerType) ?? null,
+      side: readOrderSide(firstItem?.metadata),
       submittedAt: row.submittedAt ?? null,
       cancelledAt: row.cancelledAt ?? null,
       rejectedAt: row.rejectedAt ?? null,

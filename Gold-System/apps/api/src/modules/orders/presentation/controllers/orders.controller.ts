@@ -126,10 +126,8 @@ export class OrdersController {
    * POST /orders/:id/approve
    * Approve an Order after manual review (ASSIGNED/UNDER_REVIEW → APPROVED).
    *
-   * NOTE: Trade creation is a subsequent phase (Phase 3.6+, UC-11).
-   * Credit is NOT consumed here — consumed at Trade approval (§3.3).
-   *
-   * DUAL APPROVAL: Single approval only (§13.4 OPEN — threshold undefined).
+   * MVP: the first approval is final and confirmTrade runs immediately.
+   * POST /trades remains for leftovers and for a future N-person policy.
    *
    * Authorization: trade.approve (Reviewer)
    *

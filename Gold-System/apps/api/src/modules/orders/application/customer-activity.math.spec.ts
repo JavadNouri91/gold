@@ -135,6 +135,30 @@ describe('customer activity analytics', () => {
     expect(result.transactions[0]?.countsTowardVolume).toBe(true);
   });
 
+  it('expands a display group so CLOSED includes cancelled and rejected', () => {
+    const result = computeCustomerActivity(
+      [
+        row({ id: 'ok', weightGrams: '5.000000' }),
+        row({
+          id: 'cancelled',
+          status: 'CANCELLED',
+          weightGrams: '3.000000',
+          totalAmountRial: '30.00',
+        }),
+        row({
+          id: 'rejected',
+          status: 'REJECTED',
+          weightGrams: '2.000000',
+          totalAmountRial: '20.00',
+        }),
+      ],
+      { ...query, status: 'CLOSED' },
+    );
+
+    expect(result.meta.total).toBe(2);
+    expect(result.volume.grams).toBe('5.000000');
+  });
+
   it('filters by side, purity, and order number without dropping other customers data handling', () => {
     const rows = [
       row({ id: '1', orderNumber: 'ORD-000125', side: 'BUY', purityRatio: '0.750000' }),
@@ -230,10 +254,23 @@ describe('customer activity analytics', () => {
       ]),
     ).toEqual({
       weightGrams: '20.000000',
+      reservedPickupGrams: '0.000000',
       purityRatio: '0.750000',
       averageBuyPriceRial: '50000000.00',
       totalBuyValueRial: '1500000000.00',
       totalSellValueRial: '600000000.00',
+    });
+  });
+
+  it('subtracts committed pickup grams from available holding', () => {
+    expect(
+      computeCustomerHolding(
+        [row({ id: 'buy', side: 'BUY', weightGrams: '30.000000', totalAmountRial: '1500000000.00' })],
+        { pickupReservedGrams: '5.000000', pickupCommittedGrams: '12.000000' },
+      ),
+    ).toMatchObject({
+      weightGrams: '18.000000',
+      reservedPickupGrams: '5.000000',
     });
   });
 });

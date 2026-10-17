@@ -6,7 +6,12 @@
  */
 
 import type { PaginationMeta } from '@gold/shared-types';
-import { fetchBlob, request } from './api';
+import {
+  fetchBlob,
+  request,
+  type ListPickupsResponse,
+  type PhysicalGoldPickup,
+} from './api';
 
 export function toQuery(params: object): string {
   const query = new URLSearchParams();
@@ -203,10 +208,15 @@ export interface StaffOrder {
   pricingCalculationId?: string | null;
   status: string;
   totalAmountRial: string;
+  goldAmountRial?: string;
+  feeAmountRial?: string;
+  step1BasePrice?: string | null;
+  wageAmount?: string | null;
   reservedAmountRial: string;
   weightGrams: string;
   purityRatio: string;
   customerType?: string | null;
+  side?: 'BUY' | 'SELL' | null;
   submittedAt?: string | null;
   cancelledAt?: string | null;
   rejectedAt?: string | null;
@@ -214,6 +224,16 @@ export interface StaffOrder {
   rejectionReason?: string | null;
   createdAt: string;
   updatedAt: string;
+  charges?: Array<{
+    code: string;
+    labelFa: string;
+    side: string;
+    mode: string;
+    rateValue: string;
+    calculationBase: string | null;
+    baseAmount: string;
+    amount: string;
+  }>;
 }
 
 export interface StaffOrderList {
@@ -1217,6 +1237,47 @@ export const purchasesApi = {
   },
 };
 
+export const staffPickupsApi = {
+  list(params?: {
+    status?: string;
+    customerId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListPickupsResponse> {
+    return request(`/staff/pickups${toQuery(params ?? {})}`);
+  },
+  getById(id: string): Promise<PhysicalGoldPickup> {
+    return request(`/staff/pickups/${id}`);
+  },
+  markPreparing(
+    id: string,
+    input: { scheduledPickupAt: string; staffNote?: string },
+  ): Promise<PhysicalGoldPickup> {
+    return request(`/staff/pickups/${id}/preparing`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+  markReady(id: string, staffNote?: string): Promise<PhysicalGoldPickup> {
+    return request(`/staff/pickups/${id}/ready`, {
+      method: 'POST',
+      body: JSON.stringify({ staffNote }),
+    });
+  },
+  deliver(id: string, staffNote?: string): Promise<PhysicalGoldPickup> {
+    return request(`/staff/pickups/${id}/deliver`, {
+      method: 'POST',
+      body: JSON.stringify({ staffNote }),
+    });
+  },
+  cancel(id: string, reason: string): Promise<PhysicalGoldPickup> {
+    return request(`/staff/pickups/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+};
+
 export const financialLedgerApi = {
   journals(params?: { limit?: number; offset?: number; sourceType?: string }): Promise<LedgerJournalList> {
     return request(`/ledger/financial/journals${toQuery(params ?? {})}`);
@@ -1298,6 +1359,8 @@ export interface SessionPolicyFields {
   limitType: SessionLimitType;
   maxSessions: number | null;
   loginBehavior: SessionLoginBehavior;
+  idleTimeoutMinutes: number | null;
+  maxSessionDurationMinutes: number | null;
 }
 
 export interface RoleSessionPolicyRow {
@@ -1327,12 +1390,35 @@ export interface SessionUserHit {
   roles: Array<{ id: string; name: string; description: string | null }>;
 }
 
+function policyMinutesFromApi(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Math.trunc(Number(value));
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeSessionPolicyFields(raw: SessionPolicyFields & Record<string, unknown>): SessionPolicyFields {
+  const idle = raw.idleTimeoutMinutes ?? raw.idle_timeout_minutes;
+  const maxDuration = raw.maxSessionDurationMinutes ?? raw.max_session_duration_minutes;
+  return {
+    limitType: raw.limitType,
+    maxSessions: raw.maxSessions,
+    loginBehavior: raw.loginBehavior,
+    idleTimeoutMinutes: policyMinutesFromApi(idle),
+    maxSessionDurationMinutes: policyMinutesFromApi(maxDuration),
+  };
+}
+
 export const sessionPolicyApi = {
   getGlobal(): Promise<SessionPolicyFields> {
-    return request('/session-policies/global');
+    return request<SessionPolicyFields & Record<string, unknown>>('/session-policies/global').then(
+      normalizeSessionPolicyFields,
+    );
   },
   updateGlobal(body: SessionPolicyFields): Promise<SessionPolicyFields> {
-    return request('/session-policies/global', { method: 'PATCH', body: JSON.stringify(body) });
+    return request<SessionPolicyFields & Record<string, unknown>>('/session-policies/global', {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }).then(normalizeSessionPolicyFields);
   },
   listRoles(): Promise<RoleSessionPolicyRow[]> {
     return request('/session-policies/roles');

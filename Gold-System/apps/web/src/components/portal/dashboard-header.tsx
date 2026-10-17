@@ -14,6 +14,8 @@ import { AssetsHeader } from '@/components/portal/assets/assets-header';
 import { CreditHeader } from '@/components/portal/credit/credit-header';
 import { NotificationBell } from '@/components/portal/notifications/notification-bell';
 import { PortalSupportModal } from '@/components/portal/portal-support-modal';
+import { HeaderKycStatus } from '@/components/portal/header-kyc-status';
+import { PendingPickupCard } from '@/components/portal/pending-pickup-card';
 import { RialBalanceCard } from '@/components/portal/rial-balance-card';
 import { ThemeCycleButton } from '@/components/theme-toggle';
 
@@ -53,7 +55,11 @@ export function DashboardHeader({ onMenu }: { onMenu: () => void }) {
             </Button>
             <NotificationBell />
           </div>
-          <RialBalanceCard className="min-w-0" />
+          <div className="flex shrink-0 items-center gap-1.5">
+            <HeaderKycStatus />
+            <PendingPickupCard variant="icon" />
+            <RialBalanceCard variant="icon" />
+          </div>
         </div>
         <div className="flex items-start gap-3 px-4 pb-3">
           <CustomerAvatar customer={customer} name={fullName} size="h-11 w-11" />
@@ -109,6 +115,8 @@ export function DashboardHeader({ onMenu }: { onMenu: () => void }) {
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
+          <HeaderKycStatus />
+          <PendingPickupCard />
           <RialBalanceCard />
           <ThemeCycleButton />
           <NotificationBell />

@@ -55,6 +55,9 @@ export class OrderEntity {
   /** Customer type snapshot at Order creation time */
   readonly customerType: CustomerType | null;
 
+  /** BUY/SELL from the first order item. Null when the order was never classified. */
+  readonly side: 'BUY' | 'SELL' | null;
+
   readonly submittedAt: Date | null;
   readonly cancelledAt: Date | null;
   readonly rejectedAt: Date | null;
@@ -82,6 +85,7 @@ export class OrderEntity {
     weightGrams: Decimal;
     purityRatio: Decimal;
     customerType: CustomerType | null;
+    side?: 'BUY' | 'SELL' | null;
     submittedAt: Date | null;
     cancelledAt: Date | null;
     rejectedAt: Date | null;
@@ -93,6 +97,7 @@ export class OrderEntity {
     updatedAt: Date;
   }) {
     Object.assign(this, props);
+    this.side = props.side ?? null;
   }
 
   // ─── State machine guards ─────────────────────────────────────
@@ -136,20 +141,26 @@ export class OrderEntity {
 
   /**
    * True if the Order can be approved by a reviewer.
-   * Accepts both ASSIGNED and UNDER_REVIEW to allow approve from either state.
-   * Phase 3.5
+   * Assignment is optional; quoted orders can be decided directly.
    */
   canApprove(): boolean {
-    return this.status === OrderStatus.ASSIGNED || this.status === OrderStatus.UNDER_REVIEW;
+    return (
+      this.status === OrderStatus.QUOTED ||
+      this.status === OrderStatus.ASSIGNED ||
+      this.status === OrderStatus.UNDER_REVIEW
+    );
   }
 
   /**
    * True if the Order can have revision requested by a reviewer.
-   * Accepts both ASSIGNED and UNDER_REVIEW.
-   * Phase 3.5
+   * Assignment is optional; quoted orders can be decided directly.
    */
   canRequestRevision(): boolean {
-    return this.status === OrderStatus.ASSIGNED || this.status === OrderStatus.UNDER_REVIEW;
+    return (
+      this.status === OrderStatus.QUOTED ||
+      this.status === OrderStatus.ASSIGNED ||
+      this.status === OrderStatus.UNDER_REVIEW
+    );
   }
 
   /**

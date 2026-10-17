@@ -1,4 +1,11 @@
-import { formatGroupedPersianInteger, formatMoney, rialToToman, tomanToRial } from '@/lib/utils';
+import { formatSignedWholeRial } from '@/lib/portfolio-display';
+import {
+  formatGroupedPersianInteger,
+  formatMoney,
+  formatWholeMoney,
+  rialToToman,
+  tomanToRial,
+} from '@/lib/utils';
 
 describe('formatGroupedPersianInteger', () => {
   it('groups thousands with Persian digits', () => {
@@ -13,6 +20,26 @@ describe('authoritative money display', () => {
   it('shows Rial amounts as Toman without rounding away backend fraction digits', () => {
     expect(formatMoney('1234.239')).toBe('۱۲۳.۴۲۳۹ تومان');
     expect(formatMoney('1234.239')).not.toContain('ریال');
+  });
+});
+
+describe('formatWholeMoney', () => {
+  it('drops fractional toman without rounding up', () => {
+    expect(formatWholeMoney('1750000005.70')).toBe('۱۷۵,۰۰۰,۰۰۰ تومان');
+    expect(formatWholeMoney('1234.239')).toBe('۱۲۳ تومان');
+    expect(formatWholeMoney('9')).toBe('۰ تومان');
+    expect(formatWholeMoney('-15')).toBe('−۱ تومان');
+    expect(formatWholeMoney(null)).toBe('—');
+  });
+});
+
+describe('formatSignedWholeRial', () => {
+  it('drops the toman fraction and keeps the profit or loss sign', () => {
+    expect(formatSignedWholeRial('1750000005.70')).toBe('۱۷۵,۰۰۰,۰۰۰ تومان');
+    expect(formatSignedWholeRial('-1234.239')).toBe('−۱۲۳ تومان');
+    expect(formatSignedWholeRial('9')).toBe('۰ تومان');
+    expect(formatSignedWholeRial('-5')).toBe('۰ تومان');
+    expect(formatSignedWholeRial(null)).toBe('—');
   });
 });
 

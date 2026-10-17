@@ -23,8 +23,12 @@ async function bootstrap(): Promise<void> {
   app.use(compression());
 
   // ─── CORS ────────────────────────────────────────────────────
+  const corsOrigins = config.get<string[]>('app.corsOrigins', [
+    'http://localhost:4000',
+    'http://127.0.0.1:4000',
+  ]);
   app.enableCors({
-    origin: config.get<string>('app.corsOrigin', 'http://localhost:4000'),
+    origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
     credentials: true,
@@ -61,7 +65,7 @@ async function bootstrap(): Promise<void> {
   }
 
   const port = config.get<number>('app.port', 4001);
-  await app.listen(port);
+  await app.listen(port, '0.0.0.0');
   console.log(`🟡 Gold System API running on http://localhost:${port}/api/v1`);
   console.log(`📖 Swagger docs: http://localhost:${port}/api/docs`);
 }

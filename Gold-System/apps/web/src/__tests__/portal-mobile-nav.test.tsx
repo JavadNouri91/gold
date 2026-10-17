@@ -12,6 +12,7 @@ const mockGetMe = jest.fn();
 const mockGetAccount = jest.fn();
 const mockSummary = jest.fn();
 const mockLogout = jest.fn();
+const mockPortfolio = jest.fn();
 let mockPathname = '/portal/dashboard';
 
 jest.mock('next/navigation', () => ({
@@ -45,6 +46,10 @@ jest.mock('@/lib/api', () => {
     notificationsApi: {
       ...actual.notificationsApi,
       summary: (...args: unknown[]) => mockSummary(...args),
+    },
+    ordersApi: {
+      ...actual.ordersApi,
+      portfolio: (...args: unknown[]) => mockPortfolio(...args),
     },
     fetchBlob: jest.fn().mockRejectedValue(new Error('no avatar')),
   };
@@ -92,10 +97,19 @@ beforeEach(() => {
   mockGetAccount.mockReset();
   mockSummary.mockReset();
   mockLogout.mockReset();
+  mockPortfolio.mockReset();
   mockGetMe.mockResolvedValue(customer);
   mockGetAccount.mockResolvedValue(account());
   mockSummary.mockResolvedValue({ unread: 7 });
   mockLogout.mockResolvedValue(undefined);
+  mockPortfolio.mockResolvedValue({
+    weightGrams: '0',
+    reservedPickupGrams: '0',
+    purityRatio: null,
+    averageBuyPriceRial: null,
+    totalBuyValueRial: null,
+    totalSellValueRial: null,
+  });
   document.body.style.overflow = '';
 });
 
@@ -108,9 +122,18 @@ describe('DashboardHeader mobile chrome', () => {
     expect(screen.getAllByText('مشتری خانگی').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('فعال').length).toBeGreaterThanOrEqual(1);
 
+    const pickup = await screen.findAllByRole('link', { name: /طلای در انتظار تحویل/ });
+    expect(pickup[0]).toHaveAttribute('href', '/portal/pickups/new');
+    expect(pickup[0]).not.toHaveAttribute('title');
+    await userEvent.hover(pickup[0]!);
+    expect(await screen.findByRole('tooltip', { name: /طلای در انتظار تحویل/ })).toHaveClass('font-sans');
+    await userEvent.unhover(pickup[0]!);
+
     const balance = screen.getAllByRole('link', { name: /توان خرید/ })[0]!;
     expect(balance).toHaveAttribute('href', '/portal/credit');
-    expect(balance).toHaveTextContent('۱۵,۸۲۶,۰۰۰ تومان');
+    expect(balance).not.toHaveAttribute('title');
+    await userEvent.hover(balance);
+    expect(await screen.findByRole('tooltip', { name: /توان خرید/ })).toHaveClass('font-sans');
 
     expect(screen.getAllByRole('link', { name: /اعلان‌ها، ۷ خوانده‌نشده/ })[0]).toHaveAttribute(
       'href',
@@ -133,10 +156,18 @@ describe('DashboardSidebar mobile drawer', () => {
     expect(screen.getByText('مشتری خانگی')).toBeInTheDocument();
     expect(screen.getByText(/حساب فعال/)).toBeInTheDocument();
 
+    const nameRow = screen.getByRole('heading', { name: 'علی رضایی' }).parentElement?.parentElement;
+    expect(within(nameRow!).getByRole('link', { name: 'احراز هویت تأیید شده' })).toBeInTheDocument();
+
+    const drawerPickup = await screen.findByRole('link', { name: /طلای در انتظار تحویل/ });
+    expect(drawerPickup).toHaveAttribute('href', '/portal/pickups/new');
+    expect(drawerPickup).not.toHaveTextContent('مشاهده درخواست‌ها');
+    expect(drawerPickup).not.toHaveTextContent('درخواست تحویل حضوری');
+
     const drawerBalance = screen.getByRole('link', { name: /توان خرید شما/ });
     expect(drawerBalance).toHaveAttribute('href', '/portal/credit');
     expect(drawerBalance).toHaveTextContent('۱۵,۸۲۶,۰۰۰ تومان');
-    expect(drawerBalance).toHaveTextContent('مشاهده جزئیات دارایی و موجودی');
+    expect(drawerBalance).not.toHaveTextContent('مشاهده جزئیات دارایی و موجودی');
 
     const nav = screen.getByRole('navigation', { name: 'منوی کشویی پورتال' });
     const dashboard = within(nav).getByRole('link', { name: 'داشبورد' });

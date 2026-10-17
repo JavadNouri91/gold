@@ -6,7 +6,6 @@ import { Alert } from '@/components/ui/alert';
 import { PageSpinner } from '@/components/ui/spinner';
 import { BankAccountsCard } from '@/components/portal/profile/bank-accounts-card';
 import { PersonalInformationCard } from '@/components/portal/profile/personal-information-card';
-import { ProfileCreditCard } from '@/components/portal/profile/profile-credit-card';
 import { ProfileHero } from '@/components/portal/profile/profile-hero';
 import { ProfileKycCard } from '@/components/portal/profile/profile-kyc-card';
 import { ProfilePreferences } from '@/components/portal/profile/profile-preferences';
@@ -19,12 +18,6 @@ export default function ProfilePage() {
     isLoading: customerLoading,
     mutate,
   } = useSWR('customer/me', () => customerApi.getMe());
-
-  const {
-    data: account,
-    error: accountError,
-    isLoading: accountLoading,
-  } = useSWR('customer/me/account', () => customerApi.getMyAccount());
 
   if (customerLoading) return <PageSpinner />;
   if (customerError instanceof ApiClientError && customerError.isNotFound) {
@@ -41,15 +34,6 @@ export default function ProfilePage() {
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
         <div className="order-2 flex flex-col gap-4 xl:order-1 xl:col-span-3">
           <ProfileKycCard customerStatus={customer.status} />
-          <ProfileCreditCard
-            account={account}
-            isLoading={accountLoading}
-            unavailable={accountError instanceof ApiClientError && accountError.isNotFound}
-            hasError={
-              Boolean(accountError) &&
-              !(accountError instanceof ApiClientError && accountError.isNotFound)
-            }
-          />
         </div>
 
         <div className="order-1 xl:order-2 xl:col-span-6">

@@ -58,6 +58,18 @@ export enum NotificationType {
   // ── OTP (docs/21-business-decisions.md §11.1) ─────────────────────
   /** Login OTP — delivered via SMS */
   OTP_LOGIN = 'OTP_LOGIN',
+
+  // ── Physical gold pickup ─────────────────────────────────────
+  /** Customer requested in-store melted-gold pickup */
+  PICKUP_REQUESTED = 'PICKUP_REQUESTED',
+  /** Staff marked the bar ready for store pickup */
+  PICKUP_READY = 'PICKUP_READY',
+  /** Staff recorded physical delivery at the store */
+  PICKUP_DELIVERED = 'PICKUP_DELIVERED',
+  /** Pickup cancelled; reserved weight released */
+  PICKUP_CANCELLED = 'PICKUP_CANCELLED',
+  /** Internal: new pickup request awaiting staff */
+  INTERNAL_NEW_PICKUP = 'INTERNAL_NEW_PICKUP',
 }
 
 /** Which channels are used per notification type */
@@ -78,4 +90,9 @@ export const NOTIFICATION_CHANNELS: Record<NotificationType, NotificationChannel
   [NotificationType.INTERNAL_PAYMENT_ISSUE]: [NotificationChannel.IN_APP],
   [NotificationType.INTERNAL_SETTLEMENT_ISSUE]: [NotificationChannel.IN_APP],
   [NotificationType.OTP_LOGIN]: [NotificationChannel.SMS],
+  [NotificationType.PICKUP_REQUESTED]: [NotificationChannel.IN_APP],
+  [NotificationType.PICKUP_READY]: [NotificationChannel.SMS, NotificationChannel.IN_APP],
+  [NotificationType.PICKUP_DELIVERED]: [NotificationChannel.IN_APP],
+  [NotificationType.PICKUP_CANCELLED]: [NotificationChannel.IN_APP],
+  [NotificationType.INTERNAL_NEW_PICKUP]: [NotificationChannel.IN_APP],
 };

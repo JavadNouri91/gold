@@ -14,10 +14,35 @@ import type { ApiResponse, PaginationMeta } from '@gold/shared-types';
 
 // ─── Config ──────────────────────────────────────────────────────────────────
 
-const BASE_URL =
-  (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4001';
+function configuredApiOrigin(): string {
+  const raw =
+    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4001';
+  return raw.replace(/\/api\/v1\/?$/, '');
+}
 
-const API_BASE = `${BASE_URL}/api/v1`;
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+}
+
+/** Browser origin for the API. LAN pages rewrite localhost to the current host. */
+function apiOrigin(): string {
+  const configured = configuredApiOrigin();
+  if (typeof window === 'undefined') return configured;
+  try {
+    const api = new URL(configured);
+    const pageHost = window.location.hostname;
+    if (!isLoopbackHost(pageHost) && isLoopbackHost(api.hostname)) {
+      api.hostname = pageHost;
+    }
+    return api.origin;
+  } catch {
+    return configured;
+  }
+}
+
+function apiBase(): string {
+  return `${apiOrigin()}/api/v1`;
+}
 
 // ─── Token storage ────────────────────────────────────────────────────────────
 
@@ -90,7 +115,7 @@ export function sessionLoginPath(): string {
 }
 
 async function rawRequest<T>(path: string, options: RequestInit = {}, token?: string): Promise<T> {
-  const url = `${API_BASE}${path}`;
+  const url = `${apiBase()}${path}`;
   const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers: Record<string, string> = {
     ...(isForm ? {} : { 'Content-Type': 'application/json' }),
@@ -119,7 +144,7 @@ async function rawRequest<T>(path: string, options: RequestInit = {}, token?: st
 
 export async function fetchBlob(path: string): Promise<Blob> {
   const token = tokenStore.getAccess();
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${apiBase()}${path}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
   if (res.status === 204) return new Blob();
@@ -682,9 +707,12 @@ export interface Order {
   totalAmountRial: string;
   goldAmountRial?: string;
   feeAmountRial?: string;
+  step1BasePrice?: string | null;
+  wageAmount?: string | null;
   weightGrams: string;
   purityRatio: string;
   customerType?: string;
+  side?: 'BUY' | 'SELL' | null;
   reservedAmountRial: string;
   pricingCalculationId?: string;
   submittedAt?: string;
@@ -697,10 +725,63 @@ export interface Order {
 
 export interface CustomerHolding {
   weightGrams: string;
+  reservedPickupGrams?: string;
   purityRatio: string | null;
   averageBuyPriceRial: string | null;
   totalBuyValueRial: string | null;
   totalSellValueRial: string | null;
+}
+
+export type PhysicalGoldPickupStatus =
+  | 'REQUESTED'
+  | 'PREPARING'
+  | 'READY'
+  | 'DELIVERED'
+  | 'CANCELLED';
+
+export interface PhysicalGoldPickupEvent {
+  id: string;
+  status: PhysicalGoldPickupStatus;
+  note: string | null;
+  actorId: string | null;
+  createdAt: string;
+}
+
+export interface PhysicalGoldPickupCustomer {
+  id: string;
+  customerNumber: string;
+  firstName: string;
+  lastName: string;
+  mobile: string;
+}
+
+export interface PhysicalGoldPickup {
+  id: string;
+  pickupNumber: string;
+  customerId: string;
+  storeId: string;
+  weightGrams: string;
+  purityRatio: string;
+  status: PhysicalGoldPickupStatus;
+  customerNote: string | null;
+  staffNote: string | null;
+  cancelReason: string | null;
+  cancelledByKind?: 'CUSTOMER' | 'STAFF' | null;
+  scheduledPickupAt: string | null;
+  requestedAt: string;
+  preparingAt: string | null;
+  readyAt: string | null;
+  deliveredAt: string | null;
+  cancelledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  events: PhysicalGoldPickupEvent[];
+  customer: PhysicalGoldPickupCustomer | null;
+}
+
+export interface ListPickupsResponse {
+  data: PhysicalGoldPickup[];
+  meta: { total: number; limit: number; offset: number };
 }
 
 export interface CreateOrderInput {
@@ -868,6 +949,42 @@ export const ordersApi = {
   },
 };
 
+// ─── Physical gold pickup ─────────────────────────────────────────────────────
+
+export const pickupsApi = {
+  list(params?: {
+    status?: PhysicalGoldPickupStatus;
+    limit?: number;
+    offset?: number;
+  }): Promise<ListPickupsResponse> {
+    const query = new URLSearchParams();
+    if (params?.status) query.set('status', params.status);
+    if (params?.limit != null) query.set('limit', String(params.limit));
+    if (params?.offset != null) query.set('offset', String(params.offset));
+    const qs = query.toString();
+    return request(`/pickups${qs ? `?${qs}` : ''}`);
+  },
+
+  getById(id: string): Promise<PhysicalGoldPickup> {
+    return request(`/pickups/${id}`);
+  },
+
+  create(input: {
+    weightGrams: string;
+    purityRatio?: string;
+    customerNote?: string;
+  }): Promise<PhysicalGoldPickup> {
+    return request('/pickups', { method: 'POST', body: JSON.stringify(input) });
+  },
+
+  cancel(id: string, reason: string): Promise<PhysicalGoldPickup> {
+    return request(`/pickups/${id}/cancel`, {
+      method: 'POST',
+      body: JSON.stringify({ reason }),
+    });
+  },
+};
+
 // ─── Quotations ───────────────────────────────────────────────────────────────
 
 export interface Quotation {
@@ -888,7 +1005,7 @@ export const quotationsApi = {
   },
 
   getDownloadUrl(id: string): string {
-    return `${API_BASE}/quotations/${id}/download`;
+    return `${apiBase()}/quotations/${id}/download`;
   },
 };
 
@@ -910,6 +1027,7 @@ export interface Trade {
   taxAmount?: string;
   discountAmount?: string;
   customerType?: string;
+  side?: 'BUY' | 'SELL' | null;
   confirmedAt?: string;
   createdAt: string;
 }
@@ -920,11 +1038,32 @@ export interface ListTradesResponse {
 }
 
 export const tradesApi = {
-  list(params?: { limit?: number; offset?: number }): Promise<ListTradesResponse> {
+  list(params?: { limit?: number; offset?: number; page?: number }): Promise<ListTradesResponse> {
     const query = new URLSearchParams();
     if (params?.limit) query.set('limit', String(params.limit));
     if (params?.offset) query.set('offset', String(params.offset));
-    return request(`/trades?${query.toString()}`);
+    if (params?.page != null) query.set('page', String(params.page));
+    return request<{
+      trades?: Trade[];
+      data?: Trade[];
+      meta?: PaginationMeta;
+      total?: number;
+      page?: number;
+      limit?: number;
+    }>(`/trades?${query.toString()}`).then((payload) => {
+      const data = payload.trades ?? payload.data ?? [];
+      const limit = payload.meta?.limit ?? payload.limit ?? params?.limit ?? 20;
+      const total = payload.meta?.total ?? payload.total ?? data.length;
+      return {
+        data,
+        meta: payload.meta ?? {
+          page: payload.page ?? 1,
+          limit,
+          total,
+          totalPages: Math.max(1, Math.ceil(total / limit)),
+        },
+      };
+    });
   },
 
   getById(id: string): Promise<Trade> {

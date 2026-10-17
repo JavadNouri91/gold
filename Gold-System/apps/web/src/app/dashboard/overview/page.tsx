@@ -61,27 +61,30 @@ export default function OverviewPage() {
       {data ? (
         <>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard icon={Users} label="مشتریان" value={count(data.totalCustomers)} hint={`فعال ${count(data.activeCustomers)}`} />
-            <MetricCard icon={ShieldCheck} label="احراز هویت در انتظار" value={count(data.pendingKyc)} />
-            <MetricCard icon={ShoppingCart} label="سفارش‌های در جریان گزارش" value={count(data.pendingOrders)} hint={`کل سفارش‌ها ${count(data.ordersTotal)}`} />
-            <MetricCard icon={ClipboardList} label="سفارش‌های منتظر بررسی" value={count(data.ordersAwaitingReview)} />
-            <MetricCard icon={TrendingUp} label="معاملات تأییدشده" value={count(data.confirmedTrades)} hint={formatMoney(data.totalTradeValueRial)} />
-            <MetricCard icon={Scale} label="معاملات تسویه‌نشده" value={count(data.unsettledTrades)} hint={`پرداخت‌های ثبت‌شده ${count(data.totalPaymentsRecorded)}`} />
-            <MetricCard icon={Truck} label="تعهد به تأمین‌کننده" value={formatMoney(data.supplierPayableRial)} />
-            <MetricCard icon={Coins} label="موقعیت طلا" value={formatWeight(data.goldPositionGrams)} hint={`تعهد طلا ${formatWeight(data.goldObligationGrams)}`} />
+            <MetricCard href="/dashboard/customers" icon={Users} label="مشتریان" value={count(data.totalCustomers)} hint={`فعال ${count(data.activeCustomers)}`} />
+            <MetricCard href="/dashboard/kyc" icon={ShieldCheck} label="احراز هویت در انتظار" value={count(data.pendingKyc)} />
+            <MetricCard href="/dashboard/orders" icon={ShoppingCart} label="سفارش‌های در جریان گزارش" value={count(data.pendingOrders)} hint={`کل سفارش‌ها ${count(data.ordersTotal)}`} />
+            <MetricCard href="/dashboard/assignments" icon={ClipboardList} label="سفارش‌های منتظر بررسی" value={count(data.ordersAwaitingReview)} />
+            <MetricCard href="/dashboard/trades" icon={TrendingUp} label="معاملات تأییدشده" value={count(data.confirmedTrades)} hint={formatMoney(data.totalTradeValueRial)} />
+            <MetricCard href="/dashboard/settlements" icon={Scale} label="معاملات تسویه‌نشده" value={count(data.unsettledTrades)} hint={`پرداخت‌های ثبت‌شده ${count(data.totalPaymentsRecorded)}`} />
+            <MetricCard href="/dashboard/suppliers" icon={Truck} label="تعهد به تأمین‌کننده" value={formatMoney(data.supplierPayableRial)} />
+            <MetricCard href="/dashboard/ledger/gold" icon={Coins} label="موقعیت طلا" value={formatWeight(data.goldPositionGrams)} hint={`تعهد طلا ${formatWeight(data.goldObligationGrams)}`} />
           </section>
           <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <MetricCard label="درآمد فروش ثبت‌شده" value={formatMoney(data.salesRevenueRial)} />
-            <MetricCard label="بهای خرید ثبت‌شده" value={formatMoney(data.purchaseCostRial)} />
-            <MetricCard label="ارزش پرداخت‌ها" value={formatMoney(data.totalPaymentsValueRial)} />
-            <MetricCard label="وزن معاملات" value={formatWeight(data.totalTradeWeightGrams)} />
+            <MetricCard href="/dashboard/ledger/financial" label="درآمد فروش ثبت‌شده" value={formatMoney(data.salesRevenueRial)} />
+            <MetricCard href="/dashboard/purchases" label="بهای خرید ثبت‌شده" value={formatMoney(data.purchaseCostRial)} />
+            <MetricCard href="/dashboard/payments" label="ارزش پرداخت‌ها" value={formatMoney(data.totalPaymentsValueRial)} />
+            <MetricCard href="/dashboard/trades" label="وزن معاملات" value={formatWeight(data.totalTradeWeightGrams)} />
           </section>
           <p className="text-xs text-muted-foreground">
             مصرف اعتبار در این گزارش تجمیعی وجود ندارد و از صفحه حساب مشتری، با همان اعداد سرور، دیده می‌شود.
           </p>
           <div className="grid gap-4 lg:grid-cols-2">
             <Card>
-              <CardHeader><CardTitle>معاملات اخیر</CardTitle></CardHeader>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle>معاملات اخیر</CardTitle>
+                <Link href="/dashboard/trades" className="text-sm font-medium text-gold-800">همه معاملات</Link>
+              </CardHeader>
               <CardContent>
                 {data.recentTrades.length === 0 ? (
                   <p className="text-sm text-muted-foreground">معامله‌ای ثبت نشده است.</p>
@@ -100,7 +103,10 @@ export default function OverviewPage() {
               </CardContent>
             </Card>
             <Card>
-              <CardHeader><CardTitle>پرداخت‌های اخیر</CardTitle></CardHeader>
+              <CardHeader className="flex-row items-center justify-between space-y-0">
+                <CardTitle>پرداخت‌های اخیر</CardTitle>
+                <Link href="/dashboard/payments" className="text-sm font-medium text-gold-800">همه پرداخت‌ها</Link>
+              </CardHeader>
               <CardContent>
                 {data.recentPayments.length === 0 ? (
                   <p className="text-sm text-muted-foreground">پرداختی ثبت نشده است.</p>

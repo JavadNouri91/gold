@@ -4,6 +4,8 @@
 
 import {
   formatRial,
+  formatFeeRate,
+  feeLineLabel,
   formatGrams,
   formatPurity,
   formatMobile,
@@ -15,6 +17,7 @@ import {
   isValidMobile,
   isPositiveDecimal,
   getStatusColor,
+  ORDER_STATUS_FILTER_OPTIONS,
   ORDER_STATUS_LABELS,
   TRADE_STATUS_LABELS,
   PAYMENT_STATUS_LABELS,
@@ -42,6 +45,24 @@ describe('formatRial', () => {
 
   it('handles integer value', () => {
     expect(formatRial(1000000)).toContain('تومان');
+  });
+});
+
+describe('formatFeeRate', () => {
+  it('shows a percentage without trailing zeros', () => {
+    expect(formatFeeRate('PERCENTAGE', '2.000000')).toBe('۲٪');
+    expect(formatFeeRate('PERCENTAGE', '1.500000')).toBe('۱.۵٪');
+  });
+
+  it('labels a fixed rial fee as a flat amount', () => {
+    expect(formatFeeRate('FIXED', '150000.000000')).toBe('مبلغ ثابت');
+  });
+});
+
+describe('feeLineLabel', () => {
+  it('appends the locked rate to the fee name', () => {
+    expect(feeLineLabel('کارمزد خرید', 'PERCENTAGE', '2.000000')).toBe('کارمزد خرید (۲٪)');
+    expect(feeLineLabel('کارمزد فروش', 'FIXED', '10000')).toBe('کارمزد فروش (مبلغ ثابت)');
   });
 });
 
@@ -149,11 +170,18 @@ describe('getStatusColor', () => {
 });
 
 describe('status labels', () => {
-  it('ORDER_STATUS_LABELS has all expected statuses', () => {
+  it('ORDER_STATUS_LABELS maps machine statuses onto five display groups', () => {
+    expect(ORDER_STATUS_FILTER_OPTIONS).toHaveLength(5);
     expect(ORDER_STATUS_LABELS['DRAFT']).toBe('پیش‌نویس');
-    expect(ORDER_STATUS_LABELS['SUBMITTED']).toBe('ثبت شده');
-    expect(ORDER_STATUS_LABELS['CANCELLED']).toBe('لغو شده');
-    expect(ORDER_STATUS_LABELS['COMPLETED']).toBe('تکمیل شده');
+    expect(ORDER_STATUS_LABELS['SUBMITTED']).toBe('در حال بررسی');
+    expect(ORDER_STATUS_LABELS['QUOTED']).toBe('در حال بررسی');
+    expect(ORDER_STATUS_LABELS['ASSIGNED']).toBe('در حال بررسی');
+    expect(ORDER_STATUS_LABELS['UNDER_REVIEW']).toBe('در حال بررسی');
+    expect(ORDER_STATUS_LABELS['APPROVED']).toBe('پایان‌یافته');
+    expect(ORDER_STATUS_LABELS['TRADE_CREATED']).toBe('پایان‌یافته');
+    expect(ORDER_STATUS_LABELS['COMPLETED']).toBe('پایان‌یافته');
+    expect(ORDER_STATUS_LABELS['CANCELLED']).toBe('رد / لغو شده');
+    expect(ORDER_STATUS_LABELS['REJECTED']).toBe('رد / لغو شده');
   });
 
   it('TRADE_STATUS_LABELS has all expected statuses', () => {

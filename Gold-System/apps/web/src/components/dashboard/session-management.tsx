@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import useSWR from 'swr';
+import { ChevronDown } from 'lucide-react';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { Toast } from '@/components/dashboard/customer-widgets';
 import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
@@ -22,7 +23,7 @@ import {
   type UserSessionPolicyMode,
 } from '@/lib/internal-api';
 import { hasPermission } from '@/lib/permissions';
-import { latinMobile, toPersianDigits } from '@/lib/utils';
+import { cn, latinMobile, toPersianDigits } from '@/lib/utils';
 
 const LIMIT_OPTIONS = [
   { value: '1', label: '۱' },
@@ -49,11 +50,169 @@ function limitLabel(policy: { limitType: SessionLimitType | null; maxSessions: n
   return toPersianDigits(String(policy.maxSessions ?? '—'));
 }
 
-function fieldsFromLimit(limit: string, loginBehavior: SessionLoginBehavior): SessionPolicyFields {
+function concurrencyFieldsFromLimit(
+  limit: string,
+  loginBehavior: SessionLoginBehavior,
+): Pick<SessionPolicyFields, 'limitType' | 'maxSessions' | 'loginBehavior'> {
   if (limit === 'unlimited') {
     return { limitType: 'UNLIMITED', maxSessions: null, loginBehavior };
   }
   return { limitType: 'LIMITED', maxSessions: Number(limit), loginBehavior };
+}
+
+function globalPolicyFields(
+  limit: string,
+  loginBehavior: SessionLoginBehavior,
+  idleTimeoutMinutes: number | null,
+  maxSessionDurationMinutes: number | null,
+): SessionPolicyFields {
+  return {
+    ...concurrencyFieldsFromLimit(limit, loginBehavior),
+    idleTimeoutMinutes,
+    maxSessionDurationMinutes,
+  };
+}
+
+const IDLE_TIMEOUT_PRESETS = [
+  { value: '15', label: '۱۵ دقیقه' },
+  { value: '30', label: '۳۰ دقیقه' },
+  { value: '60', label: '۱ ساعت' },
+  { value: '120', label: '۲ ساعت' },
+  { value: '480', label: '۸ ساعت' },
+] as const;
+
+const MAX_DURATION_PRESETS = [
+  { value: '60', label: '۱ ساعت' },
+  { value: '480', label: '۸ ساعت' },
+  { value: '1440', label: '۲۴ ساعت' },
+  { value: '10080', label: '۷ روز' },
+  { value: '43200', label: '۳۰ روز' },
+] as const;
+
+type MinutePreset = { value: string; label: string };
+
+function normalizeMinutesFromApi(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.trunc(parsed);
+}
+
+function minutesSelectValue(value: number | null | undefined) {
+  if (value == null) return 'off';
+  return String(value);
+}
+
+function minutesFromSelect(value: string): number | null {
+  if (value === 'off') return null;
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return null;
+  return Math.trunc(parsed);
+}
+
+function PolicySelect({
+  value,
+  onChange,
+  disabled,
+  options,
+  labelledBy,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+  options: readonly { value: string; label: string }[];
+  labelledBy?: string;
+}) {
+  const listId = useId();
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const selected = options.find((option) => option.value === value);
+
+  useEffect(() => {
+    if (!open) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={rootRef} className="relative">
+      <button
+        type="button"
+        disabled={disabled}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-labelledby={labelledBy}
+        aria-controls={listId}
+        onClick={() => {
+          if (!disabled) setOpen((current) => !current);
+        }}
+        className="flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        <span className="truncate">{selected?.label ?? 'انتخاب کنید'}</span>
+        <ChevronDown className={cn('h-4 w-4 shrink-0 text-muted-foreground', open && 'rotate-180')} />
+      </button>
+      {open ? (
+        <ul
+          id={listId}
+          role="listbox"
+          aria-labelledby={labelledBy}
+          className="absolute end-0 start-0 z-50 mt-1 max-h-60 w-full overflow-y-auto rounded-md border border-input bg-card py-1 text-sm text-foreground shadow-md"
+        >
+          {options.map((option) => {
+            const isSelected = option.value === value;
+            return (
+              <li key={option.value} role="option" aria-selected={isSelected}>
+                <button
+                  type="button"
+                  className={cn(
+                    'flex w-full items-center px-3 py-2 text-right hover:bg-muted',
+                    isSelected && 'bg-muted font-medium',
+                  )}
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                  }}
+                >
+                  {option.label}
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      ) : null}
+    </div>
+  );
+}
+
+function minuteOptionLabel(minutes: number): string {
+  if (minutes % 10_080 === 0 && minutes >= 10_080) {
+    return `${toPersianDigits(String(minutes / 10_080))} روز`;
+  }
+  if (minutes % 1440 === 0 && minutes >= 1440) {
+    return `${toPersianDigits(String(minutes / 1440))} روز`;
+  }
+  if (minutes % 60 === 0 && minutes >= 60) {
+    return `${toPersianDigits(String(minutes / 60))} ساعت`;
+  }
+  return `${toPersianDigits(String(minutes))} دقیقه`;
+}
+
+function minuteSelectOptions(presets: readonly MinutePreset[], savedMinutes: number | null): MinutePreset[] {
+  const options: MinutePreset[] = [{ value: 'off', label: 'غیرفعال' }, ...presets];
+  if (savedMinutes == null) return options;
+  const key = String(savedMinutes);
+  if (options.some((option) => option.value === key)) return options;
+  return [...options, { value: key, label: minuteOptionLabel(savedMinutes) }];
 }
 
 function messageOf(error: unknown) {
@@ -97,55 +256,107 @@ export function SessionManagementPage() {
   );
 }
 
+type GlobalPolicyDraft = {
+  limit?: string;
+  behavior?: SessionLoginBehavior;
+  idleMinutes?: string;
+  maxDurationMinutes?: string;
+};
+
 function GlobalSection({ onSaved, onError }: { onSaved: () => void; onError: (error: unknown) => void }) {
   const policy = useSWR('session-policy-global', () => sessionPolicyApi.getGlobal());
-  const [limit, setLimit] = useState<string | null>(null);
-  const [behavior, setBehavior] = useState<SessionLoginBehavior | null>(null);
+  const [draft, setDraft] = useState<GlobalPolicyDraft>({});
   const [saving, setSaving] = useState(false);
-  const currentLimit = limit ?? (policy.data ? limitValue(policy.data) : '1');
-  const currentBehavior = behavior ?? policy.data?.loginBehavior ?? 'BLOCK';
+
+  const savedIdle = normalizeMinutesFromApi(policy.data?.idleTimeoutMinutes);
+  const savedMaxDuration = normalizeMinutesFromApi(policy.data?.maxSessionDurationMinutes);
+
+  useEffect(() => {
+    setDraft({});
+  }, [
+    policy.data?.limitType,
+    policy.data?.maxSessions,
+    policy.data?.loginBehavior,
+    savedIdle,
+    savedMaxDuration,
+  ]);
+
+  const currentLimit = draft.limit ?? (policy.data ? limitValue(policy.data) : '1');
+  const currentBehavior = draft.behavior ?? policy.data?.loginBehavior ?? 'BLOCK';
+  const currentIdle = draft.idleMinutes ?? minutesSelectValue(savedIdle);
+  const currentMaxDuration = draft.maxDurationMinutes ?? minutesSelectValue(savedMaxDuration);
 
   return (
-    <Card>
+    <Card className="overflow-visible">
       <CardHeader>
         <CardTitle>پیش‌فرض سراسری</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         {policy.error ? <Alert variant="error">تنظیمات سراسری بارگذاری نشد.</Alert> : null}
-        <label className="block space-y-1 text-sm">
-          <span className="font-medium">حداکثر نشست هم‌زمان</span>
-          <select
-            className="flex h-10 w-full rounded-md border bg-background px-3"
+        <div className="space-y-1 text-sm">
+          <p id="session-limit-label" className="font-medium">
+            حداکثر نشست هم‌زمان
+          </p>
+          <PolicySelect
+            labelledBy="session-limit-label"
             value={currentLimit}
             disabled={!policy.data || saving}
-            onChange={(event) => setLimit(event.target.value)}
-          >
-            {LIMIT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-          <span className="text-xs text-muted-foreground">
+            onChange={(value) => setDraft((prev) => ({ ...prev, limit: value }))}
+            options={LIMIT_OPTIONS}
+          />
+          <p className="text-xs text-muted-foreground">
             برای نقش‌ها و کاربرانی که تنظیم جداگانه ندارند اعمال می‌شود. مقدار اولیه ۱ است.
-          </span>
-        </label>
-        <label className="block space-y-1 text-sm">
-          <span className="font-medium">وقتی سقف پر است و ورود جدید انجام می‌شود</span>
-          <select
-            className="flex h-10 w-full rounded-md border bg-background px-3"
+          </p>
+        </div>
+        <div className="space-y-1 text-sm">
+          <p id="session-behavior-label" className="font-medium">
+            وقتی سقف پر است و ورود جدید انجام می‌شود
+          </p>
+          <PolicySelect
+            labelledBy="session-behavior-label"
             value={currentBehavior}
             disabled={!policy.data || saving}
-            onChange={(event) => setBehavior(event.target.value as SessionLoginBehavior)}
-          >
-            <option value="BLOCK">مسدود کردن ورود جدید</option>
-            <option value="REVOKE_OLDEST">لغو قدیمی‌ترین نشست فعال</option>
-            <option value="REQUIRE_CONFIRMATION">نیاز به تأیید / رفتار تعریف‌شده توسط مدیر</option>
-          </select>
-          <span className="text-xs text-muted-foreground">
+            onChange={(value) => setDraft((prev) => ({ ...prev, behavior: value as SessionLoginBehavior }))}
+            options={[
+              { value: 'BLOCK', label: 'مسدود کردن ورود جدید' },
+              { value: 'REVOKE_OLDEST', label: 'لغو قدیمی‌ترین نشست فعال' },
+              { value: 'REQUIRE_CONFIRMATION', label: 'نیاز به تأیید / رفتار تعریف‌شده توسط مدیر' },
+            ]}
+          />
+          <p className="text-xs text-muted-foreground">
             مسدود کردن، ورود را رد می‌کند. لغو قدیمی‌ترین، نشست قبلی را باطل می‌کند و حذف نمی‌کند. تأیید، تا انتخاب یک نشست فعال ورود را کامل نمی‌کند.
-          </span>
-        </label>
+          </p>
+        </div>
+        <div className="space-y-1 text-sm">
+          <p id="session-idle-label" className="font-medium">
+            حداکثر زمان بدون فعالیت
+          </p>
+          <PolicySelect
+            labelledBy="session-idle-label"
+            value={currentIdle}
+            disabled={!policy.data || saving}
+            onChange={(value) => setDraft((prev) => ({ ...prev, idleMinutes: value }))}
+            options={minuteSelectOptions(IDLE_TIMEOUT_PRESETS, minutesFromSelect(currentIdle))}
+          />
+          <p className="text-xs text-muted-foreground">
+            پس از این مدت بدون درخواست API یا تازه‌سازی توکن، نشست پایان می‌یابد و کاربر باید دوباره وارد شود.
+          </p>
+        </div>
+        <div className="space-y-1 text-sm">
+          <p id="session-max-duration-label" className="font-medium">
+            حداکثر مدت نشست از زمان ورود
+          </p>
+          <PolicySelect
+            labelledBy="session-max-duration-label"
+            value={currentMaxDuration}
+            disabled={!policy.data || saving}
+            onChange={(value) => setDraft((prev) => ({ ...prev, maxDurationMinutes: value }))}
+            options={minuteSelectOptions(MAX_DURATION_PRESETS, minutesFromSelect(currentMaxDuration))}
+          />
+          <p className="text-xs text-muted-foreground">
+            حتی با فعالیت مداوم، پس از این مدت از لحظهٔ ورود در همان دستگاه، نشست تمام می‌شود.
+          </p>
+        </div>
         <div className="flex justify-end">
           <Button
             type="button"
@@ -154,9 +365,19 @@ function GlobalSection({ onSaved, onError }: { onSaved: () => void; onError: (er
             onClick={() => {
               setSaving(true);
               void sessionPolicyApi
-                .updateGlobal(fieldsFromLimit(currentLimit, currentBehavior))
+                .updateGlobal(
+                  globalPolicyFields(
+                    currentLimit,
+                    currentBehavior,
+                    minutesFromSelect(currentIdle),
+                    minutesFromSelect(currentMaxDuration),
+                  ),
+                )
                 .then(() => policy.mutate())
-                .then(onSaved)
+                .then(() => {
+                  setDraft({});
+                  onSaved();
+                })
                 .catch(onError)
                 .finally(() => setSaving(false));
             }}
@@ -282,7 +503,7 @@ function RoleEditor({
               ? { useDefault: true }
               : {
                   useDefault: false,
-                  ...fieldsFromLimit(limit, behavior),
+                  ...concurrencyFieldsFromLimit(limit, behavior),
                   loginBehavior: behavior,
                 };
             void sessionPolicyApi
@@ -386,7 +607,11 @@ function UserSection({
               const body =
                 mode === 'INHERIT'
                   ? { mode: 'INHERIT' as const }
-                  : { mode: 'CUSTOM' as const, ...fieldsFromLimit(limit, behavior), loginBehavior: behavior };
+                  : {
+                      mode: 'CUSTOM' as const,
+                      ...concurrencyFieldsFromLimit(limit, behavior),
+                      loginBehavior: behavior,
+                    };
               void sessionPolicyApi
                 .updateUser(policy.data!.user.id, body)
                 .then(() => policy.mutate())
@@ -402,17 +627,20 @@ function UserSection({
               سیاست مؤثر: {policy.data.effective.limitType === 'UNLIMITED' ? 'نامحدود' : toPersianDigits(String(policy.data.effective.maxSessions))}{' '}
               نشست، {BEHAVIOR_LABEL[policy.data.effective.loginBehavior]} ({policy.data.effective.source === 'user' ? 'کاربر' : policy.data.effective.source === 'role' ? 'نقش' : 'سراسری'})
             </p>
-            <label className="block space-y-1 text-sm">
-              <span className="font-medium">سیاست نشست</span>
-              <select
-                className="flex h-10 w-full rounded-md border bg-background px-3"
+            <div className="space-y-1 text-sm">
+              <p id="session-user-mode-label" className="font-medium">
+                سیاست نشست
+              </p>
+              <PolicySelect
+                labelledBy="session-user-mode-label"
                 value={mode}
-                onChange={(event) => setMode(event.target.value as UserSessionPolicyMode)}
-              >
-                <option value="INHERIT">ارث‌بری از نقش</option>
-                <option value="CUSTOM">سفارشی</option>
-              </select>
-            </label>
+                onChange={(value) => setMode(value as UserSessionPolicyMode)}
+                options={[
+                  { value: 'INHERIT', label: 'ارث‌بری از نقش' },
+                  { value: 'CUSTOM', label: 'سفارشی' },
+                ]}
+              />
+            </div>
             {mode === 'CUSTOM' ? (
               <>
                 <LimitSelect value={limit} onChange={setLimit} />
@@ -518,17 +746,14 @@ function OwnSessions({
 }
 
 function LimitSelect({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+  const labelId = useId();
   return (
-    <label className="block space-y-1 text-sm">
-      <span className="font-medium">حداکثر نشست هم‌زمان</span>
-      <select className="flex h-10 w-full rounded-md border bg-background px-3" value={value} onChange={(event) => onChange(event.target.value)}>
-        {LIMIT_OPTIONS.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
-    </label>
+    <div className="space-y-1 text-sm">
+      <p id={labelId} className="font-medium">
+        حداکثر نشست هم‌زمان
+      </p>
+      <PolicySelect labelledBy={labelId} value={value} onChange={onChange} options={LIMIT_OPTIONS} />
+    </div>
   );
 }
 
@@ -539,17 +764,21 @@ function BehaviorSelect({
   value: 'BLOCK' | 'REVOKE_OLDEST';
   onChange: (value: 'BLOCK' | 'REVOKE_OLDEST') => void;
 }) {
+  const labelId = useId();
   return (
-    <label className="block space-y-1 text-sm">
-      <span className="font-medium">رفتار ورود</span>
-      <select
-        className="flex h-10 w-full rounded-md border bg-background px-3"
+    <div className="space-y-1 text-sm">
+      <p id={labelId} className="font-medium">
+        رفتار ورود
+      </p>
+      <PolicySelect
+        labelledBy={labelId}
         value={value}
-        onChange={(event) => onChange(event.target.value as 'BLOCK' | 'REVOKE_OLDEST')}
-      >
-        <option value="BLOCK">مسدود کردن ورود جدید</option>
-        <option value="REVOKE_OLDEST">لغو قدیمی‌ترین نشست فعال</option>
-      </select>
-    </label>
+        onChange={(next) => onChange(next as 'BLOCK' | 'REVOKE_OLDEST')}
+        options={[
+          { value: 'BLOCK', label: 'مسدود کردن ورود جدید' },
+          { value: 'REVOKE_OLDEST', label: 'لغو قدیمی‌ترین نشست فعال' },
+        ]}
+      />
+    </div>
   );
 }

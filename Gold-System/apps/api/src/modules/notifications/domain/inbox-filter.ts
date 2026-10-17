@@ -14,6 +14,10 @@ export const INBOX_TYPES: NotificationType[] = [
   NotificationType.TRADE_REVERSED,
   NotificationType.PAYMENT_RECORDED,
   NotificationType.SETTLEMENT_COMPLETED,
+  NotificationType.PICKUP_REQUESTED,
+  NotificationType.PICKUP_READY,
+  NotificationType.PICKUP_DELIVERED,
+  NotificationType.PICKUP_CANCELLED,
 ];
 
 export const INBOX_CATEGORY_TYPES: Record<InboxCategory, NotificationType[]> = {
@@ -23,6 +27,10 @@ export const INBOX_CATEGORY_TYPES: Record<InboxCategory, NotificationType[]> = {
     NotificationType.REVIEW_STARTED,
     NotificationType.TRADE_CONFIRMED,
     NotificationType.TRADE_REVERSED,
+    NotificationType.PICKUP_REQUESTED,
+    NotificationType.PICKUP_READY,
+    NotificationType.PICKUP_DELIVERED,
+    NotificationType.PICKUP_CANCELLED,
   ],
   financial: [NotificationType.PAYMENT_RECORDED, NotificationType.SETTLEMENT_COMPLETED],
   kyc: [NotificationType.KYC_APPROVED, NotificationType.KYC_REJECTED],

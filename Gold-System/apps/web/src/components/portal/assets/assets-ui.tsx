@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { formatSignedPercent, formatSignedRial, moneyTone, toneClass } from '@/lib/portfolio-display';
+import { formatSignedPercent, formatSignedRial, formatSignedWholeRial, moneyTone, toneClass } from '@/lib/portfolio-display';
 
 export const assetCardClass = 'min-w-0 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-5';
 
@@ -12,17 +12,19 @@ export function AssetSkeleton({ className }: { className?: string }) {
 export function SignedMoney({
   value,
   percent,
+  whole = false,
   className,
 }: {
   value: string | null | undefined;
   percent?: string | null;
+  whole?: boolean;
   className?: string;
 }) {
   const tone = moneyTone(value);
-  const percentLabel = formatSignedPercent(percent, tone);
+  const percentLabel = formatSignedPercent(percent, tone, whole ? { plus: false } : undefined);
   return (
     <p className={cn('font-semibold tabular-nums', toneClass(tone), className)}>
-      {formatSignedRial(value)}
+      {whole ? formatSignedWholeRial(value) : formatSignedRial(value)}
       {percentLabel ? <span className="mr-1 text-xs font-medium">{percentLabel}</span> : null}
     </p>
   );

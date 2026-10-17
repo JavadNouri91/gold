@@ -13,7 +13,7 @@ import {
   formatRial,
   formatGrams,
   formatDate,
-  ORDER_STATUS_LABELS,
+  orderStatusPresentation,
   toPersianDigits,
 } from '@/lib/utils';
 
@@ -76,10 +76,7 @@ export default function OrdersPage() {
                       <div className="flex items-center gap-4 text-sm">
                         <span className="tabular-nums">{formatGrams(order.weightGrams)}</span>
                         <span className="tabular-nums font-medium">{formatRial(order.totalAmountRial)}</span>
-                        <StatusBadge
-                          status={order.status}
-                          label={ORDER_STATUS_LABELS[order.status] ?? order.status}
-                        />
+                        <StatusBadge {...orderStatusPresentation(order.status)} />
                       </div>
                     </div>
                     <div className="mt-2">

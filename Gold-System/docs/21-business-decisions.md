@@ -614,11 +614,46 @@ Rename recommendation: `credit_limit_gold_rial` for clarity.
 
 ---
 
-## 15. DOCUMENT CHANGE LOG
+## 15. PHYSICAL GOLD PICKUP (تحویل حضوری)
+
+### 15.1 Product decision — DECIDED
+
+Customers may redeem melted-gold balance as a **physical bar/ingot** at the single store.
+
+- **Not** jewelry catalog / wage manufacturing.
+- **Not** multi-store or courier delivery.
+- Separate from Order → Quotation → Trade (no rial price settlement).
+- Pickup purity is **fixed at 750** (`0.750000`); the customer does not choose purity.
+
+### 15.2 Holding reservation — DECIDED
+
+On request (`REQUESTED`), weight is reserved immediately and reduces sellable grams
+(`booked buy − sell − non-cancelled pickups`). Cancel releases the reservation.
+`DELIVERED` permanently removes the grams from the customer holding.
+
+### 15.3 Staff workflow — DECIDED
+
+`REQUESTED → PREPARING → READY → DELIVERED`. Customer sees the same steps.
+Customer may cancel only while `REQUESTED`. Once staff starts `PREPARING`, the
+customer cannot cancel. Staff may cancel until `DELIVERED`.
+When staff moves a request to `PREPARING`, they must select the planned in-store
+handover date from the calendar (`scheduledPickupAt`). The customer sees that date.
+
+### 15.4 Gold ledger — DECIDED (partial)
+
+On `DELIVERED`, post **GA-02 OUT** only (obligation fulfilled by physical handover).
+**GA-01** remains unchanged until open-questions.md #39 is resolved.
+
+---
+
+## 16. DOCUMENT CHANGE LOG
 
 | Date | Change | Author |
 |---|---|---|
 | 2026-09-26 | Initial creation from business Q&A session | Lead Architect |
+| 2026-10-17 | §15 Physical gold pickup (in-store bar redemption) | Engineering |
+| 2026-10-17 | §15.3 scheduled in-store handover date on PREPARING | Engineering |
+| 2026-10-17 | §15.3 customer cancel only while REQUESTED | Engineering |
 
 ---
 

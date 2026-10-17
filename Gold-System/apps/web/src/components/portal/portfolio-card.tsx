@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { formatRial, formatWeight } from '@/lib/utils';
+import { formatRial, formatWholeMoney, formatWeight } from '@/lib/utils';
 import { isRegisteredHolding, type PortfolioPosition } from '@/lib/customer-portfolio';
 
 export function PortfolioCard({ position }: { position?: PortfolioPosition | null }) {
@@ -34,7 +34,7 @@ export function PortfolioCard({ position }: { position?: PortfolioPosition | nul
           <dl className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <dt className="text-xs text-muted-foreground">میانگین قیمت خرید</dt>
-              <dd className="mt-1 text-sm font-semibold">{formatRial(holding.averageBuyPriceRial)}</dd>
+              <dd className="mt-1 text-sm font-semibold">{formatWholeMoney(holding.averageBuyPriceRial)}</dd>
             </div>
             <div>
               <dt className="text-xs text-muted-foreground">عیار</dt>

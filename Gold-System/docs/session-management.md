@@ -14,6 +14,13 @@ A missing role or user row means “inherit”. The seeded global default is 1 s
 
 Allowed ceilings are 1, 2, 3, 5, or unlimited. Role and user overrides can choose `BLOCK` or `REVOKE_OLDEST`. `REQUIRE_CONFIRMATION` is only a global behavior: the login stays incomplete until the user picks an active session to revoke.
 
+The global default also supports optional **time limits** (configured on the same admin page):
+
+- **Idle timeout** — after this many minutes without an authenticated API request or token refresh, the session is revoked.
+- **Maximum session duration** — from the device login time (`refresh_tokens.created_at`), the session ends after this many minutes even if the user stays active. Refresh rotation clamps `expires_at` so it never extends beyond this cap.
+
+When both are set, whichever limit is reached first ends the session. `null` disables each limit independently.
+
 ## Lifecycle
 
 1. OTP verification resolves the policy inside a transaction that locks the user row (`SELECT … FOR UPDATE`).

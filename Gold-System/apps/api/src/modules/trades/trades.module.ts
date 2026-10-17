@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { TradesController } from './presentation/controllers/trades.controller';
 import { TradesService } from './application/trades.service';
 import { TradeRepository } from './infrastructure/repositories/trade.repository';
@@ -43,7 +43,7 @@ import { TradingPolicyModule } from '../trading-policy/trading-policy.module';
  */
 @Module({
   imports: [
-    OrdersModule,
+    forwardRef(() => OrdersModule),
     QuotationsModule,
     CustomerAccountsModule,
     AuditModule,

@@ -6,12 +6,10 @@ import { PageSpinner } from '@/components/ui/spinner';
 import { Alert } from '@/components/ui/alert';
 import { GoldPriceCard } from '@/components/portal/gold-price-card';
 import { PortfolioCard } from '@/components/portal/portfolio-card';
-import { TradingCreditCard } from '@/components/portal/trading-credit-card';
-import { KycStatusCard } from '@/components/portal/kyc-status-card';
+import { BuyPowerCard } from '@/components/portal/buy-power-card';
 import { QuickActions } from '@/components/portal/quick-actions';
 import { ActiveOrders } from '@/components/portal/active-orders';
 import { RecentTransactions } from '@/components/portal/recent-transactions';
-import { DEMO_ACTIVE_ORDERS, DEMO_RECENT_TRADES } from '@/lib/portal-demo';
 
 function isNotFound(error: unknown): boolean {
   return error instanceof ApiClientError && error.isNotFound;
@@ -21,27 +19,21 @@ export default function DashboardPage() {
   const { data: customer, error: customerError, isLoading: customerLoading } =
     useSWR('customer/me', () => customerApi.getMe());
 
-  const { data: account, error: accountError, isLoading: accountLoading } =
-    useSWR('customer/me/account', () => customerApi.getMyAccount());
-
   const { data: price, isValidating: priceRefreshing, mutate: refreshPrice } =
     useSWR('pricing/current-price', () => pricingApi.getCurrentPrice());
 
   const { data: ordersResp } =
-    useSWR('orders/recent', () => ordersApi.list({ limit: 5 }));
+    useSWR('orders/recent', () => ordersApi.list({ limit: 100 }));
 
   const { data: tradesResp } =
-    useSWR('trades/recent', () => tradesApi.list({ limit: 5 }));
+    useSWR('trades/recent', () => tradesApi.list({ limit: 100 }));
 
   const { data: holding } = useSWR('orders/portfolio', () => ordersApi.portfolio());
   const position = toPortfolioPosition(holding, price?.normalizedValue);
   const customerMissing = isNotFound(customerError);
   const customerLoadFailed = Boolean(customerError) && !customerMissing;
 
-  if (
-    (customerLoading && !customerError) ||
-    (accountLoading && !account && !accountError)
-  ) {
+  if (customerLoading && !customerError) {
     return <PageSpinner />;
   }
 
@@ -62,9 +54,8 @@ export default function DashboardPage() {
         <div className="xl:col-span-4">
           <PortfolioCard position={position} />
         </div>
-        <div className="flex flex-col gap-4 xl:col-span-3">
-          {account ? <TradingCreditCard account={account} /> : null}
-          <KycStatusCard customerStatus={customer?.status} />
+        <div className="xl:col-span-3">
+          <BuyPowerCard price={price} />
         </div>
       </div>
 
@@ -87,12 +78,8 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <ActiveOrders
-          orders={ordersResp?.data?.length ? ordersResp.data.slice(0, 5) : DEMO_ACTIVE_ORDERS}
-        />
-        <RecentTransactions
-          trades={tradesResp?.data?.length ? tradesResp.data.slice(0, 5) : DEMO_RECENT_TRADES}
-        />
+        <ActiveOrders orders={ordersResp?.data ?? []} />
+        <RecentTransactions trades={tradesResp?.data ?? []} />
       </div>
     </div>
   );

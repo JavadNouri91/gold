@@ -1,34 +1,73 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import type { Trade } from '@/lib/api';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { TRADE_STATUS_LABELS, cn, formatDate, formatRial, formatWeight } from '@/lib/utils';
+import { TRADE_STATUS_LABELS, cn, formatDate, formatWholeMoney, formatWeight } from '@/lib/utils';
+import {
+  ORDER_PERIOD_LABELS,
+  filterOrdersByPeriod,
+  type OrderPeriod,
+} from '@/lib/order-period';
 import type { DemoSide, DemoTradeRow } from '@/lib/portal-demo';
 
 export type RecentTradeRow = (Trade & { side?: DemoSide; statusLabel?: string; demo?: boolean }) | DemoTradeRow;
 
-function sideMeta(side?: DemoSide) {
-  const isSell = side === 'SELL';
-  return {
-    label: isSell ? 'فروش' : 'خرید',
-    className: isSell ? 'text-red-700' : 'text-emerald-700',
-  };
+function sideMeta(side?: DemoSide | null) {
+  if (side === 'SELL') return { label: 'فروش', className: 'text-red-700' };
+  if (side === 'BUY') return { label: 'خرید', className: 'text-emerald-700' };
+  return { label: 'معامله', className: 'text-slate-700' };
 }
 
-export function RecentTransactions({ trades }: { trades: RecentTradeRow[] }) {
+const PERIODS: OrderPeriod[] = ['day', 'week', 'month', 'year'];
+const MAX_ROWS = 10;
+
+export function RecentTransactions({
+  trades,
+  now,
+}: {
+  trades: RecentTradeRow[];
+  now?: Date;
+}) {
+  const [period, setPeriod] = useState<OrderPeriod>('day');
+  const visible = useMemo(
+    () => filterOrdersByPeriod(trades, period, now).slice(0, MAX_ROWS),
+    [trades, period, now],
+  );
+
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between gap-2">
+    <section className="portal-dense-copy rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-base font-bold text-slate-800">آخرین معاملات</h2>
         <Link href="/portal/trades" className="text-xs text-gold-700 hover:underline">
           مشاهده همه
         </Link>
       </div>
 
-      {!trades.length ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">هنوز معامله‌ای ثبت نشده</p>
+      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="بازه معاملات">
+        {PERIODS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setPeriod(key)}
+            aria-pressed={period === key}
+            className={cn(
+              'rounded-full px-3 py-1 text-xs font-medium',
+              period === key
+                ? 'bg-gold-500 text-white'
+                : 'bg-slate-50 text-slate-600 hover:bg-slate-100',
+            )}
+          >
+            {ORDER_PERIOD_LABELS[key]}
+          </button>
+        ))}
+      </div>
+
+      {!visible.length ? (
+        <p className="py-6 text-center text-sm text-muted-foreground">
+          {period === 'day' ? 'معامله‌ای برای امروز ندارید' : 'معامله‌ای در این بازه ندارید'}
+        </p>
       ) : (
         <>
           <div className="hidden overflow-x-auto md:block">
@@ -45,7 +84,7 @@ export function RecentTransactions({ trades }: { trades: RecentTradeRow[] }) {
                 </tr>
               </thead>
               <tbody>
-                {trades.map((trade) => {
+                {visible.map((trade) => {
                   const side = sideMeta(trade.side);
                   return (
                     <tr key={trade.id} className="border-b border-slate-50 last:border-0">
@@ -54,8 +93,8 @@ export function RecentTransactions({ trades }: { trades: RecentTradeRow[] }) {
                       </td>
                       <td className={cn('py-3', side.className)}>{side.label}</td>
                       <td className="py-3 tabular-nums">{formatWeight(trade.weightGrams)}</td>
-                      <td className="py-3 tabular-nums">{formatRial(trade.unitPriceRial)}</td>
-                      <td className="py-3 tabular-nums">{formatRial(trade.totalAmountRial)}</td>
+                      <td className="py-3 tabular-nums">{formatWholeMoney(trade.unitPriceRial)}</td>
+                      <td className="py-3 tabular-nums">{formatWholeMoney(trade.totalAmountRial)}</td>
                       <td className="py-3">
                         <StatusBadge
                           status={trade.status}
@@ -71,7 +110,7 @@ export function RecentTransactions({ trades }: { trades: RecentTradeRow[] }) {
           </div>
 
           <ul className="space-y-3 md:hidden">
-            {trades.map((trade) => {
+            {visible.map((trade) => {
               const side = sideMeta(trade.side);
               return (
                 <li key={trade.id}>
@@ -93,7 +132,7 @@ export function RecentTransactions({ trades }: { trades: RecentTradeRow[] }) {
                       </span>
                       <span>{formatDate(trade.createdAt)}</span>
                     </div>
-                    <p className="mt-1 text-sm font-semibold tabular-nums">{formatRial(trade.totalAmountRial)}</p>
+                    <p className="mt-1 text-sm font-semibold tabular-nums">{formatWholeMoney(trade.totalAmountRial)}</p>
                   </TradeCardLink>
                 </li>
               );

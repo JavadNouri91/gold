@@ -6,7 +6,7 @@ import { Filter, Search, X } from 'lucide-react';
 import type { ActivityBucket, ActivityList, ActivitySummary } from '@/lib/api';
 import { ACTIVITY_RANGE_OPTIONS, type ActivityRangePreset } from '@/lib/activity-range';
 import { DatePickerJalali } from '@/components/ui/date-picker-jalali';
-import { ORDER_STATUS_LABELS, formatPurity } from '@/lib/utils';
+import { ORDER_STATUS_FILTER_OPTIONS, ORDER_STATUS_LABELS, formatPurity } from '@/lib/utils';
 import { ActivityDistribution, ActivitySummaryCards, ActivityVolumeChart } from './activity-visuals';
 import { ActivityPagination, TransactionCards, TransactionTable } from './activity-transactions';
 
@@ -356,7 +356,7 @@ function Filters(props: {
                   className={`${selectClass} mt-1`}
                 >
                   <option value="">همه</option>
-                  {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
+                  {ORDER_STATUS_FILTER_OPTIONS.map(({ value, label }) => (
                     <option key={value} value={value}>
                       {label}
                     </option>
@@ -471,7 +471,7 @@ function FilterFields({
       </select>
       <select aria-label="وضعیت" value={status} onChange={(event) => onStatus(event.target.value)} className={selectClass}>
         <option value="">همه وضعیت‌ها</option>
-        {Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => (
+        {ORDER_STATUS_FILTER_OPTIONS.map(({ value, label }) => (
           <option key={value} value={value}>
             {label}
           </option>

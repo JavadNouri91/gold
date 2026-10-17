@@ -37,6 +37,7 @@ import { NotificationService } from '../notifications/application/notification.s
 import { TradingPolicyService } from '../trading-policy/application/trading-policy.service';
 import { PrismaService } from '../../database/prisma.service';
 import { QuotationsService } from '../quotations/application/quotations.service';
+import { TradesService } from '../trades/application/trades.service';
 
 import { OrderEntity } from './domain/entities/order.entity';
 import { CreateOrderDto } from './application/dto/create-order.dto';
@@ -88,6 +89,7 @@ function makeOrder(
     cancelledByUserId: string | null;
     rejectionReason: string | null;
     rejectedByUserId: string | null;
+    side: 'BUY' | 'SELL' | null;
   }> = {},
 ): OrderEntity {
   return new OrderEntity({
@@ -111,6 +113,7 @@ function makeOrder(
     cancelledByUserId: overrides.cancelledByUserId ?? null,
     rejectionReason: overrides.rejectionReason ?? null,
     rejectedByUserId: overrides.rejectedByUserId ?? null,
+    side: overrides.side ?? null,
     createdAt: new Date('2026-09-26T10:00:00Z'),
     updatedAt: new Date('2026-09-26T10:00:00Z'),
   });
@@ -168,6 +171,7 @@ describe('OrdersService', () => {
   let quotationsService: jest.Mocked<QuotationsService>;
   let tradingPolicy: { assertTradingOpen: jest.Mock; validateTransaction: jest.Mock };
   let activity: { sellableWeightGrams: jest.Mock };
+  let tradesService: { confirmTrade: jest.Mock };
 
   // Mock $transaction: just execute the callback with a fake tx
   // Phase 3.5: fakeTx needs order.update + order.findUnique + assignment.updateMany
@@ -289,6 +293,10 @@ describe('OrdersService', () => {
           provide: CustomerActivityService,
           useValue: { sellableWeightGrams: jest.fn() },
         },
+        {
+          provide: TradesService,
+          useValue: { confirmTrade: jest.fn().mockResolvedValue({ id: 'trade-1' }) },
+        },
       ],
     }).compile();
 
@@ -301,6 +309,7 @@ describe('OrdersService', () => {
     quotationsService = module.get(QuotationsService) as jest.Mocked<QuotationsService>;
     tradingPolicy = module.get(TradingPolicyService);
     activity = module.get(CustomerActivityService);
+    tradesService = module.get(TradesService);
 
     // Default: $transaction executes callback immediately with fakeTx
     (prisma.$transaction as jest.Mock).mockImplementation(
@@ -376,6 +385,8 @@ describe('OrdersService', () => {
       // Response has correct status
       expect(result.status).toBe(OrderStatus.DRAFT);
       expect(result.reservedAmountRial).toBe('0.00'); // no credit reserved yet
+      expect(result.step1BasePrice).toBe('1000000.000000');
+      expect(result.wageAmount).toBe('0.00');
     });
 
     it('throws CustomerNotEligibleForOrderException if no customer profile exists', async () => {
@@ -957,11 +968,11 @@ describe('OrdersService', () => {
   describe('approveOrder', () => {
     const approveDto: ApproveOrderDto = { notes: 'Looks good' };
 
-    it('approves an UNDER_REVIEW Order (UNDER_REVIEW → APPROVED), no credit consumed', async () => {
+    it('approves an UNDER_REVIEW Order and finalizes the trade under the single-approver policy', async () => {
       const underReviewOrder = makeOrder({ status: OrderStatus.UNDER_REVIEW });
       (orderRepo.findById as jest.Mock)
         .mockResolvedValueOnce(underReviewOrder)
-        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.APPROVED }));
+        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.TRADE_CREATED }));
 
       // Concurrency guard: tx re-reads status as UNDER_REVIEW
       (
@@ -985,22 +996,37 @@ describe('OrdersService', () => {
         data: expect.objectContaining({ status: 'COMPLETED' }),
       });
 
-      // Credit NOT consumed (§3.3 — credit consumed at Trade approval)
       expect(accountRepo.releaseCredit).not.toHaveBeenCalled();
-
-      // Audit logged
       expect(auditService.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'ORDER_APPROVED' }),
       );
+      expect(tradesService.confirmTrade).toHaveBeenCalledWith(
+        'reviewer-user',
+        expect.objectContaining({ orderId: ORDER_ID }),
+      );
 
-      expect(result.status).toBe(OrderStatus.APPROVED);
+      expect(result.status).toBe(OrderStatus.TRADE_CREATED);
+    });
+
+    it('approves a QUOTED Order without assignment', async () => {
+      const quotedOrder = makeOrder({ status: OrderStatus.QUOTED });
+      (orderRepo.findById as jest.Mock)
+        .mockResolvedValueOnce(quotedOrder)
+        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.TRADE_CREATED }));
+      (
+        fakeTx as unknown as { order: { findUnique: jest.Mock } }
+      ).order.findUnique.mockResolvedValue({ status: 'QUOTED' });
+
+      const result = await service.approveOrder('reviewer-user', ORDER_ID, approveDto);
+      expect(result.status).toBe(OrderStatus.TRADE_CREATED);
+      expect(tradesService.confirmTrade).toHaveBeenCalled();
     });
 
     it('approves an ASSIGNED Order (ASSIGNED → APPROVED)', async () => {
       const assignedOrder = makeOrder({ status: OrderStatus.ASSIGNED });
       (orderRepo.findById as jest.Mock)
         .mockResolvedValueOnce(assignedOrder)
-        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.APPROVED }));
+        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.TRADE_CREATED }));
 
       // Concurrency guard: tx sees ASSIGNED status
       (
@@ -1008,10 +1034,11 @@ describe('OrdersService', () => {
       ).order.findUnique.mockResolvedValue({ status: 'ASSIGNED' });
 
       const result = await service.approveOrder('reviewer-user', ORDER_ID, approveDto);
-      expect(result.status).toBe(OrderStatus.APPROVED);
+      expect(result.status).toBe(OrderStatus.TRADE_CREATED);
+      expect(tradesService.confirmTrade).toHaveBeenCalled();
     });
 
-    it('CREDIT SAFETY: approval does NOT release or consume credit (§3.3)', async () => {
+    it('CREDIT SAFETY: approval itself does NOT release credit; consume is confirmTrade', async () => {
       const underReviewOrder = makeOrder({ status: OrderStatus.UNDER_REVIEW });
       (orderRepo.findById as jest.Mock)
         .mockResolvedValueOnce(underReviewOrder)
@@ -1022,10 +1049,9 @@ describe('OrdersService', () => {
 
       await service.approveOrder('reviewer-user', ORDER_ID, approveDto);
 
-      // No credit operations triggered
       expect(accountRepo.releaseCredit).not.toHaveBeenCalled();
-      // quotationsService not called on approve
       expect(quotationsService.expireForOrderInTx).not.toHaveBeenCalled();
+      expect(tradesService.confirmTrade).toHaveBeenCalled();
     });
 
     it('CONCURRENCY: throws InvalidOrderStateTransitionException if already approved by another reviewer', async () => {
@@ -1141,13 +1167,17 @@ describe('OrdersService', () => {
       );
     });
 
-    it('throws InvalidOrderStateTransitionException from QUOTED state', async () => {
+    it('requests revision from QUOTED without assignment', async () => {
       const quotedOrder = makeOrder({ status: OrderStatus.QUOTED });
-      (orderRepo.findById as jest.Mock).mockResolvedValue(quotedOrder);
+      (orderRepo.findById as jest.Mock)
+        .mockResolvedValueOnce(quotedOrder)
+        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.REVISION_REQUESTED }));
+      (
+        fakeTx as unknown as { order: { findUnique: jest.Mock } }
+      ).order.findUnique.mockResolvedValue({ status: 'QUOTED' });
 
-      await expect(service.requestRevision('reviewer-user', ORDER_ID, revisionDto)).rejects.toThrow(
-        InvalidOrderStateTransitionException,
-      );
+      const result = await service.requestRevision('reviewer-user', ORDER_ID, revisionDto);
+      expect(result.status).toBe(OrderStatus.REVISION_REQUESTED);
     });
 
     it('throws OrderNotFoundException when order not found', async () => {
@@ -1183,6 +1213,15 @@ describe('OrdersService', () => {
       expect(result.id).toBe('other-order-id');
     });
 
+    it('includes locked spot price, wage and fee on order detail', async () => {
+      (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder());
+
+      const result = await service.getOrderDetail('staff-user-id', ORDER_ID, true);
+      expect(result.step1BasePrice).toBe('100000.000000');
+      expect(result.wageAmount).toBe('0.00');
+      expect(result.feeAmountRial).toBe('0.00');
+    });
+
     it('customer list is scoped to own orders only', async () => {
       (prisma.customer.findUnique as jest.Mock).mockResolvedValue(activeCustomerRow);
       (orderRepo.findByCustomerId as jest.Mock).mockResolvedValue({
@@ -1196,6 +1235,35 @@ describe('OrdersService', () => {
       // findByCustomerId called with THIS customer's ID, not findAll
       expect(orderRepo.findByCustomerId).toHaveBeenCalledWith(CUSTOMER_ID, { page: 1, limit: 20 });
       expect(orderRepo.findAll).not.toHaveBeenCalled();
+    });
+
+    it('staff list expands a display group into raw statuses', async () => {
+      (orderRepo.findAll as jest.Mock).mockResolvedValue({ orders: [], total: 0 });
+
+      await service.listOrders('staff-user-id', { page: 1, limit: 20, status: 'IN_REVIEW' }, true);
+
+      expect(orderRepo.findAll).toHaveBeenCalledWith({
+        page: 1,
+        limit: 20,
+        statuses: [
+          OrderStatus.SUBMITTED,
+          OrderStatus.QUOTED,
+          OrderStatus.ASSIGNED,
+          OrderStatus.UNDER_REVIEW,
+        ],
+        customerId: undefined,
+      });
+    });
+
+    it('includes BUY and SELL on listed orders', async () => {
+      (prisma.customer.findUnique as jest.Mock).mockResolvedValue(activeCustomerRow);
+      (orderRepo.findByCustomerId as jest.Mock).mockResolvedValue({
+        orders: [makeOrder({ side: 'BUY' }), makeOrder({ id: 'sell-order', side: 'SELL' })],
+        total: 2,
+      });
+
+      const result = await service.listOrders(CUSTOMER_USER_ID, { page: 1, limit: 20 }, false);
+      expect(result.orders.map((order) => order.side)).toEqual(['BUY', 'SELL']);
     });
   });
 
@@ -1245,11 +1313,11 @@ describe('OrdersService', () => {
     });
 
     // Phase 3.5 state machine tests
-    it('QUOTED: canBeAssigned=true, canApprove=false', () => {
+    it('QUOTED: assignment is optional and decisions are allowed', () => {
       const order = makeOrder({ status: OrderStatus.QUOTED });
       expect(order.canBeAssigned()).toBe(true);
-      expect(order.canApprove()).toBe(false);
-      expect(order.canRequestRevision()).toBe(false);
+      expect(order.canApprove()).toBe(true);
+      expect(order.canRequestRevision()).toBe(true);
       expect(order.canCancel()).toBe(true);
     });
 

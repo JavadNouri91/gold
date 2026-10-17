@@ -22,10 +22,10 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import {
   ASSIGNMENT_STATUS_LABELS,
-  ORDER_STATUS_LABELS,
   formatDateTime,
   formatMoney,
   formatWeight,
+  orderStatusPresentation,
   statusLabel,
 } from '@/lib/utils';
 
@@ -82,7 +82,7 @@ export default function AssignmentsPage() {
       key: 'status',
       header: 'وضعیت',
       render: (row) => (
-        <StatusBadge status={row.status} label={statusLabel(ORDER_STATUS_LABELS, row.status)} />
+        <StatusBadge {...orderStatusPresentation(row.status)} />
       ),
     },
     {
@@ -127,7 +127,7 @@ export default function AssignmentsPage() {
     <div className="space-y-4">
       <PageHeader
         title="صف بررسی"
-        description="سفارش‌های قیمت‌گذاری‌شده هنوز معامله نیستند. ابتدا برداشت یا تخصیص، بعد بررسی و تأیید، و در پایان ایجاد معامله."
+        description="سفارش‌های قیمت‌گذاری‌شده را برداشت یا تخصیص دهید؛ تأیید نهایی همان معامله را می‌سازد."
       />
       {claimFeedback ? <Alert variant="success">{claimFeedback}</Alert> : null}
       {claimError ? <Alert variant="error">{claimError}</Alert> : null}

@@ -1,4 +1,5 @@
 import Decimal from 'decimal.js';
+import { expandOrderStatusFilter } from '@gold/shared-types';
 
 /**
  * Customer transaction analytics.
@@ -108,7 +109,10 @@ export interface ActivityTransaction {
 }
 
 export interface CustomerHolding {
+  /** Available melted-gold grams (booked buy−sell minus non-cancelled pickups). */
   weightGrams: string;
+  /** Grams in REQUESTED / PREPARING / READY pickups (still reserved, not delivered). */
+  reservedPickupGrams: string;
   purityRatio: string | null;
   averageBuyPriceRial: string | null;
   totalBuyValueRial: string | null;
@@ -117,6 +121,7 @@ export interface CustomerHolding {
 
 export const EMPTY_CUSTOMER_HOLDING: CustomerHolding = {
   weightGrams: '0.000000',
+  reservedPickupGrams: '0.000000',
   purityRatio: null,
   averageBuyPriceRial: null,
   totalBuyValueRial: null,
@@ -203,7 +208,10 @@ function samePurity(left: string, right: string): boolean {
 
 function passesQuery(row: ActivityOrderInput, query: ActivityQuery): boolean {
   if (query.side && row.side !== query.side) return false;
-  if (query.status && row.status !== query.status) return false;
+  if (query.status) {
+    const allowed = new Set<string>(expandOrderStatusFilter(query.status));
+    if (allowed.size === 0 || !allowed.has(row.status)) return false;
+  }
   if (query.purityRatio && !samePurity(row.purityRatio, query.purityRatio)) return false;
   if (query.q) {
     const needle = query.q.trim().toLowerCase();
@@ -409,12 +417,22 @@ export function computeCustomerActivity(
   };
 }
 
-/** Net melted-gold holding from booked buy and sell orders. Unclassified rows are ignored. */
-export function computeCustomerHolding(rows: ActivityOrderInput[]): CustomerHolding {
+/**
+ * Net melted-gold holding from booked buy and sell orders.
+ * Non-cancelled physical pickups permanently reduce available weight.
+ * Unclassified rows are ignored.
+ */
+export function computeCustomerHolding(
+  rows: ActivityOrderInput[],
+  opts?: { pickupReservedGrams?: Decimal.Value; pickupCommittedGrams?: Decimal.Value },
+): CustomerHolding {
   const computed = computeCustomerActivity(rows, { bucket: 'month', page: 1, limit: 10 });
   const buyWeight = new Decimal(computed.buy.grams);
   const sellWeight = new Decimal(computed.sell.grams);
-  const net = Decimal.max(buyWeight.minus(sellWeight), 0);
+  const bookedNet = Decimal.max(buyWeight.minus(sellWeight), 0);
+  const reservedPickup = new Decimal(opts?.pickupReservedGrams ?? 0);
+  const committedPickup = new Decimal(opts?.pickupCommittedGrams ?? 0);
+  const available = Decimal.max(bookedNet.minus(committedPickup), 0);
   const buyAmount = new Decimal(computed.buy.amountRial);
   const sellAmount = new Decimal(computed.sell.amountRial);
   const purities = new Set(
@@ -423,7 +441,8 @@ export function computeCustomerHolding(rows: ActivityOrderInput[]): CustomerHold
       .map((row) => purityKey(row.purityRatio)),
   );
   return {
-    weightGrams: grams(net),
+    weightGrams: grams(available),
+    reservedPickupGrams: grams(Decimal.max(reservedPickup, 0)),
     purityRatio: purities.size === 1 ? [...purities][0] : null,
     averageBuyPriceRial: buyWeight.gt(0) ? money(buyAmount.div(buyWeight)) : null,
     totalBuyValueRial: buyWeight.gt(0) ? money(buyAmount) : null,

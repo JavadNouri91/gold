@@ -143,6 +143,11 @@ describe('manager flow', () => {
     expect(firstStaffRoute(MANAGER)).toBe('/dashboard/overview');
     const { unmount } = render(<OverviewPage />);
     expect(await screen.findByText('نمای مدیریت')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /مشتریان/ })).toHaveAttribute('href', '/dashboard/customers');
+    expect(screen.getByRole('link', { name: /احراز هویت در انتظار/ })).toHaveAttribute('href', '/dashboard/kyc');
+    expect(screen.getByRole('link', { name: /سفارش‌های منتظر بررسی/ })).toHaveAttribute('href', '/dashboard/assignments');
+    expect(screen.getByRole('link', { name: /موقعیت طلا/ })).toHaveAttribute('href', '/dashboard/ledger/gold');
+    expect(screen.getByRole('link', { name: /ارزش پرداخت‌ها/ })).toHaveAttribute('href', '/dashboard/payments');
     unmount();
 
     const customers = render(<CustomersPage />);

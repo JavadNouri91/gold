@@ -1,6 +1,6 @@
-import { IsEnum, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { OrderStatus } from '@gold/shared-types';
+import { ORDER_STATUS_QUERY_VALUES } from '@gold/shared-types';
 
 export class ListOrdersDto {
   @IsOptional()
@@ -16,10 +16,10 @@ export class ListOrdersDto {
   @Max(100)
   limit?: number = 20;
 
-  /** Filter by status — staff only; customers always see their own orders */
+  /** Filter by display group or raw OrderStatus — staff only */
   @IsOptional()
-  @IsEnum(OrderStatus)
-  status?: OrderStatus;
+  @IsIn([...ORDER_STATUS_QUERY_VALUES])
+  status?: string;
 
   /** Filter by customer ID — staff only */
   @IsOptional()

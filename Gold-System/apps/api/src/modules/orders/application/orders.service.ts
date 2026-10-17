@@ -1,6 +1,12 @@
 import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import Decimal from 'decimal.js';
-import { CustomerType, CustomerStatus, OrderStatus, TradeSide } from '@gold/shared-types';
+import {
+  CustomerType,
+  CustomerStatus,
+  OrderStatus,
+  TradeSide,
+  expandOrderStatusFilter,
+} from '@gold/shared-types';
 
 import { PrismaService } from '../../../database/prisma.service';
 import { AuditService } from '../../audit/application/audit.service';
@@ -14,6 +20,8 @@ import { NotificationType } from '../../notifications/domain/constants/notificat
 import { TradingPolicyService } from '../../trading-policy/application/trading-policy.service';
 import { CustomerActivityService } from './customer-activity.service';
 import { readOrderSide } from './customer-activity.math';
+import { TradesService } from '../../trades/application/trades.service';
+import { evaluateTradeApproval } from '../../trades/domain/trade-approval.policy';
 
 import { CreateOrderDto } from './dto/create-order.dto';
 import { CancelOrderDto } from './dto/cancel-order.dto';
@@ -51,6 +59,8 @@ export class OrdersService {
     private readonly notificationService: NotificationService,
     private readonly tradingPolicy: TradingPolicyService,
     private readonly activity: CustomerActivityService,
+    @Inject(forwardRef(() => TradesService))
+    private readonly tradesService: TradesService,
   ) {}
 
   // ─── Create Order (DRAFT) ─────────────────────────────────────
@@ -170,16 +180,24 @@ export class OrdersService {
         `total: ${totalAmountRial.toFixed(2)} Rial, side: ${side})`,
     );
 
-    return this.toResponse(order, [], fees.charges.map((c) => ({
-      code: c.code,
-      labelFa: c.labelFa,
-      side: c.side,
-      mode: c.mode,
-      rateValue: c.rateValue.toFixed(6),
-      calculationBase: c.calculationBase,
-      baseAmount: c.baseAmount.toFixed(2),
-      amount: c.amount.toFixed(2),
-    })));
+    return this.toResponse(
+      order,
+      [],
+      fees.charges.map((c) => ({
+        code: c.code,
+        labelFa: c.labelFa,
+        side: c.side,
+        mode: c.mode,
+        rateValue: c.rateValue.toFixed(6),
+        calculationBase: c.calculationBase,
+        baseAmount: c.baseAmount.toFixed(2),
+        amount: c.amount.toFixed(2),
+      })),
+      {
+        step1BasePrice: pricing.step1BasePrice.toFixed(6),
+        wageAmount: pricing.wageAmount.toFixed(2),
+      },
+    );
   }
 
   // ─── Submit Order (DRAFT → SUBMITTED + credit reservation) ───
@@ -571,12 +589,10 @@ export class OrdersService {
    * Phase 3.5: Order transitions to APPROVED state.
    * Trade creation happens in a later phase (Phase 3.6+, UC-11).
    *
-   * CREDIT: Credit is NOT consumed here. Credit consumption (reserved → consumed)
-   * happens at Trade approval when Trade is formally confirmed (§3.3).
-   * This approval marks the Order as ready for Trade creation.
-   *
-   * DUAL APPROVAL: §13.4 — OPEN (threshold undefined).
-   * Single approval is implemented. Dual approval is BLOCKED.
+   * CREDIT: Consumption still happens inside confirmTrade (§3.3).
+   * MVP: the first `trade.approve` is treated as final (`evaluateTradeApproval`)
+   * and immediately calls confirmTrade. If later requiredCount > 1, this
+   * method stops at APPROVED and POST /trades remains the finalizer.
    *
    * CONCURRENCY: State check is performed inside the transaction.
    * If another reviewer has already approved/rejected, the state check
@@ -603,12 +619,7 @@ export class OrdersService {
         where: { id: orderId },
         select: { status: true },
       });
-      if (fresh?.status !== 'ASSIGNED' && fresh?.status !== 'UNDER_REVIEW') {
-        throw new InvalidOrderStateTransitionException(
-          (fresh?.status ?? 'UNKNOWN') as OrderStatus,
-          'approve',
-        );
-      }
+      this.assertReviewDecisionStatus(fresh?.status, 'approve');
 
       await tx.order.update({
         where: { id: orderId },
@@ -633,15 +644,31 @@ export class OrdersService {
         status: OrderStatus.APPROVED,
         approvedByUserId: actorUserId,
         notes: dto.notes ?? null,
-        creditConsumed: false, // credit NOT consumed here — happens at Trade approval
+        creditConsumed: false,
       },
       reason: dto.notes,
     });
 
-    this.logger.log(
-      `Order ${order.orderNumber} approved by user ${actorUserId}. ` +
-        `Note: Trade creation pending (Phase 3.6+). Credit NOT consumed yet.`,
-    );
+    const decision = evaluateTradeApproval({
+      recordedCount: 1,
+      amountRial: order.totalAmountRial,
+      dualApprovalThresholdRial: null,
+    });
+
+    if (decision.isFinal) {
+      this.logger.log(
+        `Order ${order.orderNumber} approved by ${actorUserId}; single-approver policy finalizes the trade.`,
+      );
+      await this.tradesService.confirmTrade(actorUserId, {
+        orderId,
+        notes: dto.notes,
+      });
+    } else {
+      this.logger.log(
+        `Order ${order.orderNumber} approved by ${actorUserId}; ` +
+          `${decision.recordedCount}/${decision.requiredCount} approvals — trade not created yet.`,
+      );
+    }
 
     const updated = await this.orderRepo.findById(orderId);
     if (!updated) throw new OrderNotFoundException(orderId);
@@ -692,12 +719,7 @@ export class OrdersService {
         where: { id: orderId },
         select: { status: true },
       });
-      if (fresh?.status !== 'ASSIGNED' && fresh?.status !== 'UNDER_REVIEW') {
-        throw new InvalidOrderStateTransitionException(
-          (fresh?.status ?? 'UNKNOWN') as OrderStatus,
-          'requestRevision',
-        );
-      }
+      this.assertReviewDecisionStatus(fresh?.status, 'requestRevision');
 
       await tx.order.update({
         where: { id: orderId },
@@ -756,7 +778,7 @@ export class OrdersService {
       const result = await this.orderRepo.findAll({
         page,
         limit,
-        status: dto.status,
+        statuses: dto.status ? expandOrderStatusFilter(dto.status) : undefined,
         customerId: dto.customerId,
       });
       orders = result.orders;
@@ -794,14 +816,16 @@ export class OrdersService {
       const order = await this.orderRepo.findById(orderId);
       if (!order) throw new OrderNotFoundException(orderId);
       const charges = await this.loadChargeDtos(orderId);
-      return this.toResponse(order, [], charges);
+      const snapshot = await this.loadPricingSnapshot(order.pricingCalculationId);
+      return this.toResponse(order, [], charges, snapshot);
     }
 
     const { customer } = await this.resolveCustomerAndAccount(actorUserId);
     const order = await this.orderRepo.findByIdForCustomer(orderId, customer.id);
     if (!order) throw new OrderNotFoundException(orderId);
     const charges = await this.loadChargeDtos(orderId);
-    return this.toResponse(order, [], charges);
+    const snapshot = await this.loadPricingSnapshot(order.pricingCalculationId);
+    return this.toResponse(order, [], charges, snapshot);
   }
 
   // ─── Private helpers ──────────────────────────────────────────
@@ -877,6 +901,19 @@ export class OrdersService {
 
   // ─── Response mapping ─────────────────────────────────────────
 
+  private assertReviewDecisionStatus(status: string | undefined, action: string) {
+    if (
+      status !== OrderStatus.QUOTED &&
+      status !== OrderStatus.ASSIGNED &&
+      status !== OrderStatus.UNDER_REVIEW
+    ) {
+      throw new InvalidOrderStateTransitionException(
+        (status ?? 'UNKNOWN') as OrderStatus,
+        action,
+      );
+    }
+  }
+
   private async loadChargeDtos(orderId: string) {
     const charges = await this.feeService.listSnapshotsForOrder(orderId);
     return charges.map((c) => ({
@@ -891,10 +928,24 @@ export class OrdersService {
     }));
   }
 
+  private async loadPricingSnapshot(pricingCalculationId: string | null) {
+    if (!pricingCalculationId) return null;
+    const calc = await this.prisma.pricingCalculation.findUnique({
+      where: { id: pricingCalculationId },
+      select: { step1BasePrice: true, wageAmount: true },
+    });
+    if (!calc) return null;
+    return {
+      step1BasePrice: new Decimal(calc.step1BasePrice.toString()).toFixed(6),
+      wageAmount: new Decimal(calc.wageAmount.toString()).toFixed(2),
+    };
+  }
+
   private toResponse(
     order: OrderEntity,
     _items: OrderItemEntity[],
     charges?: OrderResponseDto['charges'],
+    snapshot?: { step1BasePrice: string; wageAmount: string } | null,
   ): OrderResponseDto {
     const dto = new OrderResponseDto();
     dto.id = order.id;
@@ -906,10 +957,13 @@ export class OrdersService {
     dto.totalAmountRial = order.totalAmountRial.toFixed(2);
     dto.goldAmountRial = order.goldAmountRial.toFixed(2);
     dto.feeAmountRial = order.feeAmountRial.toFixed(2);
+    dto.step1BasePrice = snapshot?.step1BasePrice ?? null;
+    dto.wageAmount = snapshot?.wageAmount ?? null;
     dto.reservedAmountRial = order.reservedAmountRial.toFixed(2);
     dto.weightGrams = order.weightGrams.toFixed(6);
     dto.purityRatio = order.purityRatio.toFixed(6);
     dto.customerType = order.customerType;
+    dto.side = order.side;
     dto.submittedAt = order.submittedAt;
     dto.cancelledAt = order.cancelledAt;
     dto.rejectedAt = order.rejectedAt;

@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { IsIn, IsInt, IsISO8601, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Type } from 'class-transformer';
-import { OrderStatus } from '@gold/shared-types';
+import { ORDER_STATUS_QUERY_VALUES } from '@gold/shared-types';
 import { Prisma } from '@prisma/client';
 
 import { PrismaService } from '../../../database/prisma.service';
@@ -32,8 +32,8 @@ export class CustomerActivityQueryDto {
   side?: OrderSide;
 
   @IsOptional()
-  @IsIn(Object.values(OrderStatus))
-  status?: OrderStatus;
+  @IsIn([...ORDER_STATUS_QUERY_VALUES])
+  status?: string;
 
   @IsOptional()
   @IsString()
@@ -154,27 +154,57 @@ export class CustomerActivityService {
   async portfolio(userId: string) {
     const customerId = await this.resolveCustomerId(userId);
     if (!customerId) return EMPTY_CUSTOMER_HOLDING;
-    const rows = await this.prisma.order.findMany({
-      where: { customerId },
-      select: orderActivitySelect,
-    });
-    return computeCustomerHolding(rows.map(mapRow));
+    const [rows, pickupTotals] = await Promise.all([
+      this.prisma.order.findMany({
+        where: { customerId },
+        select: orderActivitySelect,
+      }),
+      this.pickupWeightTotals(customerId, this.prisma),
+    ]);
+    return computeCustomerHolding(rows.map(mapRow), pickupTotals);
   }
 
   /**
-   * Booked buy weight minus booked sell weight.
+   * Booked buy−sell minus non-cancelled physical pickups.
    * Must run inside the same transaction that locks the customer account,
-   * so a second sell sees the first as already booked.
+   * so a second sell or pickup sees the first as already committed.
    */
   async sellableWeightGrams(
     customerId: string,
     db: Prisma.TransactionClient,
   ): Promise<Decimal> {
-    const rows = await db.order.findMany({
-      where: { customerId },
-      select: orderActivitySelect,
+    const [rows, pickupTotals] = await Promise.all([
+      db.order.findMany({
+        where: { customerId },
+        select: orderActivitySelect,
+      }),
+      this.pickupWeightTotals(customerId, db),
+    ]);
+    return new Decimal(computeCustomerHolding(rows.map(mapRow), pickupTotals).weightGrams);
+  }
+
+  /**
+   * Sums pickup weight that reduces sellable holding.
+   * reserved = open pipeline; committed = reserved + delivered (everything except CANCELLED).
+   */
+  async pickupWeightTotals(
+    customerId: string,
+    db: Prisma.TransactionClient | PrismaService,
+  ): Promise<{ pickupReservedGrams: Decimal; pickupCommittedGrams: Decimal }> {
+    const rows = await db.physicalGoldPickup.findMany({
+      where: { customerId, status: { not: 'CANCELLED' } },
+      select: { weightGrams: true, status: true },
     });
-    return new Decimal(computeCustomerHolding(rows.map(mapRow)).weightGrams);
+    let reserved = new Decimal(0);
+    let committed = new Decimal(0);
+    for (const row of rows) {
+      const grams = new Decimal(row.weightGrams.toString());
+      committed = committed.plus(grams);
+      if (row.status !== 'DELIVERED') {
+        reserved = reserved.plus(grams);
+      }
+    }
+    return { pickupReservedGrams: reserved, pickupCommittedGrams: committed };
   }
 
   async summary(userId: string, dto: CustomerActivityQueryDto) {

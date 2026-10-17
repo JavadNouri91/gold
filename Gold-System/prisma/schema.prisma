@@ -95,6 +95,11 @@ model User {
   authoredCustomerNotes CustomerNote[]       @relation("CustomerNoteAuthor")
   sessionPolicy         UserSessionPolicy?
   loginConfirmations    LoginConfirmation[]
+  pickupPreparing       PhysicalGoldPickup[] @relation("PickupPreparingBy")
+  pickupReady           PhysicalGoldPickup[] @relation("PickupReadyBy")
+  pickupDelivered       PhysicalGoldPickup[] @relation("PickupDeliveredBy")
+  pickupCancelled       PhysicalGoldPickup[] @relation("PickupCancelledBy")
+  pickupEvents          PhysicalGoldPickupEvent[] @relation("PickupEventActor")
 
   @@map("users")
 }
@@ -134,12 +139,16 @@ model RefreshToken {
 
 /// Singleton row id = "global". Role and user policies fall back to this row.
 model SessionSetting {
-  id            String               @id
-  limitType     SessionLimitType     @default(LIMITED) @map("limit_type")
-  maxSessions   Int?                 @map("max_sessions")
-  loginBehavior SessionLoginBehavior @default(BLOCK) @map("login_behavior")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
-  updatedById   String?              @map("updated_by_id")
+  id                       String               @id
+  limitType                SessionLimitType     @default(LIMITED) @map("limit_type")
+  maxSessions              Int?                 @map("max_sessions")
+  loginBehavior            SessionLoginBehavior @default(BLOCK) @map("login_behavior")
+  /// Minutes without API/refresh activity before the session ends. Null = disabled.
+  idleTimeoutMinutes       Int?                 @map("idle_timeout_minutes")
+  /// Maximum minutes from login (created_at) before the session ends. Null = disabled.
+  maxSessionDurationMinutes Int?                @map("max_session_duration_minutes")
+  updatedAt                DateTime             @updatedAt @map("updated_at")
+  updatedById              String?              @map("updated_by_id")
 
   @@map("session_settings")
 }
@@ -269,6 +278,7 @@ model Customer {
   payments         Payment[]
   quotations       Quotation[]
   trades           Trade[]
+  physicalPickups  PhysicalGoldPickup[]
   referrer         Customer?             @relation("CustomerReferrals", fields: [referrerId], references: [id], onDelete: SetNull)
   referrals        Customer[]            @relation("CustomerReferrals")
 
@@ -1258,6 +1268,20 @@ enum NotificationType {
   INTERNAL_PAYMENT_ISSUE
   INTERNAL_SETTLEMENT_ISSUE
   OTP_LOGIN
+  PICKUP_REQUESTED
+  PICKUP_READY
+  PICKUP_DELIVERED
+  PICKUP_CANCELLED
+  INTERNAL_NEW_PICKUP
+}
+
+/// In-store pickup of melted gold as a bar/ingot (not jewelry catalog).
+enum PhysicalGoldPickupStatus {
+  REQUESTED
+  PREPARING
+  READY
+  DELIVERED
+  CANCELLED
 }
 
 enum TradingWeekday {
@@ -1363,4 +1387,59 @@ model TradingLimit {
   @@index([scope, scopeKey])
   @@index([sessionId])
   @@map("trading_limits")
+}
+
+/// Customer request to redeem melted-gold balance as a physical bar at the store.
+/// Non-CANCELLED rows reduce sellable holding from the moment of request.
+model PhysicalGoldPickup {
+  id             String                    @id @default(cuid())
+  pickupNumber   String                    @unique @map("pickup_number")
+  customerId     String                    @map("customer_id")
+  storeId        String                    @map("store_id")
+  weightGrams    Decimal                   @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio    Decimal                   @map("purity_ratio") @db.Decimal(8, 6)
+  status         PhysicalGoldPickupStatus  @default(REQUESTED)
+  customerNote       String?                   @map("customer_note")
+  staffNote          String?                   @map("staff_note")
+  cancelReason       String?                   @map("cancel_reason")
+  /// CUSTOMER | STAFF — who cancelled the pickup.
+  cancelledByKind    String?                   @map("cancelled_by_kind")
+  /// Planned in-store handover date (set when staff starts PREPARING).
+  scheduledPickupAt  DateTime?                 @map("scheduled_pickup_at")
+  requestedAt        DateTime                  @default(now()) @map("requested_at")
+  preparingAt        DateTime?                 @map("preparing_at")
+  readyAt            DateTime?                 @map("ready_at")
+  deliveredAt        DateTime?                 @map("delivered_at")
+  cancelledAt        DateTime?                 @map("cancelled_at")
+  preparingById      String?                   @map("preparing_by_id")
+  readyById          String?                   @map("ready_by_id")
+  deliveredById      String?                   @map("delivered_by_id")
+  cancelledById      String?                   @map("cancelled_by_id")
+  createdAt      DateTime                  @default(now()) @map("created_at")
+  updatedAt      DateTime                  @updatedAt @map("updated_at")
+  customer       Customer                  @relation(fields: [customerId], references: [id])
+  preparingBy    User?                     @relation("PickupPreparingBy", fields: [preparingById], references: [id])
+  readyBy        User?                     @relation("PickupReadyBy", fields: [readyById], references: [id])
+  deliveredBy    User?                     @relation("PickupDeliveredBy", fields: [deliveredById], references: [id])
+  cancelledBy    User?                     @relation("PickupCancelledBy", fields: [cancelledById], references: [id])
+  events         PhysicalGoldPickupEvent[]
+
+  @@index([customerId, status])
+  @@index([status, requestedAt])
+  @@index([storeId])
+  @@map("physical_gold_pickups")
+}
+
+model PhysicalGoldPickupEvent {
+  id        String                   @id @default(cuid())
+  pickupId  String                   @map("pickup_id")
+  status    PhysicalGoldPickupStatus
+  note      String?
+  actorId   String?                  @map("actor_id")
+  createdAt DateTime                 @default(now()) @map("created_at")
+  pickup    PhysicalGoldPickup       @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+  actor     User?                    @relation("PickupEventActor", fields: [actorId], references: [id])
+
+  @@index([pickupId, createdAt])
+  @@map("physical_gold_pickup_events")
 }

@@ -1,3 +1,4 @@
+import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { ConfigModule } from '@nestjs/config';
@@ -48,6 +49,9 @@ import { SettlementsModule } from './modules/settlements/settlements.module';
 import { SuppliersModule } from './modules/suppliers/suppliers.module';
 import { PurchasesModule } from './modules/purchases/purchases.module';
 
+// ─── Physical gold pickup (in-store bar redemption) ───────
+import { PickupsModule } from './modules/pickups/pickups.module';
+
 // ─── Phase 7 — Notifications + SMS ────────────────────────
 import { NotificationsModule } from './modules/notifications/notifications.module';
 
@@ -60,6 +64,11 @@ import { TradingPolicyModule } from './modules/trading-policy/trading-policy.mod
     // ─── Configuration ───────────────────────────────────────
     ConfigModule.forRoot({
       isGlobal: true,
+      envFilePath: [
+        join(process.cwd(), '.env'),
+        join(process.cwd(), '../../.env'),
+        join(__dirname, '../../../.env'),
+      ],
       load: [appConfig, databaseConfig, jwtConfig, otpConfig, storageConfig, smsConfig],
       validate: validateEnv,
       cache: true,
@@ -121,6 +130,7 @@ import { TradingPolicyModule } from './modules/trading-policy/trading-policy.mod
     // ─── Phase 6 — Suppliers + Purchases ───────────────────────
     SuppliersModule,
     PurchasesModule,
+    PickupsModule,
 
     // ─── Phase 7 — Notifications + SMS ─────────────────────────
     // Note: NotificationsModule is ALSO imported by AuthModule, KycModule,

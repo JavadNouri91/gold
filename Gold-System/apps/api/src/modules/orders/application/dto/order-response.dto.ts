@@ -25,6 +25,10 @@ export class OrderResponseDto {
   goldAmountRial: string;
   /** Transaction fee total */
   feeAmountRial: string;
+  /** Spot (pipeline step 1) at order creation — rial per gram */
+  step1BasePrice: string | null;
+  /** Wage/making charge locked on the pricing calculation */
+  wageAmount: string | null;
   /** Credit reserved from CustomerAccount — 0 until SUBMITTED */
   reservedAmountRial: string;
   /** Locked charge line items (fees) */
@@ -42,6 +46,8 @@ export class OrderResponseDto {
   weightGrams: string; // Decimal as string
   purityRatio: string; // Decimal as string
   customerType: CustomerType | null;
+  /** BUY/SELL from order item metadata. Null when unclassified. */
+  side: 'BUY' | 'SELL' | null;
 
   submittedAt: Date | null;
   cancelledAt: Date | null;

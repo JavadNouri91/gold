@@ -92,6 +92,83 @@ export enum OrderStatus {
   CANCELLED = 'CANCELLED',
 }
 
+/** Five customer/staff display groups. The raw OrderStatus machine is unchanged. */
+export const OrderStatusGroup = {
+  DRAFT: 'DRAFT',
+  IN_REVIEW: 'IN_REVIEW',
+  REVISION_REQUESTED: 'REVISION_REQUESTED',
+  COMPLETED: 'COMPLETED',
+  CLOSED: 'CLOSED',
+} as const;
+
+export type OrderStatusGroup = (typeof OrderStatusGroup)[keyof typeof OrderStatusGroup];
+
+export const ORDER_STATUS_GROUP_MEMBERS: Record<OrderStatusGroup, readonly OrderStatus[]> = {
+  DRAFT: [OrderStatus.DRAFT],
+  IN_REVIEW: [
+    OrderStatus.SUBMITTED,
+    OrderStatus.QUOTED,
+    OrderStatus.ASSIGNED,
+    OrderStatus.UNDER_REVIEW,
+  ],
+  REVISION_REQUESTED: [OrderStatus.REVISION_REQUESTED],
+  COMPLETED: [
+    OrderStatus.APPROVED,
+    OrderStatus.TRADE_CREATED,
+    OrderStatus.SETTLING,
+    OrderStatus.COMPLETED,
+  ],
+  CLOSED: [OrderStatus.REJECTED, OrderStatus.CANCELLED],
+};
+
+export const ORDER_STATUS_GROUP_ORDER: readonly OrderStatusGroup[] = [
+  'DRAFT',
+  'IN_REVIEW',
+  'REVISION_REQUESTED',
+  'COMPLETED',
+  'CLOSED',
+];
+
+/** Retired display keys; still accepted on list/activity filters. */
+const ORDER_STATUS_FILTER_ALIASES: Record<string, OrderStatusGroup> = {
+  AWAITING_REVIEW: 'IN_REVIEW',
+  APPROVED: 'COMPLETED',
+};
+
+const ORDER_STATUS_TO_GROUP = Object.fromEntries(
+  ORDER_STATUS_GROUP_ORDER.flatMap((group) =>
+    ORDER_STATUS_GROUP_MEMBERS[group].map((status) => [status, group]),
+  ),
+) as Record<OrderStatus, OrderStatusGroup>;
+
+export const ORDER_STATUS_QUERY_VALUES: readonly string[] = Array.from(
+  new Set([
+    ...Object.values(OrderStatus),
+    ...Object.values(OrderStatusGroup),
+    ...Object.keys(ORDER_STATUS_FILTER_ALIASES),
+  ]),
+);
+
+export function orderStatusGroup(status: string): OrderStatusGroup | null {
+  if (status in ORDER_STATUS_FILTER_ALIASES) return ORDER_STATUS_FILTER_ALIASES[status]!;
+  if ((ORDER_STATUS_GROUP_ORDER as readonly string[]).includes(status)) {
+    return status as OrderStatusGroup;
+  }
+  return ORDER_STATUS_TO_GROUP[status as OrderStatus] ?? null;
+}
+
+/** Expand a UI group or a raw machine status into Prisma `status in (...)`. */
+export function expandOrderStatusFilter(status: string): OrderStatus[] {
+  const aliased = ORDER_STATUS_FILTER_ALIASES[status];
+  const group = aliased
+    ?? ((ORDER_STATUS_GROUP_ORDER as readonly string[]).includes(status)
+      ? (status as OrderStatusGroup)
+      : null);
+  if (group) return [...ORDER_STATUS_GROUP_MEMBERS[group]];
+  if ((Object.values(OrderStatus) as string[]).includes(status)) return [status as OrderStatus];
+  return [];
+}
+
 export enum QuotationStatus {
   GENERATED = 'GENERATED',
   ACTIVE = 'ACTIVE',
@@ -204,6 +281,16 @@ export enum GoldSourceType {
   TRADE_REVERSAL = 'TRADE_REVERSAL',
   PURCHASE_CONFIRM = 'PURCHASE_CONFIRM',
   ADJUSTMENT = 'ADJUSTMENT',
+  PICKUP_DELIVER = 'PICKUP_DELIVER',
+}
+
+/** In-store redemption of melted-gold balance as a physical bar. */
+export enum PhysicalGoldPickupStatus {
+  REQUESTED = 'REQUESTED',
+  PREPARING = 'PREPARING',
+  READY = 'READY',
+  DELIVERED = 'DELIVERED',
+  CANCELLED = 'CANCELLED',
 }
 
 // ─── Ledger Source Types ──────────────────────────────────────────────────────

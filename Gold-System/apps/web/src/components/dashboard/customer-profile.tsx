@@ -27,7 +27,6 @@ import {
   CUSTOMER_TYPE_LABELS,
   CUSTOMER_VERIFICATION_LABELS,
   KYC_STATUS_LABELS,
-  ORDER_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
   QUOTATION_STATUS_LABELS,
@@ -36,6 +35,7 @@ import {
   formatDateTime,
   formatMoney,
   formatWeight,
+  orderStatusPresentation,
   statusLabel,
 } from '@/lib/utils';
 
@@ -260,16 +260,19 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
       {tab === 'orders' ? (
         <RecordList
           empty="سفارشی ثبت نشده است."
-          rows={(workspace.data?.orders ?? []).map((order) => ({
-            id: order.id,
-            href: `/dashboard/orders/${order.id}`,
-            title: order.orderNumber,
-            amount: formatMoney(order.totalAmountRial),
-            extra: formatWeight(order.weightGrams),
-            status: order.status,
-            statusLabel: statusLabel(ORDER_STATUS_LABELS, order.status),
-            date: formatDate(order.createdAt),
-          }))}
+          rows={(workspace.data?.orders ?? []).map((order) => {
+            const presented = orderStatusPresentation(order.status);
+            return {
+              id: order.id,
+              href: `/dashboard/orders/${order.id}`,
+              title: order.orderNumber,
+              amount: formatMoney(order.totalAmountRial),
+              extra: formatWeight(order.weightGrams),
+              status: presented.status,
+              statusLabel: presented.label,
+              date: formatDate(order.createdAt),
+            };
+          })}
         />
       ) : null}
 

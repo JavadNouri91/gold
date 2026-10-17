@@ -94,9 +94,9 @@ describe('reviewer flow', () => {
     render(<ReviewContextPanel context={context} onChanged={jest.fn()} />);
     const user = userEvent.setup();
     await user.click(screen.getByRole('button', { name: 'رد سفارش' }));
-    await user.type(screen.getByLabelText('دلیل'), 'وزن با درخواست نمی‌خواند');
-    const buttons = screen.getAllByRole('button', { name: 'تأیید' });
-    await user.click(buttons[buttons.length - 1]!);
+    await user.type(screen.getByLabelText(/دلیل/), 'وزن با درخواست نمی‌خواند');
+    const rejectButtons = screen.getAllByRole('button', { name: 'رد سفارش' });
+    await user.click(rejectButtons[rejectButtons.length - 1]!);
     expect(api.internalOrdersApi.reject).toHaveBeenCalledWith('ord-1', 'وزن با درخواست نمی‌خواند');
   });
 });

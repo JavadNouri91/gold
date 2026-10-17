@@ -12,7 +12,13 @@ import { FilterBar } from '@/components/dashboard/filter-bar';
 import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
 import { ApiErrorState } from '@/components/dashboard/states';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { ORDER_STATUS_LABELS, formatDate, formatMoney, formatWeight, statusLabel } from '@/lib/utils';
+import {
+  ORDER_STATUS_FILTER_OPTIONS,
+  formatDate,
+  formatMoney,
+  formatWeight,
+  orderStatusPresentation,
+} from '@/lib/utils';
 
 export default function OrdersPage() {
   const { user } = useAuth();
@@ -60,20 +66,20 @@ export default function OrdersPage() {
     {
       key: 'status',
       header: 'وضعیت',
-      render: (row) => <StatusBadge status={row.status} label={statusLabel(ORDER_STATUS_LABELS, row.status)} />,
+      render: (row) => <StatusBadge {...orderStatusPresentation(row.status)} />,
     },
   ];
 
   return (
     <div className="space-y-4">
-      <PageHeader title="سفارش‌ها" description="وضعیت‌ها همان مقادیر ماشین وضعیت سرور هستند." />
+      <PageHeader title="سفارش‌ها" description="وضعیت نمایشی در پنج گروه خلاصه شده است." />
       <FilterBar
         fields={[
           {
             key: 'status',
             label: 'وضعیت',
             type: 'select',
-            options: Object.entries(ORDER_STATUS_LABELS).map(([value, label]) => ({ value, label })),
+            options: ORDER_STATUS_FILTER_OPTIONS,
           },
           { key: 'customerId', label: 'شناسه مشتری', dir: 'ltr' },
         ]}

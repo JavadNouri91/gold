@@ -1,19 +1,28 @@
-import type { LucideIcon } from 'lucide-react';
+import Link from 'next/link';
+import { ChevronLeft, type LucideIcon } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
+import { cn } from '@/lib/utils';
 
 export function MetricCard({
   label,
   value,
   hint,
   icon: Icon,
+  href,
 }: {
   label: string;
   value: string;
   hint?: string;
   icon?: LucideIcon;
+  href?: string;
 }) {
-  return (
-    <Card>
+  const card = (
+    <Card
+      className={cn(
+        'h-full',
+        href && 'transition-colors group-hover:border-gold-400 group-hover:bg-gold-50/60',
+      )}
+    >
       <CardContent className="p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -23,10 +32,24 @@ export function MetricCard({
             </p>
             {hint ? <p className="mt-1 text-xs text-muted-foreground">{hint}</p> : null}
           </div>
-          {Icon ? <Icon className="h-5 w-5 text-gold-600" aria-hidden="true" /> : null}
+          <div className="flex items-center gap-1 text-gold-600">
+            {Icon ? <Icon className="h-5 w-5" aria-hidden="true" /> : null}
+            {href ? <ChevronLeft className="h-4 w-4 text-muted-foreground" aria-hidden="true" /> : null}
+          </div>
         </div>
       </CardContent>
     </Card>
+  );
+
+  if (!href) return card;
+
+  return (
+    <Link
+      href={href}
+      className="group block rounded-xl outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+    >
+      {card}
+    </Link>
   );
 }
 

@@ -10,6 +10,7 @@ import { isZeroDecimal, multiplyDecimal, ratioPercent, subtractDecimal } from '.
 
 export interface CustomerHolding {
   weightGrams: string;
+  reservedPickupGrams?: string;
   purityRatio: string | null;
   averageBuyPriceRial: string | null;
   totalBuyValueRial: string | null;
@@ -26,6 +27,7 @@ export interface PortfolioAssetSlice {
 
 export interface PortfolioPosition {
   weightGrams: string;
+  reservedPickupGrams: string;
   purityLabel: string | null;
   averageBuyPriceRial: string | null;
   marketValueRial: string | null;
@@ -67,6 +69,7 @@ export function toPortfolioPosition(
 
   return {
     weightGrams: holding.weightGrams,
+    reservedPickupGrams: holding.reservedPickupGrams ?? '0.000000',
     purityLabel: purityMillisLabel(holding.purityRatio),
     averageBuyPriceRial: holding.averageBuyPriceRial,
     marketValueRial,

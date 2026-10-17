@@ -10,6 +10,7 @@
 - trade approved/rejected
 - payment recorded
 - settlement completed
+- pickup requested / ready / delivered / cancelled
 
 ### Internal
 - new order
@@ -18,6 +19,7 @@
 - pending review
 - payment issue
 - settlement issue
+- new pickup request
 
 ## Notification record
 - recipient
@@ -39,6 +41,7 @@ Sensitive operations:
 - payment creation/reversal
 - ledger adjustments
 - permission changes
+- physical gold pickup status changes
 
 Audit fields:
 - actor

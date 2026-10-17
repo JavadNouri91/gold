@@ -21,6 +21,8 @@
 - `customer.quotation.download_own`
 - `customer.payment.read_own`
 - `customer.account.read_own`
+- `customer.pickup.create`
+- `customer.pickup.read_own`
 
 ### Seller
 - `order.read`
@@ -29,6 +31,10 @@
 - `trade.review`
 - `trade.comment`
 - `customer.account.read`
+- `pickup.read`
+- `pickup.prepare`
+- `pickup.deliver`
+- `pickup.cancel`
 
 ### Operator
 - `order.read`
@@ -37,6 +43,10 @@
 - `trade.review`
 - `trade.revision`
 - `notification.manage`
+- `pickup.read`
+- `pickup.prepare`
+- `pickup.deliver`
+- `pickup.cancel`
 
 ### Reviewer
 - `trade.approve`

@@ -9,6 +9,10 @@ import {
   type SessionLoginBehavior as Behavior,
   type SessionLimitType as LimitType,
 } from '../domain/session-policy';
+import {
+  isValidIdleTimeoutMinutes,
+  isValidMaxSessionDurationMinutes,
+} from '../domain/session-time-policy';
 import { SessionEnforcementService } from './session-enforcement.service';
 
 function snapshot(value: object): Record<string, unknown> {
@@ -21,6 +25,8 @@ export interface SessionPolicyInput {
   limitType: LimitType;
   maxSessions?: number | null;
   loginBehavior: Behavior;
+  idleTimeoutMinutes?: number | null;
+  maxSessionDurationMinutes?: number | null;
 }
 
 @Injectable()
@@ -33,16 +39,29 @@ export class SessionAdminService {
 
   async getGlobal() {
     const row = await this.ensureGlobal();
-    return this.presentPolicy(row.limitType, row.maxSessions, row.loginBehavior);
+    return this.presentPolicy(row);
   }
 
   async updateGlobal(input: SessionPolicyInput, actorId: string, ipAddress?: string) {
     const checked = this.checked(input.limitType, input.maxSessions, input.loginBehavior, true);
     const before = await this.ensureGlobal();
+    const timeLimits = this.checkedTimeLimits(
+      input.idleTimeoutMinutes !== undefined
+        ? input.idleTimeoutMinutes
+        : before.idleTimeoutMinutes,
+      input.maxSessionDurationMinutes !== undefined
+        ? input.maxSessionDurationMinutes
+        : before.maxSessionDurationMinutes,
+    );
     const data = this.policyData(checked);
     const updated = await this.prisma.sessionSetting.update({
       where: { id: GLOBAL_SESSION_SETTING_ID },
-      data: { ...data, updatedById: actorId },
+      data: {
+        ...data,
+        idleTimeoutMinutes: timeLimits.idleTimeoutMinutes,
+        maxSessionDurationMinutes: timeLimits.maxSessionDurationMinutes,
+        updatedById: actorId,
+      },
     });
     await this.auditService.log({
       actorId,
@@ -50,14 +69,10 @@ export class SessionAdminService {
       entityType: 'SessionSetting',
       entityId: GLOBAL_SESSION_SETTING_ID,
       ipAddress,
-      before: snapshot(
-        this.presentPolicy(before.limitType, before.maxSessions, before.loginBehavior),
-      ),
-      after: snapshot(
-        this.presentPolicy(updated.limitType, updated.maxSessions, updated.loginBehavior),
-      ),
+      before: snapshot(this.presentPolicy(before)),
+      after: snapshot(this.presentPolicy(updated)),
     });
-    return this.presentPolicy(updated.limitType, updated.maxSessions, updated.loginBehavior);
+    return this.presentPolicy(updated);
   }
 
   async listRolePolicies() {
@@ -298,11 +313,42 @@ export class SessionAdminService {
     };
   }
 
-  private presentPolicy(
-    limitType: SessionLimitType,
-    maxSessions: number | null,
-    loginBehavior: SessionLoginBehavior,
+  private checkedTimeLimits(
+    idleTimeoutMinutes: number | null | undefined,
+    maxSessionDurationMinutes: number | null | undefined,
   ) {
-    return { limitType, maxSessions, loginBehavior };
+    const idle =
+      idleTimeoutMinutes === undefined ? null : idleTimeoutMinutes === null ? null : idleTimeoutMinutes;
+    const maxDuration =
+      maxSessionDurationMinutes === undefined
+        ? null
+        : maxSessionDurationMinutes === null
+          ? null
+          : maxSessionDurationMinutes;
+    if (idle != null && !isValidIdleTimeoutMinutes(idle)) {
+      throw new BadRequestException(
+        `حداکثر زمان بدون فعالیت باید بین ${5} و ${480} دقیقه باشد.`,
+      );
+    }
+    if (maxDuration != null && !isValidMaxSessionDurationMinutes(maxDuration)) {
+      throw new BadRequestException('حداکثر مدت نشست از زمان ورود نامعتبر است.');
+    }
+    return { idleTimeoutMinutes: idle, maxSessionDurationMinutes: maxDuration };
+  }
+
+  private presentPolicy(row: {
+    limitType: SessionLimitType;
+    maxSessions: number | null;
+    loginBehavior: SessionLoginBehavior;
+    idleTimeoutMinutes: number | null;
+    maxSessionDurationMinutes: number | null;
+  }) {
+    return {
+      limitType: row.limitType,
+      maxSessions: row.maxSessions,
+      loginBehavior: row.loginBehavior,
+      idleTimeoutMinutes: row.idleTimeoutMinutes ?? null,
+      maxSessionDurationMinutes: row.maxSessionDurationMinutes ?? null,
+    };
   }
 }

@@ -5,21 +5,23 @@ import useSWR from 'swr';
 import { ChevronLeft, Wallet } from 'lucide-react';
 import { ApiClientError, customerApi } from '@/lib/api';
 import { readAvailableCredit } from '@/lib/credit-view';
-import { cn, formatMoney } from '@/lib/utils';
+import { HeaderHoverTip } from '@/components/portal/header-hover-tip';
+import { cn, formatWholeMoney } from '@/lib/utils';
 
 /** Same SWR key as the dashboard and credit page, so the header reuses that response. */
 const ACCOUNT_KEY = 'customer/me/account';
 
 /**
  * Compact header card for the signed-in customer's remaining purchasing power.
- * The amount is the server `availableRial` field, shown in Toman. Gold, reserved,
- * and consumed buckets are not shown and are not recomputed here.
+ * The amount is the server `availableRial` field, shown as whole Toman with no
+ * fractional digits. Gold, reserved, and consumed buckets are not shown and
+ * are not recomputed here.
  */
 export function RialBalanceCard({
   variant = 'header',
   className,
 }: {
-  variant?: 'header' | 'drawer';
+  variant?: 'header' | 'drawer' | 'icon';
   className?: string;
 }) {
   const { data, error, isLoading } = useSWR(ACCOUNT_KEY, () => customerApi.getMyAccount());
@@ -27,12 +29,38 @@ export function RialBalanceCard({
   const unavailable = error instanceof ApiClientError && error.isNotFound;
   const failed = Boolean(error) && !unavailable;
   const available = data ? readAvailableCredit(data) : null;
-  const formatted = available ? formatMoney(available) : null;
+  const formatted = available ? formatWholeMoney(available) : null;
   const amount = formatted && formatted !== '—' ? formatted : null;
 
   let value = '—';
   if (failed) value = 'خطا در دریافت';
   else if (amount) value = amount;
+
+  if (variant === 'icon') {
+    return (
+      <HeaderHoverTip
+        tone="emerald"
+        content={
+          <>
+            <span className="block">توان خرید</span>
+            {loading ? null : <span className="mt-0.5 block font-bold tabular-nums">{value}</span>}
+          </>
+        }
+      >
+        <Link
+          href="/portal/credit"
+          aria-busy={loading || undefined}
+          aria-label={amount ? `توان خرید، ${value}` : 'توان خرید'}
+          className={cn(
+            'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-800 shadow-sm ring-1 ring-emerald-100 transition-colors hover:bg-emerald-100 sm:h-12 sm:w-12',
+            className,
+          )}
+        >
+          <Wallet className="h-5 w-5 text-emerald-600" aria-hidden />
+        </Link>
+      </HeaderHoverTip>
+    );
+  }
 
   if (variant === 'drawer') {
     return (
@@ -56,10 +84,6 @@ export function RialBalanceCard({
               </span>
             )}
           </span>
-        </span>
-        <span className="mt-2 flex items-center gap-1 text-[11px] font-medium text-emerald-700">
-          مشاهده جزئیات دارایی و موجودی
-          <ChevronLeft className="h-3.5 w-3.5" aria-hidden />
         </span>
       </Link>
     );

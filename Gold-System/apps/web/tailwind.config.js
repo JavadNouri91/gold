@@ -9,7 +9,7 @@ module.exports = {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Vazirmatn', 'system-ui', 'sans-serif'],
+        sans: ['var(--font-vazirmatn)', 'system-ui', 'sans-serif'],
       },
       colors: {
         border: 'hsl(var(--border))',

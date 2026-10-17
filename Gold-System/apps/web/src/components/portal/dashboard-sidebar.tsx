@@ -18,6 +18,7 @@ import {
   X,
   LogOut,
   FileText,
+  Package,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import useSWR from 'swr';
@@ -33,6 +34,8 @@ import { SidebarNavItem } from '@/components/navigation/sidebar-nav-item';
 import { SidebarLogout } from '@/components/navigation/sidebar-logout';
 import { CustomerAvatar } from '@/components/portal/customer-avatar';
 import { PortalSupportModal } from '@/components/portal/portal-support-modal';
+import { HeaderKycStatus } from '@/components/portal/header-kyc-status';
+import { PendingPickupCard } from '@/components/portal/pending-pickup-card';
 import { RialBalanceCard } from '@/components/portal/rial-balance-card';
 import { ThemeCycleButton } from '@/components/theme-toggle';
 
@@ -88,6 +91,14 @@ const primaryNav: NavItem[] = [
     iconClassName: 'bg-violet-50 text-violet-700',
     exact: true,
     permission: 'customer.order.read_own',
+  },
+  {
+    href: '/portal/pickups',
+    label: 'تحویل حضوری',
+    description: 'دریافت طلای آبشده از فروشگاه',
+    icon: Package,
+    iconClassName: 'bg-teal-50 text-teal-700',
+    permission: 'customer.pickup.read_own',
   },
   {
     href: '/portal/trades',
@@ -344,30 +355,33 @@ export function DashboardSidebar({
             <div className="flex items-start justify-between gap-3 px-4 pb-2 pt-4">
               <div className="flex min-w-0 flex-1 items-start gap-3">
                 <CustomerAvatar customer={customer} name={fullName} size="h-12 w-12" />
-                <div className="min-w-0">
-                  <h2 id={titleId} className="truncate text-base font-bold text-[#172033]">
-                    {fullName}
-                  </h2>
-                  {typeLabel ? (
-                    <p className="mt-0.5 truncate text-xs text-[#6B7280]">{typeLabel}</p>
-                  ) : null}
-                  {accountLabel ? (
-                    <p
-                      className={cn(
-                        'mt-1 inline-flex items-center gap-1.5 text-xs font-medium',
-                        accountActive ? 'text-emerald-700' : 'text-slate-500',
-                      )}
-                    >
-                      <span
+                <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <h2 id={titleId} className="truncate text-base font-bold text-[#172033]">
+                      {fullName}
+                    </h2>
+                    {typeLabel ? (
+                      <p className="mt-0.5 truncate text-xs text-[#6B7280]">{typeLabel}</p>
+                    ) : null}
+                    {accountLabel ? (
+                      <p
                         className={cn(
-                          'inline-block h-1.5 w-1.5 rounded-full',
-                          accountActive ? 'bg-emerald-600' : 'bg-slate-400',
+                          'mt-1 inline-flex items-center gap-1.5 text-xs font-medium',
+                          accountActive ? 'text-emerald-700' : 'text-slate-500',
                         )}
-                        aria-hidden
-                      />
-                      حساب {accountLabel}
-                    </p>
-                  ) : null}
+                      >
+                        <span
+                          className={cn(
+                            'inline-block h-1.5 w-1.5 rounded-full',
+                            accountActive ? 'bg-emerald-600' : 'bg-slate-400',
+                          )}
+                          aria-hidden
+                        />
+                        حساب {accountLabel}
+                      </p>
+                    ) : null}
+                  </div>
+                  <HeaderKycStatus className="shrink-0" />
                 </div>
               </div>
               <Button
@@ -381,8 +395,9 @@ export function DashboardSidebar({
               </Button>
             </div>
 
-            <div className="px-4 pb-3">
-              <RialBalanceCard variant="drawer" />
+            <div className="flex flex-col gap-2 px-4 pb-3">
+              <PendingPickupCard variant="drawer" />
+              <RialBalanceCard variant="drawer" className="min-w-0" />
             </div>
 
             <nav

@@ -24,9 +24,17 @@ import {
   type StoredRolePolicy,
   type StoredUserPolicy,
 } from '../domain/session-policy';
+import {
+  clampRefreshExpiresAt,
+  evaluateSessionTimeLimits,
+  type GlobalSessionTimeLimits,
+  type SessionTimeLimitReason,
+} from '../domain/session-time-policy';
 
 const ACTIVITY_TOUCH_MS = 5 * 60 * 1000;
 const CONFIRMATION_TTL_MS = 2 * 60 * 1000;
+/** Interactive login txs take a user lock plus several reads; Prisma's 5s default is too tight. */
+const SESSION_TX = { maxWait: 10_000, timeout: 15_000 } as const;
 
 export interface SessionView {
   id: string;
@@ -50,6 +58,12 @@ export interface OpenSessionInput {
 
 type Tx = Prisma.TransactionClient;
 
+type TimeLimitRevocation = {
+  sessionId: string;
+  userId: string;
+  reason: SessionTimeLimitReason;
+};
+
 @Injectable()
 export class SessionEnforcementService {
   constructor(
@@ -60,7 +74,9 @@ export class SessionEnforcementService {
   async openLoginSession(
     input: OpenSessionInput,
   ): Promise<{ sessionId: string; refreshToken: string }> {
-    const outcome = await this.prisma.$transaction((tx) => this.admit(tx, input));
+    const limits = await this.readGlobalTimeLimits();
+    const outcome = await this.sessionTx((tx) => this.admit(tx, input, limits));
+    await this.auditTimeLimitRevocations(outcome.timeLimitRevocations);
 
     if (outcome.kind === 'blocked') {
       await this.auditService.log({
@@ -110,7 +126,8 @@ export class SessionEnforcementService {
     userAgent: string | null;
   }): Promise<{ userId: string; sessionId: string; refreshToken: string }> {
     const tokenHash = hashRefreshToken(input.confirmationToken);
-    const outcome = await this.prisma.$transaction(async (tx) => {
+    const limits = await this.readGlobalTimeLimits();
+    const outcome = await this.sessionTx(async (tx) => {
       const ticket = await tx.loginConfirmation.findUnique({ where: { tokenHash } });
       if (!ticket || ticket.usedAt || ticket.expiresAt <= new Date()) {
         throw new UnauthorizedException('تأیید ورود منقضی یا نامعتبر است. دوباره وارد شوید.');
@@ -131,7 +148,11 @@ export class SessionEnforcementService {
         where: { id: chosen.id },
         data: { revokedAt: new Date() },
       });
-      const active = await this.listActive(tx, ticket.userId);
+      const { live: active, revoked: timeLimitRevocations } = await this.listActive(
+        tx,
+        ticket.userId,
+        limits,
+      );
       const decision = decideAdmission(active, policy);
       if (decision.type === 'block' || decision.type === 'confirm') {
         throw new BusinessRuleException('SESSION_LIMIT_REACHED', SESSION_LIMIT_REACHED_MESSAGE);
@@ -142,12 +163,16 @@ export class SessionEnforcementService {
           data: { revokedAt: new Date() },
         });
       }
-      const created = await this.insertSession(tx, {
-        userId: ticket.userId,
-        expiresAt: input.expiresAt,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
-      });
+      const created = await this.insertSession(
+        tx,
+        {
+          userId: ticket.userId,
+          expiresAt: input.expiresAt,
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+        },
+        limits,
+      );
       await tx.loginConfirmation.update({
         where: { id: ticket.id },
         data: { usedAt: new Date() },
@@ -157,8 +182,10 @@ export class SessionEnforcementService {
         sessionId: created.sessionId,
         refreshToken: created.refreshToken,
         revokedIds: [chosen.id, ...(decision.type === 'revoke' ? decision.sessionIds : [])],
+        timeLimitRevocations,
       };
     });
+    await this.auditTimeLimitRevocations(outcome.timeLimitRevocations);
 
     await this.auditCreated(
       {
@@ -188,25 +215,34 @@ export class SessionEnforcementService {
     userAgent: string | null;
   }): Promise<{ userId: string; sessionId: string; refreshToken: string }> {
     const tokenHash = hashRefreshToken(input.confirmationToken);
-    const outcome = await this.prisma.$transaction(async (tx) => {
+    const limits = await this.readGlobalTimeLimits();
+    const outcome = await this.sessionTx(async (tx) => {
       const ticket = await tx.loginConfirmation.findUnique({ where: { tokenHash } });
       if (!ticket || ticket.usedAt || ticket.expiresAt <= new Date()) {
         throw new UnauthorizedException('تأیید ورود منقضی یا نامعتبر است. دوباره وارد شوید.');
       }
       await this.lockUser(tx, ticket.userId);
-      const active = await this.listActive(tx, ticket.userId);
+      const { live: active, revoked: timeLimitRevocations } = await this.listActive(
+        tx,
+        ticket.userId,
+        limits,
+      );
       if (active.length > 0) {
         await tx.refreshToken.updateMany({
           where: { id: { in: active.map((session) => session.id) }, userId: ticket.userId, revokedAt: null },
           data: { revokedAt: new Date() },
         });
       }
-      const created = await this.insertSession(tx, {
-        userId: ticket.userId,
-        expiresAt: input.expiresAt,
-        ipAddress: input.ipAddress,
-        userAgent: input.userAgent,
-      });
+      const created = await this.insertSession(
+        tx,
+        {
+          userId: ticket.userId,
+          expiresAt: input.expiresAt,
+          ipAddress: input.ipAddress,
+          userAgent: input.userAgent,
+        },
+        limits,
+      );
       await tx.loginConfirmation.update({
         where: { id: ticket.id },
         data: { usedAt: new Date() },
@@ -216,8 +252,10 @@ export class SessionEnforcementService {
         sessionId: created.sessionId,
         refreshToken: created.refreshToken,
         revokedIds: active.map((session) => session.id),
+        timeLimitRevocations,
       };
     });
+    await this.auditTimeLimitRevocations(outcome.timeLimitRevocations);
 
     await this.auditCreated(
       {
@@ -248,7 +286,8 @@ export class SessionEnforcementService {
   }): Promise<string> {
     const raw = generateSessionSecret();
     const tokenHash = hashRefreshToken(raw);
-    await this.prisma.$transaction(async (tx) => {
+    const limits = await this.readGlobalTimeLimits();
+    const outcome = await this.sessionTx(async (tx) => {
       await this.lockUser(tx, input.userId);
       const current = await tx.refreshToken.findUnique({ where: { id: input.sessionId } });
       if (
@@ -259,16 +298,37 @@ export class SessionEnforcementService {
       ) {
         throw new UnauthorizedException('Refresh token is invalid or expired');
       }
+      const timedOut = evaluateSessionTimeLimits(current, limits);
+      if (timedOut) {
+        await this.markRevoked(tx, current.id);
+        return { kind: 'timed_out' as const, reason: timedOut, sessionId: current.id };
+      }
+      const expiresAt = clampRefreshExpiresAt(
+        current.createdAt,
+        input.expiresAt,
+        limits.maxSessionDurationMinutes,
+      );
+      if (expiresAt <= new Date()) {
+        await this.markRevoked(tx, current.id);
+        return { kind: 'timed_out' as const, reason: 'max_duration' as const, sessionId: current.id };
+      }
       await tx.refreshToken.update({
         where: { id: current.id },
         data: {
           tokenHash,
-          expiresAt: input.expiresAt,
+          expiresAt,
           lastActivityAt: new Date(),
           ipAddress: input.ipAddress ?? current.ipAddress,
         },
       });
+      return { kind: 'rotated' as const };
     });
+    if (outcome.kind === 'timed_out') {
+      await this.auditTimeLimitRevocations([
+        { sessionId: outcome.sessionId, userId: input.userId, reason: outcome.reason },
+      ]);
+      throw this.timeLimitUnauthorized(outcome.reason);
+    }
     return raw;
   }
 
@@ -281,6 +341,22 @@ export class SessionEnforcementService {
       session.expiresAt <= new Date()
     ) {
       throw new UnauthorizedException('نشست شما پایان یافته یا منقضی شده است. دوباره وارد شوید.');
+    }
+    const limits = await this.readGlobalTimeLimits();
+    const reason = evaluateSessionTimeLimits(session, limits);
+    if (reason) {
+      await this.prisma.refreshToken.updateMany({
+        where: { id: sessionId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await this.auditService.log({
+        actorId: userId,
+        action: 'SESSION_REVOKED',
+        entityType: 'Session',
+        entityId: sessionId,
+        reason: reason === 'idle' ? 'idle_timeout' : 'max_session_duration',
+      });
+      throw this.timeLimitUnauthorized(reason);
     }
     const threshold = new Date(Date.now() - ACTIVITY_TOUCH_MS);
     if (session.lastActivityAt < threshold) {
@@ -317,7 +393,7 @@ export class SessionEnforcementService {
       );
     }
 
-    const revoked = await this.prisma.$transaction(async (tx) => {
+    const revoked = await this.sessionTx(async (tx) => {
       await this.lockUser(tx, input.targetUserId);
       const session = await tx.refreshToken.findFirst({
         where: { id: input.sessionId, userId: input.targetUserId },
@@ -359,7 +435,7 @@ export class SessionEnforcementService {
       );
     }
 
-    const revokedCount = await this.prisma.$transaction(async (tx) => {
+    const revokedCount = await this.sessionTx(async (tx) => {
       await this.lockUser(tx, input.targetUserId);
       const result = await tx.refreshToken.updateMany({
         where: {
@@ -384,18 +460,26 @@ export class SessionEnforcementService {
   }
 
   async resolveForUser(userId: string): Promise<EffectiveSessionPolicy> {
-    return this.prisma.$transaction((tx) => this.loadPolicy(tx, userId));
+    return this.sessionTx((tx) => this.loadPolicy(tx, userId));
   }
 
-  private async admit(tx: Tx, input: OpenSessionInput) {
+  private sessionTx<T>(fn: (tx: Tx) => Promise<T>): Promise<T> {
+    return this.prisma.$transaction(fn, SESSION_TX);
+  }
+
+  private async admit(tx: Tx, input: OpenSessionInput, limits: GlobalSessionTimeLimits) {
     await this.lockUser(tx, input.userId);
     const policy = await this.loadPolicy(tx, input.userId);
-    const active = await this.listActive(tx, input.userId);
+    const { live: active, revoked: timeLimitRevocations } = await this.listActive(
+      tx,
+      input.userId,
+      limits,
+    );
     const decision = decideAdmission(active, policy);
 
     if (decision.type === 'block') {
       const confirmationToken = await this.issueConfirmation(tx, input);
-      return { kind: 'blocked' as const, policy, confirmationToken };
+      return { kind: 'blocked' as const, policy, confirmationToken, timeLimitRevocations };
     }
 
     if (decision.type === 'confirm') {
@@ -404,6 +488,7 @@ export class SessionEnforcementService {
         kind: 'confirmation' as const,
         confirmationToken,
         sessions: active.map((session) => this.toView(session, null)),
+        timeLimitRevocations,
       };
     }
 
@@ -414,8 +499,8 @@ export class SessionEnforcementService {
         data: { revokedAt: new Date() },
       });
     }
-    const created = await this.insertSession(tx, input);
-    return { kind: 'created' as const, ...created, revokedIds };
+    const created = await this.insertSession(tx, input, limits);
+    return { kind: 'created' as const, ...created, revokedIds, timeLimitRevocations };
   }
 
   private async issueConfirmation(tx: Tx, input: OpenSessionInput): Promise<string> {
@@ -436,14 +521,20 @@ export class SessionEnforcementService {
     return confirmationToken;
   }
 
-  private async insertSession(tx: Tx, input: OpenSessionInput) {
+  private async insertSession(tx: Tx, input: OpenSessionInput, limits: GlobalSessionTimeLimits) {
     const refreshToken = generateSessionSecret();
     const device = parseUserAgent(input.userAgent);
+    const createdAt = new Date();
+    const expiresAt = clampRefreshExpiresAt(
+      createdAt,
+      input.expiresAt,
+      limits.maxSessionDurationMinutes,
+    );
     const created = await tx.refreshToken.create({
       data: {
         userId: input.userId,
         tokenHash: hashRefreshToken(refreshToken),
-        expiresAt: input.expiresAt,
+        expiresAt,
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
         deviceName: device.deviceName,
@@ -456,20 +547,89 @@ export class SessionEnforcementService {
     return { sessionId: created.id, refreshToken };
   }
 
-  private async listActive(tx: Tx, userId: string) {
-    return tx.refreshToken.findMany({
+  private async listActive(tx: Tx, userId: string, limits: GlobalSessionTimeLimits) {
+    const rows = await tx.refreshToken.findMany({
       where: { userId, revokedAt: null, expiresAt: { gt: new Date() } },
       orderBy: { createdAt: 'asc' },
     });
+    return this.reconcileTimedOutSessions(tx, rows, limits, userId);
+  }
+
+  private async readGlobalTimeLimits(): Promise<GlobalSessionTimeLimits> {
+    const row = await this.prisma.sessionSetting.findUnique({
+      where: { id: GLOBAL_SESSION_SETTING_ID },
+    });
+    return {
+      idleTimeoutMinutes: row?.idleTimeoutMinutes ?? null,
+      maxSessionDurationMinutes: row?.maxSessionDurationMinutes ?? null,
+    };
+  }
+
+  private timeLimitUnauthorized(reason: SessionTimeLimitReason): UnauthorizedException {
+    if (reason === 'idle') {
+      return new UnauthorizedException(
+        'به‌دلیل عدم فعالیت، نشست شما پایان یافت. دوباره وارد شوید.',
+      );
+    }
+    return new UnauthorizedException(
+      'حداکثر مدت نشست از زمان ورود به پایان رسید. دوباره وارد شوید.',
+    );
+  }
+
+  private async markRevoked(tx: Tx, sessionId: string): Promise<void> {
+    await tx.refreshToken.updateMany({
+      where: { id: sessionId, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+  }
+
+  private async auditTimeLimitRevocations(revocations: TimeLimitRevocation[]): Promise<void> {
+    for (const item of revocations) {
+      await this.auditService.log({
+        actorId: item.userId,
+        action: 'SESSION_REVOKED',
+        entityType: 'Session',
+        entityId: item.sessionId,
+        reason: item.reason === 'idle' ? 'idle_timeout' : 'max_session_duration',
+      });
+    }
+  }
+
+  private async reconcileTimedOutSessions<T extends { id: string; userId: string; createdAt: Date; lastActivityAt: Date }>(
+    tx: Tx,
+    rows: T[],
+    limits: GlobalSessionTimeLimits,
+    userId: string,
+  ): Promise<{ live: T[]; revoked: TimeLimitRevocation[] }> {
+    const now = new Date();
+    const live: T[] = [];
+    const revoked: TimeLimitRevocation[] = [];
+    for (const row of rows) {
+      const reason = evaluateSessionTimeLimits(row, limits, now);
+      if (reason) {
+        revoked.push({ sessionId: row.id, userId, reason });
+      } else {
+        live.push(row);
+      }
+    }
+    if (revoked.length > 0) {
+      await tx.refreshToken.updateMany({
+        where: { id: { in: revoked.map((item) => item.sessionId) }, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+    }
+    return { live, revoked };
   }
 
   private async loadPolicy(tx: Tx, userId: string): Promise<EffectiveSessionPolicy> {
-    const userPolicy = await tx.userSessionPolicy.findUnique({ where: { userId } });
-    const user = await tx.user.findUnique({
-      where: { id: userId },
-      select: { roles: { select: { roleId: true } } },
-    });
-    const global = await tx.sessionSetting.findUnique({ where: { id: GLOBAL_SESSION_SETTING_ID } });
+    const [userPolicy, user, global] = await Promise.all([
+      tx.userSessionPolicy.findUnique({ where: { userId } }),
+      tx.user.findUnique({
+        where: { id: userId },
+        select: { roles: { select: { roleId: true } } },
+      }),
+      tx.sessionSetting.findUnique({ where: { id: GLOBAL_SESSION_SETTING_ID } }),
+    ]);
 
     const roleIds = user?.roles.map((role) => role.roleId) ?? [];
     const roleRows = roleIds.length

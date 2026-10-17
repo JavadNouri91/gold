@@ -82,6 +82,13 @@ export const DASHBOARD_NAV: NavItem[] = [
     group: 'عملیات',
   },
   {
+    href: '/dashboard/pickups',
+    label: 'تحویل حضوری',
+    icon: Package,
+    anyOf: ['pickup.read', 'pickup.prepare', 'pickup.deliver'],
+    group: 'عملیات',
+  },
+  {
     href: '/admin/trading-management',
     label: 'برنامه معاملات',
     icon: Clock,

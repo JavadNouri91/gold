@@ -7,7 +7,7 @@ import { MobileBottomNavigation } from '../components/portal/mobile-bottom-navig
 import { isRegisteredHolding, toPortfolioPosition, type PortfolioPosition } from '../lib/customer-portfolio';
 import { netBookedGrams, seriesPointLabel } from '../lib/asset-chart-range';
 import { formatRial, formatWeight, toPersianDigits } from '../lib/utils';
-import { formatSignedRial as signed } from '../lib/portfolio-display';
+import { formatSignedRial as signed, formatSignedWholeRial } from '../lib/portfolio-display';
 import type { ActivityTransaction, CurrentPrice } from '../lib/api';
 
 jest.mock('next/navigation', () => ({
@@ -16,6 +16,7 @@ jest.mock('next/navigation', () => ({
 
 const position: PortfolioPosition = {
   weightGrams: '24.750',
+  reservedPickupGrams: '0.000000',
   purityLabel: '750',
   averageBuyPriceRial: '56125000',
   marketValueRial: '5875000000',
@@ -98,13 +99,55 @@ describe('AssetsPage', () => {
     expect(within(balance).getByText(formatWeight(position.weightGrams))).toBeInTheDocument();
     expect(within(balance).getByText(`عیار ${toPersianDigits('750')}`)).toBeInTheDocument();
 
+    const pendingPickup = screen.getByRole('region', { name: 'طلای در انتظار تحویل' });
+    expect(within(pendingPickup).getByText(formatWeight(position.reservedPickupGrams))).toBeInTheDocument();
+    expect(within(pendingPickup).getByText(/درخواست تحویل حضوریِ بازی ندارید/)).toBeInTheDocument();
+
     const unrealized = screen.getByRole('region', { name: 'سود و زیان تحقق‌نیافته' });
-    expect(unrealized).toHaveTextContent(signed(position.unrealizedPnlRial));
+    expect(unrealized).toHaveTextContent(formatSignedWholeRial(position.unrealizedPnlRial));
     expect(within(unrealized).getByText(/ارزش روز منهای بهای خرید مانده/)).toBeInTheDocument();
     expect(within(unrealized).queryByText('سود و زیان تحقق‌یافته')).not.toBeInTheDocument();
 
     expect(screen.getByText(formatRial(price.normalizedValue))).toBeInTheDocument();
     expect(screen.getByText('بازار فعال')).toBeInTheDocument();
+  });
+
+  it('shows reserved undelivered pickup grams on assets summary', () => {
+    renderAssets({
+      position: { ...position, reservedPickupGrams: '7.000000' },
+      price,
+    });
+    const pendingPickup = screen.getByRole('region', { name: 'طلای در انتظار تحویل' });
+    expect(within(pendingPickup).getByText(formatWeight('7.000000'))).toBeInTheDocument();
+    expect(within(pendingPickup).getByText(/رزرو‌شده برای تحویل حضوری/)).toBeInTheDocument();
+    expect(within(pendingPickup).getByRole('link', { name: 'مشاهده درخواست‌ها' })).toHaveAttribute(
+      'href',
+      '/portal/pickups',
+    );
+  });
+
+  it('shows unrealized profit as whole toman', () => {
+    renderAssets({
+      position: { ...position, unrealizedPnlRial: '1750000005.70' },
+      price,
+    });
+    const unrealized = screen.getByRole('region', { name: 'سود و زیان تحقق‌نیافته' });
+    expect(unrealized).toHaveTextContent('۱۷۵,۰۰۰,۰۰۰ تومان');
+    expect(unrealized).not.toHaveTextContent('+');
+    expect(unrealized).not.toHaveTextContent('۱۷۵,۰۰۰,۰۰۰.۵۷');
+  });
+
+  it('shows an unrealized loss in red with a minus sign', () => {
+    renderAssets({
+      position: { ...position, unrealizedPnlRial: '-1234.239', changePercent: '-1.2' },
+      price,
+    });
+    const unrealized = screen.getByRole('region', { name: 'سود و زیان تحقق‌نیافته' });
+    const amount = within(unrealized).getByText(/۱۲۳ تومان/);
+    expect(amount).toHaveClass('text-[#DC2626]');
+    expect(amount).toHaveTextContent('−۱۲۳ تومان');
+    expect(amount).toHaveTextContent('(−۱.۲٪)');
+    expect(amount).not.toHaveTextContent('+');
   });
 
   it('draws weight changes from booked activity and keeps the value chart empty', () => {
