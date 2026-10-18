@@ -5,7 +5,6 @@ import { usePathname, useSearchParams } from 'next/navigation';
 import {
   LayoutDashboard,
   Coins,
-  WalletCards,
   ArrowLeftRight,
   ShoppingCart,
   BarChart3,
@@ -42,7 +41,6 @@ import { ThemeCycleButton } from '@/components/theme-toggle';
 type NavItem = {
   href: string;
   label: string;
-  description?: string;
   icon: LucideIcon;
   iconClassName?: string;
   exact?: boolean;
@@ -54,7 +52,6 @@ const primaryNav: NavItem[] = [
   {
     href: '/portal/dashboard',
     label: 'داشبورد',
-    description: 'نمای کلی حساب شما',
     icon: LayoutDashboard,
     iconClassName: 'bg-amber-50 text-amber-700',
     exact: true,
@@ -62,23 +59,13 @@ const primaryNav: NavItem[] = [
   {
     href: '/portal/assets',
     label: 'دارایی من',
-    description: 'موجودی طلا و ارزش دارایی',
     icon: Coins,
     iconClassName: 'bg-sky-50 text-sky-700',
     permission: 'customer.account.read_own',
   },
   {
-    href: '/portal/credit',
-    label: 'اعتبار',
-    description: 'موجودی تومانی و گردش حساب',
-    icon: WalletCards,
-    iconClassName: 'bg-emerald-50 text-emerald-700',
-    permission: 'customer.account.read_own',
-  },
-  {
     href: '/portal/orders/new',
     label: 'خرید و فروش',
-    description: 'خرید و فروش طلای آبشده',
     icon: ArrowLeftRight,
     iconClassName: 'bg-blue-50 text-blue-700',
     permission: 'customer.order.create',
@@ -86,32 +73,28 @@ const primaryNav: NavItem[] = [
   {
     href: '/portal/orders',
     label: 'سفارش‌ها',
-    description: 'مدیریت سفارش‌های خرید و فروش',
     icon: ShoppingCart,
     iconClassName: 'bg-violet-50 text-violet-700',
     exact: true,
     permission: 'customer.order.read_own',
   },
   {
-    href: '/portal/pickups',
-    label: 'تحویل حضوری',
-    description: 'دریافت طلای آبشده از فروشگاه',
-    icon: Package,
-    iconClassName: 'bg-teal-50 text-teal-700',
-    permission: 'customer.pickup.read_own',
-  },
-  {
     href: '/portal/trades',
     label: 'معاملات',
-    description: 'تاریخچه معاملات شما',
     icon: BarChart3,
     iconClassName: 'bg-orange-50 text-orange-700',
     permission: 'customer.order.read_own',
   },
   {
+    href: '/portal/pickups',
+    label: 'تحویل حضوری',
+    icon: Package,
+    iconClassName: 'bg-teal-50 text-teal-700',
+    permission: 'customer.pickup.read_own',
+  },
+  {
     href: '/portal/payments',
     label: 'پرداخت‌ها',
-    description: 'واریزها و برداشت‌ها',
     icon: CreditCard,
     iconClassName: 'bg-indigo-50 text-indigo-700',
     permission: 'customer.payment.read_own',
@@ -119,7 +102,6 @@ const primaryNav: NavItem[] = [
   {
     href: '/portal/notifications',
     label: 'اعلان‌ها',
-    description: 'پیام‌ها و اطلاعیه‌ها',
     icon: Bell,
     iconClassName: 'bg-red-50 text-red-700',
   },
@@ -129,7 +111,6 @@ const accountNav: NavItem[] = [
   {
     href: '/portal/profile',
     label: 'پروفایل',
-    description: 'اطلاعات شخصی و تنظیمات حساب',
     icon: UserRound,
     iconClassName: 'bg-sky-50 text-sky-700',
     permission: 'customer.profile.read',
@@ -137,7 +118,6 @@ const accountNav: NavItem[] = [
   {
     href: '/portal/kyc',
     label: 'احراز هویت',
-    description: 'تکمیل و مدیریت مدارک',
     icon: ShieldCheck,
     iconClassName: 'bg-emerald-50 text-emerald-700',
   },
@@ -303,7 +283,6 @@ export function DashboardSidebar({
                     key={itemHref(item)}
                     href={itemHref(item)}
                     label={item.label}
-                    description={item.description}
                     icon={item.icon}
                     iconClassName={item.iconClassName}
                     active={isActive(pathname, search, item)}
@@ -321,7 +300,6 @@ export function DashboardSidebar({
                     key={item.href}
                     href={item.href}
                     label={item.label}
-                    description={item.description}
                     icon={item.icon}
                     iconClassName={item.iconClassName}
                     active={isActive(pathname, search, item)}
@@ -334,7 +312,6 @@ export function DashboardSidebar({
               <SectionHeading>پشتیبانی</SectionHeading>
               <SidebarNavItem
                 label="راهنما و پشتیبانی"
-                description="سوالات متداول و ارتباط با ما"
                 icon={Headset}
                 iconClassName="bg-violet-50 text-violet-700"
                 onClick={() => setSupportOpen(true)}

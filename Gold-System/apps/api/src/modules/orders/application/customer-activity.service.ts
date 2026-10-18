@@ -58,7 +58,7 @@ export class CustomerActivityQueryDto {
   limit?: number = 10;
 
   @IsOptional()
-  @IsIn(['week', 'month', 'quarter', 'year'])
+  @IsIn(['day', 'week', 'month', 'quarter', 'year'])
   bucket?: ActivityBucket = 'month';
 }
 

@@ -1,4 +1,5 @@
 import type { CreditLedgerEntry, CustomerAccount } from '@/lib/api';
+import { toPersianDigits } from '@/lib/utils';
 import {
   compareDecimal,
   decimalUnits,
@@ -195,7 +196,7 @@ export function presentCreditHistory(
 ): CreditHistoryView {
   const title = HISTORY_TITLE[entry.type] ?? 'تغییر اعتبار';
   let description = HISTORY_DESCRIPTION[entry.type] ?? 'تغییر در اعتبار حساب';
-  if (orderNumber) description = `${description} ${orderNumber}`;
+  if (orderNumber) description = `${description} ${toPersianDigits(orderNumber)}`;
   if (entry.creditPool === 'GOLD_RIAL') description = `${description} (اعتبار طلایی)`;
   const tone = MINUS_AMOUNT_TYPES.has(entry.type)
     ? 'minus'

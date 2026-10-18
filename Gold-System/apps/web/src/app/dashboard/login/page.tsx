@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
-import { isValidMobile, latinMobile } from '@/lib/utils';
+import { isValidMobile, latinMobile, toPersianDigits } from '@/lib/utils';
 import { isStaffUser } from '@/lib/permissions';
 import { firstStaffRoute } from '@/lib/nav';
 import { Button } from '@/components/ui/button';
@@ -140,7 +140,7 @@ export default function StaffLoginPage() {
                     }}
                   >
                     <span>{session.device ?? 'دستگاه'} · {session.browser ?? 'مرورگر'}</span>
-                    <span dir="ltr">{session.ipAddress ?? ''}</span>
+                    <span dir="ltr">{session.ipAddress ? toPersianDigits(session.ipAddress) : ''}</span>
                   </Button>
                 ))}
               </div>

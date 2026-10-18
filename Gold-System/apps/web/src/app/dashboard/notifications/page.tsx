@@ -4,7 +4,7 @@ import useSWR from 'swr';
 import { staffNotificationsApi } from '@/lib/internal-api';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { ApiErrorState } from '@/components/dashboard/states';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, toPersianDigits } from '@/lib/utils';
 
 export default function NotificationsPage() {
   const notes = useSWR('staff-notifications', () => staffNotificationsApi.list({ limit: 50, offset: 0 }));
@@ -22,8 +22,8 @@ export default function NotificationsPage() {
       <ul className="divide-y rounded-xl border bg-white">
         {(notes.data ?? []).map((note) => (
           <li key={note.id} className="space-y-1 px-4 py-3">
-            <p className="text-sm font-medium">{note.subject ?? note.type}</p>
-            <p className="text-sm">{note.body}</p>
+            <p className="text-sm font-medium">{toPersianDigits(note.subject ?? note.type)}</p>
+            <p className="text-sm">{toPersianDigits(note.body)}</p>
             <p className="text-xs text-muted-foreground">
               {formatDateTime(note.createdAt)} — {note.status} — {note.channel}
             </p>

@@ -1,4 +1,5 @@
 import {
+  activityBucketKey,
   computeCustomerActivity,
   computeCustomerHolding,
   readOrderSide,
@@ -272,5 +273,17 @@ describe('customer activity analytics', () => {
       weightGrams: '18.000000',
       reservedPickupGrams: '5.000000',
     });
+  });
+});
+
+describe('activityBucketKey', () => {
+  const instant = new Date('2026-09-15T08:00:00.000Z');
+
+  it('groups the same instant by Jalali day, week, month, and quarter', () => {
+    expect(activityBucketKey(instant, 'day')).toMatch(/^D:\d{4}-\d{2}-\d{2}$/);
+    expect(activityBucketKey(instant, 'week')).toMatch(/^W:\d{4}-\d{2}-\d{2}$/);
+    expect(activityBucketKey(instant, 'month')).toMatch(/^M:\d{4}-\d{2}$/);
+    expect(activityBucketKey(instant, 'quarter')).toMatch(/^Q:\d{4}-\d{2}$/);
+    expect(activityBucketKey(instant, 'day')).not.toBe(activityBucketKey(instant, 'week'));
   });
 });

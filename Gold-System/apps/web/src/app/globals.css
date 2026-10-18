@@ -50,11 +50,16 @@
   select option {
     font-family: var(--font-vazirmatn), 'Segoe UI', system-ui, sans-serif;
   }
+}
 
-  /* Persian numerals in data cells */
-  .tabular-nums {
-    font-variant-numeric: tabular-nums;
-  }
+/*
+ * Vazirmatn’s tabular figures give every Persian digit the same width,
+ * which leaves visible gaps between them. Keep the class for markup,
+ * but render proportional digits with no extra letter-spacing.
+ */
+.tabular-nums {
+  font-variant-numeric: proportional-nums;
+  letter-spacing: normal;
 }
 
 /* RTL overrides */
@@ -175,8 +180,7 @@ html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
   letter-spacing: -0.08em;
 }
 .portal-dense-copy .tabular-nums {
-  font-variant-numeric: proportional-nums;
-  letter-spacing: -0.08em;
+  letter-spacing: normal;
 }
 
 .modal-overlay-in { animation: modal-overlay-in 150ms ease-out both; }

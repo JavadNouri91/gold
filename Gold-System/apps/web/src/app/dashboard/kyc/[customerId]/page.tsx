@@ -11,7 +11,7 @@ import { ApiErrorState } from '@/components/dashboard/states';
 import { KycDecisionPanel, KycDocumentList } from '@/components/dashboard/kyc-panel';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { CUSTOMER_STATUS_LABELS, KYC_STATUS_LABELS, formatDateTime, statusLabel } from '@/lib/utils';
+import { CUSTOMER_STATUS_LABELS, KYC_STATUS_LABELS, formatDateTime, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function KycDetailPage({ params }: { params: { customerId: string } }) {
   const { user } = useAuth();
@@ -31,7 +31,7 @@ export default function KycDetailPage({ params }: { params: { customerId: string
     <div className="space-y-4">
       <PageHeader
         title="بررسی احراز هویت"
-        description={customer.data ? `${customer.data.fullName} — ${customer.data.customerNumber}` : 'پرونده مشتری'}
+        description={customer.data ? `${customer.data.fullName} — ${toPersianDigits(customer.data.customerNumber)}` : 'پرونده مشتری'}
       />
       {customer.data ? (
         <p className="text-sm">

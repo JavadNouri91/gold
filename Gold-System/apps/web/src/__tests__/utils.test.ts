@@ -67,8 +67,8 @@ describe('feeLineLabel', () => {
 });
 
 describe('formatGrams', () => {
-  it('appends گرم unit', () => {
-    expect(formatGrams('2.5')).toContain('گرم');
+  it('appends گرم unit with Persian digits', () => {
+    expect(formatGrams('2.5')).toBe('۲.۵ گرم');
   });
 
   it('returns — for null', () => {
@@ -76,8 +76,11 @@ describe('formatGrams', () => {
   });
 
   it('handles string decimal', () => {
-    const result = formatGrams('0.500000');
-    expect(result).toContain('گرم');
+    expect(formatGrams('0.500000')).toBe('۰.۵ گرم');
+  });
+
+  it('does not insert thousands separators', () => {
+    expect(formatGrams('1234.50')).toBe('۱۲۳۴.۵ گرم');
   });
 });
 

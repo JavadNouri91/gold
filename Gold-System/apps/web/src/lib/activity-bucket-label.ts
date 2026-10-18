@@ -32,7 +32,7 @@ export function activityBucketLabel(key: string): string {
     const name = JALALI_MONTHS[Number(month) - 1] ?? month;
     return `${name} ${toPersianDigits(year ?? '')}`;
   }
-  if (kind === 'W') {
+  if (kind === 'W' || kind === 'D') {
     const [, month, day] = rest.split('-');
     const name = JALALI_MONTHS[Number(month) - 1] ?? month;
     return `${toPersianDigits(String(Number(day)))} ${name}`;

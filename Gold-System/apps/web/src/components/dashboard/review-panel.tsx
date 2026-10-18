@@ -16,8 +16,10 @@ import {
   KYC_STATUS_LABELS,
   QUOTATION_STATUS_LABELS,
   formatDateTime,
+  formatFaNumber,
   formatMoney,
   formatWeight,
+  toPersianDigits,
   orderStatusPresentation,
   statusLabel,
 } from '@/lib/utils';
@@ -76,7 +78,7 @@ export function ReviewContextPanel({
         <Card>
           <CardHeader><CardTitle>سفارش</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">
-            <p dir="ltr">{context.order.orderNumber}</p>
+            <p dir="ltr">{toPersianDigits(context.order.orderNumber)}</p>
             <StatusBadge {...orderStatusPresentation(context.order.status)} />
             <p>مبلغ: {formatMoney(context.order.totalAmountRial)}</p>
             <p>وزن: {formatWeight(context.order.weightGrams)}</p>
@@ -89,7 +91,7 @@ export function ReviewContextPanel({
             <Link className="font-medium text-gold-800" href={`/dashboard/customers/${context.customer.id}`}>
               {context.customer.firstName} {context.customer.lastName}
             </Link>
-            <p dir="ltr">{context.customer.customerNumber}</p>
+            <p dir="ltr">{toPersianDigits(context.customer.customerNumber)}</p>
             <StatusBadge status={context.customer.status} label={statusLabel(CUSTOMER_STATUS_LABELS, context.customer.status)} />
             <p>نوع: {statusLabel(CUSTOMER_TYPE_LABELS, context.customer.type)}</p>
             <p>احراز هویت: {statusLabel(KYC_STATUS_LABELS, context.customer.kycStatus)}</p>
@@ -116,9 +118,9 @@ export function ReviewContextPanel({
             {context.quotation ? (
               <>
                 <Link className="text-gold-800" href={`/dashboard/quotations/${context.quotation.id}`}>
-                  <span dir="ltr">{context.quotation.quotationNumber}</span>
+                  <span dir="ltr">{toPersianDigits(context.quotation.quotationNumber)}</span>
                 </Link>
-                <p>نسخه: {context.quotation.version.toLocaleString('fa-IR')}</p>
+                <p>نسخه: {formatFaNumber(context.quotation.version)}</p>
                 <StatusBadge status={context.quotation.status} label={statusLabel(QUOTATION_STATUS_LABELS, context.quotation.status)} />
                 <p>مبلغ قفل‌شده: {formatMoney(context.quotation.totalAmountRial)}</p>
                 <p className="text-xs text-muted-foreground">مقادیر تصویر قیمت در زمان صدور هستند و دوباره محاسبه نمی‌شوند.</p>

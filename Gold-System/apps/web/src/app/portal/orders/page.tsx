@@ -68,13 +68,13 @@ export default function OrdersPage() {
                   <CardContent className="py-4">
                     <div className="flex items-center justify-between">
                       <div className="space-y-1">
-                        <p className="font-medium" dir="ltr">{order.orderNumber}</p>
+                        <p className="font-medium" dir="ltr">{toPersianDigits(order.orderNumber)}</p>
                         <p className="text-xs text-muted-foreground">
                           {formatDate(order.createdAt)}
                         </p>
                       </div>
                       <div className="flex items-center gap-4 text-sm">
-                        <span className="tabular-nums">{formatGrams(order.weightGrams)}</span>
+                        <span>{formatGrams(order.weightGrams)}</span>
                         <span className="tabular-nums font-medium">{formatRial(order.totalAmountRial)}</span>
                         <StatusBadge {...orderStatusPresentation(order.status)} />
                       </div>

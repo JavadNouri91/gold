@@ -78,7 +78,7 @@ export function TransactionCards({ rows }: { rows: ActivityTransaction[] }) {
               <TransactionStatus status={row.status} />
             </div>
             <p className="mt-2 font-semibold tabular-nums text-[#202124]" dir="ltr">
-              {row.orderNumber}
+              {toPersianDigits(row.orderNumber)}
             </p>
             <p className="mt-3 text-base font-bold tabular-nums text-[#202124]">{formatWeight(row.weightGrams)}</p>
             <p className="text-sm text-[#6B7280]">عیار {formatPurity(row.purityRatio)}</p>
@@ -118,7 +118,7 @@ export function TransactionTable({ rows }: { rows: ActivityTransaction[] }) {
           {rows.map((row) => (
             <tr key={row.id} className="border-t border-[#E5E7EB]">
               <td className="px-3 py-4 font-semibold tabular-nums" dir="ltr">
-                {row.orderNumber}
+                {toPersianDigits(row.orderNumber)}
               </td>
               <td className="px-3 py-4 whitespace-nowrap text-[#6B7280]">{stamp(row.createdAt)}</td>
               <td className="px-3 py-4">
@@ -214,7 +214,7 @@ export function ActivityPagination({
                 …
               </span>
             ) : (
-              <PageButton key={item} label={`صفحه ${item}`} pressed={item === page} onClick={() => onPage(item)}>
+              <PageButton key={item} label={`صفحه ${toPersianDigits(String(item))}`} pressed={item === page} onClick={() => onPage(item)}>
                 {toPersianDigits(String(item))}
               </PageButton>
             ),

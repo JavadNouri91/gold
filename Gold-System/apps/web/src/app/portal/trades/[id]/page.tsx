@@ -17,6 +17,7 @@ import {
   PAYMENT_STATUS_LABELS,
   PAYMENT_METHOD_LABELS,
   SETTLEMENT_STATUS_LABELS,
+  toPersianDigits,
 } from '@/lib/utils';
 
 export default function TradeDetailPage() {
@@ -57,7 +58,7 @@ export default function TradeDetailPage() {
     <div className="max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold" dir="ltr">{trade.tradeNumber}</h1>
+          <h1 className="text-2xl font-bold" dir="ltr">{toPersianDigits(trade.tradeNumber)}</h1>
           <p className="text-sm text-muted-foreground">{formatDate(trade.confirmedAt ?? trade.createdAt)}</p>
         </div>
         <StatusBadge
@@ -71,7 +72,7 @@ export default function TradeDetailPage() {
         <CardHeader><CardTitle>شرایط معامله</CardTitle></CardHeader>
         <CardContent>
           <dl className="divide-y divide-border text-sm">
-            <Row label="شماره سفارش" value={order?.orderNumber ?? '—'} />
+            <Row label="شماره سفارش" value={order?.orderNumber ? toPersianDigits(order.orderNumber) : '—'} />
             <Row label="وزن" value={formatGrams(trade.weightGrams)} />
             <Row label="عیار" value={formatPurity(trade.purityRatio)} />
             <Row label="قیمت واحد" value={`${formatRial(trade.unitPriceRial)} / گرم`} />
@@ -89,7 +90,7 @@ export default function TradeDetailPage() {
             <Row label="مبلغ کل" value={formatRial(trade.totalAmountRial)} highlight />
             {order ? <Row label="اعتبار رزروشده" value={formatRial(order.reservedAmountRial)} /> : null}
             {quotation?.quotationNumber ? (
-              <Row label="شماره پیش‌فاکتور" value={quotation.quotationNumber} />
+              <Row label="شماره پیش‌فاکتور" value={toPersianDigits(quotation.quotationNumber)} />
             ) : null}
           </dl>
         </CardContent>
@@ -124,7 +125,7 @@ export default function TradeDetailPage() {
                   <div>
                     <p className="font-medium">{PAYMENT_METHOD_LABELS[p.method] ?? p.method}</p>
                     {p.referenceNumber && (
-                      <p className="text-xs text-muted-foreground" dir="ltr">{p.referenceNumber}</p>
+                      <p className="text-xs text-muted-foreground" dir="ltr">{toPersianDigits(p.referenceNumber)}</p>
                     )}
                     <p className="text-xs text-muted-foreground">{formatDate(p.createdAt)}</p>
                   </div>

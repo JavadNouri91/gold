@@ -21,7 +21,7 @@ import { expandOrderStatusFilter } from '@gold/shared-types';
  */
 
 export type OrderSide = 'BUY' | 'SELL';
-export type ActivityBucket = 'week' | 'month' | 'quarter' | 'year';
+export type ActivityBucket = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export interface ActivityTradeSnapshot {
   id: string;
@@ -288,6 +288,7 @@ export function activityBucketKey(date: Date, bucket: ActivityBucket): string {
     return `W:${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
   }
   const parts = persianParts(date);
+  if (bucket === 'day') return `D:${parts.year}-${pad(parts.month)}-${pad(parts.day)}`;
   if (bucket === 'year') return `Y:${parts.year}`;
   if (bucket === 'quarter') return `Q:${parts.year}-${pad(Math.ceil(parts.month / 3))}`;
   return `M:${parts.year}-${pad(parts.month)}`;

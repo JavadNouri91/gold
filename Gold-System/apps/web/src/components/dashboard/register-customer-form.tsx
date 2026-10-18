@@ -9,7 +9,7 @@ import { Alert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { ApiClientError } from '@/lib/api';
 import { internalCustomersApi, type StaffCustomer } from '@/lib/internal-api';
-import { isValidMobile, latinMobile, isValidNationalId, latinNationalId, isValidEmail, toPersianDigits, latinPhone, formatMobile, formatNationalId, MOBILE_PLACEHOLDER } from '@/lib/utils';
+import { isValidMobile, latinMobile, isValidNationalId, latinNationalId, isValidEmail, toPersianDigits, latinPhone, formatFaNumber, formatMobile, formatNationalId, MOBILE_PLACEHOLDER } from '@/lib/utils';
 import { MobileInput } from '@/components/ui/mobile-input';
 import { NationalIdInput } from '@/components/ui/national-id-input';
 import { PostalCodeInput } from '@/components/ui/postal-code-input';
@@ -271,7 +271,7 @@ function TextareaField({
         </div>
         {maxLength != null && (
           <p className="text-xs text-muted-foreground shrink-0">
-            {len.toLocaleString('fa-IR')} / {maxLength.toLocaleString('fa-IR')}
+            {formatFaNumber(len)} / {formatFaNumber(maxLength)}
           </p>
         )}
       </div>
@@ -545,7 +545,7 @@ export function RegisterCustomerButton({
               <p className="mt-1 text-sm text-muted-foreground">
                 کد مشتری:{' '}
                 <span dir="ltr" className="font-mono font-bold">
-                  {successCustomer.customerNumber}
+                  {toPersianDigits(successCustomer.customerNumber)}
                 </span>
               </p>
               <p className="mt-3 text-sm text-foreground">

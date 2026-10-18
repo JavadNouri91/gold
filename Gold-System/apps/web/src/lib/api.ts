@@ -798,7 +798,7 @@ export interface ListOrdersResponse {
   meta: PaginationMeta;
 }
 
-export type ActivityBucket = 'week' | 'month' | 'quarter' | 'year';
+export type ActivityBucket = 'day' | 'week' | 'month' | 'quarter' | 'year';
 
 export interface ActivitySideTotal {
   amountRial: string;

@@ -5,7 +5,7 @@ import { Camera } from 'lucide-react';
 import { customerApi, fetchBlob, type CustomerProfile } from '@/lib/api';
 import { UserStatusBadge } from '@/components/portal/user-status-badge';
 import { Modal } from '@/components/ui/modal';
-import { formatDate } from '@/lib/utils';
+import { formatDate, toPersianDigits } from '@/lib/utils';
 import { AvatarImageEditor } from './avatar-image-editor';
 import { friendlyApiMessage } from './friendly-message';
 
@@ -123,7 +123,7 @@ export function ProfileHero({
             <p className="mt-2 text-sm text-slate-600">
               شماره مشتری:{' '}
               <span dir="ltr" className="font-medium text-slate-800">
-                {customer.customerNumber}
+                {toPersianDigits(customer.customerNumber)}
               </span>
             </p>
             <p className="mt-1 text-sm text-slate-600">

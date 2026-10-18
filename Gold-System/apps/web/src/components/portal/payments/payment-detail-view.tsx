@@ -9,7 +9,7 @@ import {
   paymentTypeLabel,
   relatedPaymentLabel,
 } from '@/lib/payment-display';
-import { PAYMENT_METHOD_LABELS, formatMoney } from '@/lib/utils';
+import { PAYMENT_METHOD_LABELS, formatMoney, toPersianDigits } from '@/lib/utils';
 
 export function PaymentDetailView({ payment }: { payment: Payment }) {
   const related = relatedPaymentLabel(payment);
@@ -37,7 +37,7 @@ export function PaymentDetailView({ payment }: { payment: Payment }) {
         <DetailRow label="نوع پرداخت" value={paymentTypeLabel(payment.relatedSide)} />
         <DetailRow label="شماره سفارش" value={related} ltr />
         <DetailRow label="روش پرداخت" value={PAYMENT_METHOD_LABELS[payment.method] ?? payment.method} />
-        <DetailRow label="شماره پیگیری" value={payment.referenceNumber || '—'} ltr copyable={Boolean(payment.referenceNumber)} />
+        <DetailRow label="شماره پیگیری" value={payment.referenceNumber ? toPersianDigits(payment.referenceNumber) : '—'} ltr copyable={Boolean(payment.referenceNumber)} />
         <DetailRow label="تاریخ و ساعت" value={paymentStamp(payment.receivedAt || payment.createdAt)} />
       </dl>
       {payment.hasReceipt ? (

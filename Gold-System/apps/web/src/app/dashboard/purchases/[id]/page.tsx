@@ -14,7 +14,7 @@ import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { ApiClientError } from '@/lib/api';
-import { PURCHASE_STATUS_LABELS, formatDateTime, formatMoney, formatWeight, statusLabel } from '@/lib/utils';
+import { PURCHASE_STATUS_LABELS, formatDateTime, formatMoney, formatWeight, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function PurchaseDetailPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
@@ -47,7 +47,7 @@ export default function PurchaseDetailPage({ params }: { params: { id: string } 
 
   return (
     <div className="space-y-4">
-      <PageHeader title="جزئیات خرید" description={row?.purchaseNumber} />
+      <PageHeader title="جزئیات خرید" description={row?.purchaseNumber ? toPersianDigits(row.purchaseNumber) : undefined} />
       {purchase.error ? <ApiErrorState error={purchase.error} /> : null}
       {feedback ? <Alert variant="success">{feedback}</Alert> : null}
       {error ? <Alert variant="error">{error}</Alert> : null}

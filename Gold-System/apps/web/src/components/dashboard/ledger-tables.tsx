@@ -1,4 +1,4 @@
-import { formatDateTime, formatMoney, formatWeight, statusLabel, LEDGER_DIRECTION_LABELS } from '@/lib/utils';
+import { formatDateTime, formatMoney, formatWeight, statusLabel, toPersianDigits, LEDGER_DIRECTION_LABELS } from '@/lib/utils';
 import type { GoldJournal, LedgerJournal } from '@/lib/internal-api';
 
 export function LedgerTable({ journals }: { journals: LedgerJournal[] }) {
@@ -9,7 +9,7 @@ export function LedgerTable({ journals }: { journals: LedgerJournal[] }) {
         <article key={journal.id} className="overflow-x-auto rounded-xl border bg-white">
           <header className="flex flex-wrap justify-between gap-2 border-b px-4 py-3 text-sm">
             <span>منبع: {journal.sourceType}</span>
-            <span dir="ltr">{journal.sourceId}</span>
+            <span dir="ltr">{toPersianDigits(journal.sourceId)}</span>
             <span>{formatDateTime(journal.postedAt)}</span>
             <span>بدهکار {formatMoney(journal.totalDebits)}</span>
             <span>بستانکار {formatMoney(journal.totalCredits)}</span>
@@ -26,7 +26,7 @@ export function LedgerTable({ journals }: { journals: LedgerJournal[] }) {
             <tbody>
               {journal.entries.map((entry) => (
                 <tr key={entry.id} className="border-t">
-                  <td className="px-4 py-2">{entry.accountName} <span dir="ltr">({entry.accountCode})</span></td>
+                  <td className="px-4 py-2">{entry.accountName} <span dir="ltr">({toPersianDigits(entry.accountCode)})</span></td>
                   <td className="px-4 py-2">{formatMoney(entry.debit)}</td>
                   <td className="px-4 py-2">{formatMoney(entry.credit)}</td>
                   <td className="px-4 py-2">{entry.description ?? '—'}</td>
@@ -48,7 +48,7 @@ export function GoldLedgerTable({ journals }: { journals: GoldJournal[] }) {
         <article key={journal.id} className="overflow-x-auto rounded-xl border bg-white">
           <header className="flex flex-wrap justify-between gap-2 border-b px-4 py-3 text-sm">
             <span>{journal.sourceType}</span>
-            <span dir="ltr">{journal.sourceId}</span>
+            <span dir="ltr">{toPersianDigits(journal.sourceId)}</span>
             <span>{formatDateTime(journal.postedAt)}</span>
           </header>
           <table className="min-w-full text-sm">
@@ -63,10 +63,10 @@ export function GoldLedgerTable({ journals }: { journals: GoldJournal[] }) {
             <tbody>
               {journal.entries.map((entry) => (
                 <tr key={entry.id} className="border-t">
-                  <td className="px-4 py-2">{entry.accountName} <span dir="ltr">({entry.accountCode})</span></td>
+                  <td className="px-4 py-2">{entry.accountName} <span dir="ltr">({toPersianDigits(entry.accountCode)})</span></td>
                   <td className="px-4 py-2">{statusLabel(LEDGER_DIRECTION_LABELS, entry.direction)}</td>
                   <td className="px-4 py-2">{formatWeight(entry.quantity)}</td>
-                  <td className="px-4 py-2" dir="ltr">{entry.purity}</td>
+                  <td className="px-4 py-2" dir="ltr">{entry.purity ? toPersianDigits(entry.purity) : '—'}</td>
                 </tr>
               ))}
             </tbody>

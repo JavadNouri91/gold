@@ -173,6 +173,7 @@ describe('DashboardSidebar mobile drawer', () => {
     const dashboard = within(nav).getByRole('link', { name: 'داشبورد' });
     expect(dashboard).toHaveAttribute('href', '/portal/dashboard');
     expect(dashboard).toHaveAttribute('aria-current', 'page');
+    expect(within(nav).queryByRole('link', { name: 'اعتبار' })).not.toBeInTheDocument();
     expect(within(nav).getByRole('link', { name: 'خرید و فروش طلا' })).toHaveAttribute(
       'href',
       '/portal/orders/new',

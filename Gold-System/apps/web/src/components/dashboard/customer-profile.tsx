@@ -32,11 +32,13 @@ import {
   QUOTATION_STATUS_LABELS,
   TRADE_STATUS_LABELS,
   formatDate,
+  formatFaNumber,
   formatDateTime,
   formatMoney,
   formatWeight,
   orderStatusPresentation,
   statusLabel,
+  toPersianDigits,
 } from '@/lib/utils';
 
 const TABS = [
@@ -145,7 +147,7 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
       </nav>
       <PageHeader
         title={profile.fullName || `${profile.firstName} ${profile.lastName}`}
-        description={profile.customerNumber}
+        description={toPersianDigits(profile.customerNumber)}
         actions={
           <div className="flex flex-wrap gap-2">
             {canManage ? <Button variant="outline" onClick={() => setEditing(true)}>ویرایش</Button> : null}
@@ -170,7 +172,7 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <Metric label="مجموع خرید" value={metrics ? formatMoney(metrics.totalPurchaseRial) : '…'} />
         <Metric label="مجموع وزن طلا" value={metrics ? formatWeight(metrics.totalWeightGrams) : '…'} />
-        <Metric label="تعداد سفارش" value={metrics ? metrics.orderCount.toLocaleString('fa-IR') : '…'} />
+        <Metric label="تعداد سفارش" value={metrics ? formatFaNumber(metrics.orderCount) : '…'} />
         <Metric label="آخرین خرید" value={metrics ? formatDate(metrics.lastPurchaseAt) : '…'} />
         <Metric
           label="مانده حساب"
@@ -265,7 +267,7 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
             return {
               id: order.id,
               href: `/dashboard/orders/${order.id}`,
-              title: order.orderNumber,
+              title: toPersianDigits(order.orderNumber),
               amount: formatMoney(order.totalAmountRial),
               extra: formatWeight(order.weightGrams),
               status: presented.status,
@@ -282,7 +284,7 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
           rows={(workspace.data?.quotations ?? []).map((row) => ({
             id: row.id,
             href: `/dashboard/quotations/${row.id}`,
-            title: row.quotationNumber,
+            title: toPersianDigits(row.quotationNumber),
             amount: formatMoney(row.totalAmountRial),
             status: row.status,
             statusLabel: statusLabel(QUOTATION_STATUS_LABELS, row.status),
@@ -297,7 +299,7 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
           rows={(workspace.data?.invoices ?? []).map((row) => ({
             id: row.id,
             href: `/dashboard/trades/${row.id}`,
-            title: row.tradeNumber,
+            title: toPersianDigits(row.tradeNumber),
             amount: formatMoney(row.totalAmountRial),
             status: row.status,
             statusLabel: statusLabel(TRADE_STATUS_LABELS, row.status),

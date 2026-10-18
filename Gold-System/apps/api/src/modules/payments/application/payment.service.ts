@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, Logger } from '@nestjs/common';
+import { ForbiddenException, Injectable, Logger, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { randomUUID } from 'crypto';
 import { PaginationMeta } from '@gold/shared-types';
@@ -663,77 +663,54 @@ export class PaymentService {
       file: { buffer: Buffer; mimetype: string; size: number; originalname: string };
     },
   ): Promise<LedgerPaymentDto> {
-    const mime = assertReceiptFile(input.file);
     const customerId = await this.resolveCustomerId(actorUserId);
     if (!customerId) throw new ForbiddenException('حساب مشتری برای ثبت رسید پیدا نشد.');
-
-    let amount: Decimal;
-    try {
-      amount = new Decimal(input.amount);
-    } catch {
-      throw new InvalidPaymentAmountException(input.amount);
-    }
-    if (amount.lessThanOrEqualTo(0)) throw new InvalidPaymentAmountException(input.amount);
-
-    const methodDef = PAYMENT_METHOD_DEFINITIONS[input.method];
-    if (!methodDef) throw new InvalidPaymentAmountException(input.amount);
-    const reference = input.referenceNumber?.trim() || undefined;
-    if (methodDef.requiresReference && !reference) {
-      throw new MissingPaymentReferenceException(input.method);
-    }
-
-    const stored = await this.storage.upload({
-      buffer: input.file.buffer,
-      originalName: input.file.originalname,
-      mimeType: mime,
-      sizeBytes: input.file.size,
-      prefix: `payment-receipts/${customerId}`,
+    return this.createDepositReceipt({
+      actorUserId,
+      customerId,
+      method: input.method,
+      amount: input.amount,
+      referenceNumber: input.referenceNumber,
+      file: input.file,
+      notes: 'واریز افزایش اعتبار — رسید توسط مشتری بارگذاری شد',
+      auditAction: 'PAYMENT_RECEIPT_UPLOADED',
     });
+  }
 
-    try {
-      const payment = await this.prisma.$transaction((tx) =>
-        this.paymentRepo.createPaymentInTx(tx, {
-          idempotencyKey: randomUUID(),
-          tradeId: null,
-          customerId,
-          method: input.method,
-          amount,
-          currency: 'IRR',
-          referenceNumber: reference ?? null,
-          notes: 'واریز افزایش اعتبار — رسید توسط مشتری بارگذاری شد',
-          receivedAt: new Date(),
-          recordedByUserId: actorUserId,
-          receiptKey: stored.key,
-          receiptMimeType: mime,
-          receiptFileName: input.file.originalname.slice(0, 180),
-        }),
-      );
-
-      await this.audit.log({
-        actorId: actorUserId,
-        actorType: 'USER',
-        action: 'PAYMENT_RECEIPT_UPLOADED',
-        entityType: 'Payment',
-        entityId: payment.id,
-        after: {
-          tradeId: null,
-          method: payment.method,
-          amount: payment.amount.toFixed(2),
-          hasReceipt: true,
-        },
-      });
-
-      return this.toLedgerDto({
-        payment,
-        orderId: null,
-        orderNumber: null,
-        tradeNumber: null,
-        relatedSide: null,
-      });
-    } catch (error) {
-      await this.storage.delete(stored.key).catch(() => undefined);
-      throw error;
-    }
+  /**
+   * Staff records a paper deposit slip handed in at the shop.
+   * Credit is granted after accountant validation, same as a customer-uploaded receipt.
+   */
+  async submitInPersonReceipt(
+    actorUserId: string,
+    input: {
+      customerId: string;
+      method: PaymentMethod;
+      amount: string;
+      referenceNumber?: string;
+      notes?: string;
+      file: { buffer: Buffer; mimetype: string; size: number; originalname: string };
+    },
+  ): Promise<LedgerPaymentDto> {
+    const customer = await this.prisma.customer.findUnique({
+      where: { id: input.customerId },
+      select: { id: true },
+    });
+    if (!customer) throw new NotFoundException('مشتری پیدا نشد.');
+    const extra = input.notes?.trim();
+    const notes = extra
+      ? `واریز افزایش اعتبار — فیش حضوری تحویل فروشگاه. ${extra}`
+      : 'واریز افزایش اعتبار — فیش حضوری تحویل فروشگاه';
+    return this.createDepositReceipt({
+      actorUserId,
+      customerId: customer.id,
+      method: input.method,
+      amount: input.amount,
+      referenceNumber: input.referenceNumber,
+      file: input.file,
+      notes,
+      auditAction: 'PAYMENT_RECEIPT_IN_PERSON',
+    });
   }
 
   async listOwnPayableTrades(
@@ -804,6 +781,88 @@ export class PaymentService {
       payments,
       allocations,
     });
+  }
+
+  private async createDepositReceipt(input: {
+    actorUserId: string;
+    customerId: string;
+    method: PaymentMethod;
+    amount: string;
+    referenceNumber?: string;
+    notes: string;
+    auditAction: string;
+    file: { buffer: Buffer; mimetype: string; size: number; originalname: string };
+  }): Promise<LedgerPaymentDto> {
+    const mime = assertReceiptFile(input.file);
+
+    let amount: Decimal;
+    try {
+      amount = new Decimal(input.amount);
+    } catch {
+      throw new InvalidPaymentAmountException(input.amount);
+    }
+    if (amount.lessThanOrEqualTo(0)) throw new InvalidPaymentAmountException(input.amount);
+
+    const methodDef = PAYMENT_METHOD_DEFINITIONS[input.method];
+    if (!methodDef) throw new InvalidPaymentAmountException(input.amount);
+    const reference = input.referenceNumber?.trim() || undefined;
+    if (methodDef.requiresReference && !reference) {
+      throw new MissingPaymentReferenceException(input.method);
+    }
+
+    const stored = await this.storage.upload({
+      buffer: input.file.buffer,
+      originalName: input.file.originalname,
+      mimeType: mime,
+      sizeBytes: input.file.size,
+      prefix: `payment-receipts/${input.customerId}`,
+    });
+
+    try {
+      const payment = await this.prisma.$transaction((tx) =>
+        this.paymentRepo.createPaymentInTx(tx, {
+          idempotencyKey: randomUUID(),
+          tradeId: null,
+          customerId: input.customerId,
+          method: input.method,
+          amount,
+          currency: 'IRR',
+          referenceNumber: reference ?? null,
+          notes: input.notes,
+          receivedAt: new Date(),
+          recordedByUserId: input.actorUserId,
+          receiptKey: stored.key,
+          receiptMimeType: mime,
+          receiptFileName: input.file.originalname.slice(0, 180),
+        }),
+      );
+
+      await this.audit.log({
+        actorId: input.actorUserId,
+        actorType: 'USER',
+        action: input.auditAction,
+        entityType: 'Payment',
+        entityId: payment.id,
+        after: {
+          tradeId: null,
+          customerId: input.customerId,
+          method: payment.method,
+          amount: payment.amount.toFixed(2),
+          hasReceipt: true,
+        },
+      });
+
+      return this.toLedgerDto({
+        payment,
+        orderId: null,
+        orderNumber: null,
+        tradeNumber: null,
+        relatedSide: null,
+      });
+    } catch (error) {
+      await this.storage.delete(stored.key).catch(() => undefined);
+      throw error;
+    }
   }
 
   private async resolveCustomerId(actorUserId: string): Promise<string | null> {

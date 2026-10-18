@@ -236,7 +236,7 @@ function SummaryCards({
             <WalletCards className="h-4 w-4 text-[#C8922E]" aria-hidden />
             مجموع پرداختی
           </div>
-          <p className="mt-3 text-lg font-bold tracking-tighter proportional-nums text-[#202124]">{formatMoney(summary.totalPaid.amountRial)}</p>
+          <p className="mt-3 text-lg font-bold text-[#202124]">{formatMoney(summary.totalPaid.amountRial)}</p>
           <p className="mt-1 text-xs text-[#6B7280]">در {toPersianDigits(String(summary.totalPaid.count))} پرداخت</p>
         </article>
         {STATUS_CARD_FILTERS.map((card) => (
@@ -277,7 +277,7 @@ function CompactCard({
   const body = (
     <>
       <p className={cn('text-xs font-semibold', tone === 'muted' ? 'text-[#6B7280]' : toneClass[tone])}>{title}</p>
-      <p className="mt-1 break-words text-sm font-bold tracking-tighter proportional-nums text-[#202124]">{value}</p>
+      <p className="mt-1 break-words text-sm font-bold text-[#202124]">{value}</p>
       <p className="mt-1 break-words text-[11px] leading-5 text-[#6B7280]">{hint}</p>
     </>
   );
@@ -324,9 +324,9 @@ function SummaryStat({
       )}
     >
       <p className={cn('text-sm font-semibold', toneClass[tone].split(' ').at(-1))}>{title}</p>
-      <p className="mt-2 text-2xl font-bold tracking-tighter proportional-nums text-[#202124]">{toPersianDigits(String(count))}</p>
+      <p className="mt-2 text-2xl font-bold text-[#202124]">{toPersianDigits(String(count))}</p>
       <p className="mt-1 text-xs text-[#6B7280]">مجموع مبلغ</p>
-      <p className="text-sm font-semibold tracking-tighter proportional-nums text-[#202124]">{formatMoney(amount)}</p>
+      <p className="text-sm font-semibold text-[#202124]">{formatMoney(amount)}</p>
     </button>
   );
 }
@@ -533,7 +533,7 @@ function PaymentCards({ rows }: { rows: Payment[] }) {
             <p className="mt-3 text-sm font-semibold text-[#202124]" dir="ltr">
               {relatedPaymentLabel(payment)}
             </p>
-            <p className="mt-1 text-base font-bold tracking-tighter proportional-nums text-[#202124]">{formatMoney(payment.amount)}</p>
+            <p className="mt-1 text-base font-bold text-[#202124]">{formatMoney(payment.amount)}</p>
             <p className="mt-3 inline-flex items-center gap-1 text-xs text-[#6B7280]">
               <CreditCard className="h-3.5 w-3.5" aria-hidden />
               {PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}
@@ -576,7 +576,7 @@ function PaymentTable({ rows }: { rows: Payment[] }) {
               </td>
               <td className="px-2 py-4 text-xs">{paymentTypeLabel(payment.relatedSide)}</td>
               <td className="px-2 py-4 text-xs">{PAYMENT_METHOD_LABELS[payment.method] ?? payment.method}</td>
-              <td className="px-2 py-4 text-xs font-semibold tracking-tighter proportional-nums">{formatMoney(payment.amount)}</td>
+              <td className="px-2 py-4 text-xs font-semibold">{formatMoney(payment.amount)}</td>
               <td className="px-2 py-4">
                 <PaymentStatusBadge status={payment.status} />
               </td>
@@ -655,7 +655,7 @@ function PaymentPagination({
             item === '…' ? (
               <span key={`gap-${index}`} className="px-1 text-[#6B7280]">…</span>
             ) : (
-              <PageButton key={item} label={`صفحه ${item}`} pressed={item === page} onClick={() => onPage(item)}>
+              <PageButton key={item} label={`صفحه ${toPersianDigits(String(item))}`} pressed={item === page} onClick={() => onPage(item)}>
                 {toPersianDigits(String(item))}
               </PageButton>
             ),

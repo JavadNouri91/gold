@@ -11,6 +11,7 @@ import { ApiClientError } from '@/lib/api';
 import { internalCustomersApi, type StaffCustomer } from '@/lib/internal-api';
 import {
   CUSTOMER_TYPE_LABELS,
+  formatFaNumber,
   formatMobile,
   isValidMobile,
   latinMobile,
@@ -483,12 +484,12 @@ export function CustomerImportDialog({
       onFinished();
       const skipped = mappedRows.length - readyRows.length;
       if (result.failed) {
-        const details = result.errors.map((item) => `ردیف ${item.row.toLocaleString('fa-IR')}: ${item.message}`).join(' | ');
-        setError(`${result.created.toLocaleString('fa-IR')} مشتری ثبت شد. ${details}`);
+        const details = result.errors.map((item) => `ردیف ${formatFaNumber(item.row)}: ${item.message}`).join(' | ');
+        setError(`${formatFaNumber(result.created)} مشتری ثبت شد. ${details}`);
         return;
       }
-      const extra = skipped ? ` ${skipped.toLocaleString('fa-IR')} ردیف ناقص ارسال نشد.` : '';
-      onImported(`${result.created.toLocaleString('fa-IR')} مشتری ثبت شد.${extra}`);
+      const extra = skipped ? ` ${formatFaNumber(skipped)} ردیف ناقص ارسال نشد.` : '';
+      onImported(`${formatFaNumber(result.created)} مشتری ثبت شد.${extra}`);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'ورودی فایل انجام نشد.');
     } finally {
@@ -581,9 +582,9 @@ export function CustomerImportDialog({
             {missing.length ? <Alert variant="error">این ستون‌ها را وصل کنید: {missing.join('، ')}</Alert> : null}
             {unused.length ? <p className="text-muted-foreground">ستون‌های بدون تطبیق: {unused.join('، ')}</p> : null}
             <p>
-              {readyRows.length.toLocaleString('fa-IR')} ردیف آماده ثبت است.
+              {formatFaNumber(readyRows.length)} ردیف آماده ثبت است.
               {mappedRows.length > readyRows.length
-                ? ` ${(mappedRows.length - readyRows.length).toLocaleString('fa-IR')} ردیف ناقص ارسال نمی‌شود.`
+                ? ` ${formatFaNumber((mappedRows.length - readyRows.length))} ردیف ناقص ارسال نمی‌شود.`
                 : ''}
             </p>
             <div className="flex justify-end gap-2">

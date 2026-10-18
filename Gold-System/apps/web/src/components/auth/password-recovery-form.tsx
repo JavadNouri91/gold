@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { ApiClientError, authApi } from '@/lib/api';
-import { isValidMobile, latinMobile, MOBILE_PLACEHOLDER, toLatinDigits } from '@/lib/utils';
+import { isValidMobile, latinMobile, MOBILE_PLACEHOLDER, toLatinDigits, toPersianDigits } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
@@ -37,7 +37,7 @@ export function PasswordRecoveryForm({ onBack }: { onBack: () => void }) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  const { register, handleSubmit, watch, formState: { errors } } = useForm<ResetForm>({
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ResetForm>({
     defaultValues: { otp: '', password: '', confirmPassword: '' },
   });
 
@@ -115,10 +115,16 @@ export function PasswordRecoveryForm({ onBack }: { onBack: () => void }) {
           {...register('otp', {
             required: 'کد تأیید الزامی است',
             pattern: {
-              value: /^[0-9۰-۹٠-٩]{4,8}$/,
+              value: /^\d{4,8}$/,
               message: 'کد تأیید باید عددی باشد',
             },
           })}
+          value={toPersianDigits(watch('otp') ?? '')}
+          onChange={(event) => {
+            setValue('otp', toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 8), {
+              shouldValidate: true,
+            });
+          }}
         />
         <PasswordInput
           label="رمز عبور جدید"

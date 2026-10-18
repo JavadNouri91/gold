@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { PageSpinner } from '@/components/ui/spinner';
 import { Alert } from '@/components/ui/alert';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { formatDate } from '@/lib/utils';
+import { formatDate, formatFaNumber } from '@/lib/utils';
 
 const QUOTATION_STATUS_LABELS: Record<string, string> = {
   GENERATED: 'صادر شده',
@@ -37,7 +37,7 @@ export default function QuotationDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">پیشنهاد قیمت</h1>
-          <p className="text-sm text-muted-foreground">نسخه {quotation.version}</p>
+          <p className="text-sm text-muted-foreground">نسخه {formatFaNumber(quotation.version)}</p>
         </div>
         <StatusBadge
           status={quotation.status}

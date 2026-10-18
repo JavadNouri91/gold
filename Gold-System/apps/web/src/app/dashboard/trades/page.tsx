@@ -12,7 +12,7 @@ import { FilterBar } from '@/components/dashboard/filter-bar';
 import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
 import { ApiErrorState } from '@/components/dashboard/states';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { TRADE_STATUS_LABELS, formatDateTime, formatMoney, formatWeight, statusLabel } from '@/lib/utils';
+import { TRADE_STATUS_LABELS, formatDateTime, formatMoney, formatWeight, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function TradesPage() {
   const { user } = useAuth();
@@ -34,7 +34,7 @@ export default function TradesPage() {
       header: 'شماره',
       render: (row) => (
         <Link href={`/dashboard/trades/${row.id}`} className="font-medium text-gold-800" dir="ltr">
-          {row.tradeNumber}
+          {toPersianDigits(row.tradeNumber)}
         </Link>
       ),
     },

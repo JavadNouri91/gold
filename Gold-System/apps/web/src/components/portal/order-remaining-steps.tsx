@@ -1,5 +1,5 @@
 import { ORDER_PROGRESS_STEPS, orderProgress } from '@/lib/order-progress';
-import { cn } from '@/lib/utils';
+import { cn, formatFaNumber } from '@/lib/utils';
 
 export function OrderRemainingSteps({
   status,
@@ -43,7 +43,7 @@ export function OrderRemainingSteps({
                 !done && !current && 'border-[#E5E7EB] bg-white text-[#9CA3AF]',
               )}
             >
-              <span className="ml-2 tabular-nums">{(index + 1).toLocaleString('fa-IR')}</span>
+              <span className="ml-2 tabular-nums">{formatFaNumber((index + 1))}</span>
               {step.label}
               {current ? <span className="mr-2 text-xs">مرحله جاری</span> : null}
             </li>

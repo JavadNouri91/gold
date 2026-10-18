@@ -9,7 +9,7 @@ import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
 import { ApiErrorState } from '@/components/dashboard/states';
 import { LedgerTable } from '@/components/dashboard/ledger-tables';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { formatMoney } from '@/lib/utils';
+import { formatMoney, toPersianDigits } from '@/lib/utils';
 
 export default function FinancialLedgerPage() {
   const { user } = useAuth();
@@ -44,7 +44,7 @@ export default function FinancialLedgerPage() {
                 const account = accounts.data?.find((item) => item.code === balance.accountCode);
                 return (
                   <tr key={balance.accountCode} className="border-t">
-                    <td className="px-3 py-2" dir="ltr">{balance.accountCode}</td>
+                    <td className="px-3 py-2" dir="ltr">{toPersianDigits(balance.accountCode)}</td>
                     <td className="px-3 py-2">{account?.nameFa ?? account?.name ?? '—'}</td>
                     <td className="px-3 py-2">{formatMoney(balance.totalDebit)}</td>
                     <td className="px-3 py-2">{formatMoney(balance.totalCredit)}</td>

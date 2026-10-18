@@ -2,7 +2,7 @@
 
 import { useId, useMemo } from 'react';
 import { rialToToman, toPersianDigits } from '@/lib/utils';
-import type { ChartPeriod } from '@/lib/portal-demo';
+import { CHART_PERIOD_LABELS, type ChartPeriod } from '@/lib/portal-demo';
 
 function tomanAxisLabel(rial: number): string {
   const toman = rialToToman(String(Math.round(rial)));
@@ -26,7 +26,7 @@ export function GoldPriceChart({
 
   return (
     <div className="mt-4">
-      <p className="mb-1 text-[11px] text-muted-foreground">نمودار نمایشی حول قیمت مرجع — {period}</p>
+      <p className="mb-1 text-[11px] text-muted-foreground">نمودار نمایشی حول قیمت مرجع — {CHART_PERIOD_LABELS[period]}</p>
       <div className="relative h-36 w-full overflow-hidden rounded-xl bg-gold-50/40">
         <svg viewBox="0 0 400 140" className="h-full w-full" role="img" aria-label="نمودار قیمت طلای آبشده">
           <defs>

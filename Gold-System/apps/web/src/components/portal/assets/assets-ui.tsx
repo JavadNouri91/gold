@@ -5,6 +5,10 @@ import { formatSignedPercent, formatSignedRial, formatSignedWholeRial, moneyTone
 
 export const assetCardClass = 'min-w-0 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-5';
 
+export const assetFigureClass = 'mt-3 text-xl font-bold tabular-nums tracking-tight text-[#202124] sm:text-2xl';
+
+export const assetCaptionClass = 'mt-1.5 text-xs leading-5 text-[#6B7280]';
+
 export function AssetSkeleton({ className }: { className?: string }) {
   return <div className={cn('animate-pulse rounded-xl bg-slate-100', className)} aria-hidden />;
 }
@@ -51,4 +55,28 @@ export function CardHeading({ icon, title, id }: { icon: LucideIcon; title: stri
 
 export function EmptyNote({ children }: { children: ReactNode }) {
   return <p className="text-sm leading-7 text-[#6B7280]">{children}</p>;
+}
+
+export function RangeChip({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean;
+  children: ReactNode;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'min-h-11 rounded-full px-3 text-xs font-semibold',
+        active ? 'bg-[#C8922E] text-white' : 'bg-[#F8F9FA] text-[#202124] hover:bg-[#FFF4D6]',
+      )}
+    >
+      {children}
+    </button>
+  );
 }

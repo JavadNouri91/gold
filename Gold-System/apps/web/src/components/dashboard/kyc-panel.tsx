@@ -15,7 +15,7 @@ import { internalKycApi, type KycDocumentRecord } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
 import { kycDocumentLabel, requiredKycDocumentTypes } from '@/lib/kyc-documents';
 import { PERSONAL_PHOTO_TYPE } from '@/lib/kyc-portrait-matte';
-import { KYC_STATUS_LABELS, formatDateTime, statusLabel } from '@/lib/utils';
+import { KYC_STATUS_LABELS, formatDateTime, formatFaNumber, statusLabel } from '@/lib/utils';
 
 const CHECKERBOARD =
   'bg-[length:16px_16px] bg-[linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] bg-[position:0_0,0_8px,8px_-8px,-8px_0]';
@@ -101,7 +101,7 @@ export function KycDocumentList({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {submittedCount.toLocaleString('fa-IR')} از {required.length.toLocaleString('fa-IR')} مدرک الزامی ارسال شده است.
+        {formatFaNumber(submittedCount)} از {formatFaNumber(required.length)} مدرک الزامی ارسال شده است.
         {customerType === 'PARTNER' ? ' برای مشتری همکار، جواز کسب هم الزامی است.' : ''}
       </p>
       {message ? <Alert variant="success">{message}</Alert> : null}

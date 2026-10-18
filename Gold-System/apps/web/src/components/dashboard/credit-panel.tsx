@@ -7,7 +7,7 @@ import { Alert } from '@/components/ui/alert';
 import { PermissionGate } from './permission-gate';
 import { internalCustomersApi, type StaffAccount } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
-import { formatMoney, tomanToRial } from '@/lib/utils';
+import { formatGroupedPersianInteger, formatMoney, tomanToRial } from '@/lib/utils';
 
 export function CreditSummary({ account }: { account: StaffAccount }) {
   const rows = [
@@ -86,7 +86,7 @@ export function GrantCreditForm({
             <option value="GOLD_RIAL">اعتبار طلایی</option>
           </select>
         </label>
-        <Input label="مبلغ (تومان)" dir="ltr" value={amount} onChange={(event) => setAmount(event.target.value)} />
+        <Input label="مبلغ (تومان)" dir="ltr" value={amount} onChange={(event) => setAmount(formatGroupedPersianInteger(event.target.value))} />
         <Input label="دلیل" value={reason} onChange={(event) => setReason(event.target.value)} />
         <Button disabled={amount.trim().length === 0 || reason.trim().length < 5} isLoading={busy} onClick={() => void submit()}>
           ثبت

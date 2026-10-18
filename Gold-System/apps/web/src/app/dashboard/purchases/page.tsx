@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { ApiClientError } from '@/lib/api';
-import { PURCHASE_STATUS_LABELS, formatMoney, formatWeight, statusLabel, tomanToRial } from '@/lib/utils';
+import { PURCHASE_STATUS_LABELS, formatGroupedPersianInteger, formatMoney, formatWeight, statusLabel, toLatinDigits, toPersianDigits, tomanToRial } from '@/lib/utils';
 
 export default function PurchasesPage() {
   const { user } = useAuth();
@@ -47,7 +47,7 @@ export default function PurchasesPage() {
       header: 'شماره',
       render: (row) => (
         <Link className="font-medium text-gold-800" href={`/dashboard/purchases/${row.id}`} dir="ltr">
-          {row.purchaseNumber}
+          {toPersianDigits(row.purchaseNumber)}
         </Link>
       ),
     },
@@ -77,8 +77,8 @@ export default function PurchasesPage() {
         settlementType: form.settlementType,
         purchaseDate: new Date(form.purchaseDate).toISOString(),
         totalAmountRial,
-        weightGrams: form.weightGrams.trim(),
-        purityRatio: form.purityRatio.trim(),
+        weightGrams: toLatinDigits(form.weightGrams).trim(),
+        purityRatio: toLatinDigits(form.purityRatio).trim(),
         pricePerGramRial,
       });
       setFeedback('پیش‌نویس خرید ثبت شد.');
@@ -115,10 +115,10 @@ export default function PurchasesPage() {
             </select>
           </label>
           <Input label="تاریخ" type="date" dir="ltr" value={form.purchaseDate} onChange={(event) => setForm({ ...form, purchaseDate: event.target.value })} />
-          <Input label="مبلغ (تومان)" dir="ltr" value={form.totalAmountRial} onChange={(event) => setForm({ ...form, totalAmountRial: event.target.value })} />
-          <Input label="وزن" dir="ltr" value={form.weightGrams} onChange={(event) => setForm({ ...form, weightGrams: event.target.value })} />
-          <Input label="خلوص" dir="ltr" value={form.purityRatio} onChange={(event) => setForm({ ...form, purityRatio: event.target.value })} />
-          <Input label="قیمت هر گرم (تومان)" dir="ltr" value={form.pricePerGramRial} onChange={(event) => setForm({ ...form, pricePerGramRial: event.target.value })} />
+          <Input label="مبلغ (تومان)" dir="ltr" value={form.totalAmountRial} onChange={(event) => setForm({ ...form, totalAmountRial: formatGroupedPersianInteger(event.target.value) })} />
+          <Input label="وزن" dir="ltr" value={form.weightGrams} onChange={(event) => setForm({ ...form, weightGrams: toPersianDigits(event.target.value) })} />
+          <Input label="خلوص" dir="ltr" value={form.purityRatio} onChange={(event) => setForm({ ...form, purityRatio: toPersianDigits(event.target.value) })} />
+          <Input label="قیمت هر گرم (تومان)" dir="ltr" value={form.pricePerGramRial} onChange={(event) => setForm({ ...form, pricePerGramRial: formatGroupedPersianInteger(event.target.value) })} />
           <div className="flex items-end"><Button onClick={() => void create()}>ثبت پیش‌نویس</Button></div>
         </div>
       </PermissionGate>

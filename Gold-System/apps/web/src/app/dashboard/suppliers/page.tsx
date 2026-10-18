@@ -16,7 +16,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { ApiClientError } from '@/lib/api';
-import { SUPPLIER_STATUS_LABELS, statusLabel } from '@/lib/utils';
+import { SUPPLIER_STATUS_LABELS, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function SuppliersPage() {
   const { user } = useAuth();
@@ -39,7 +39,7 @@ export default function SuppliersPage() {
       header: 'نام',
       render: (row) => <Link className="font-medium text-gold-800" href={`/dashboard/suppliers/${row.id}`}>{row.name}</Link>,
     },
-    { key: 'number', header: 'شماره', render: (row) => <span dir="ltr">{row.supplierNumber}</span> },
+    { key: 'number', header: 'شماره', render: (row) => <span dir="ltr">{toPersianDigits(row.supplierNumber)}</span> },
     {
       key: 'status',
       header: 'وضعیت',

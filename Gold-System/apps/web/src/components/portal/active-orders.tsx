@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import type { Order } from '@/lib/api';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { cn, formatDate, formatWholeMoney, formatWeight, orderStatusPresentation } from '@/lib/utils';
+import { cn, formatDate, formatWholeMoney, formatWeight, orderStatusPresentation, toPersianDigits } from '@/lib/utils';
 import {
   ORDER_PERIOD_LABELS,
   filterOrdersByPeriod,
@@ -122,7 +122,7 @@ export function ActiveOrders({
                   <OrderCardLink order={order}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium" dir="ltr">
-                        {order.orderNumber}
+                        {toPersianDigits(order.orderNumber)}
                       </span>
                       <StatusBadge
                         status={orderStatusPresentation(order.status).status}
@@ -153,13 +153,13 @@ function OrderRef({ order }: { order: ActiveOrderRow }) {
   if (order.demo) {
     return (
       <span className={className} dir="ltr">
-        {order.orderNumber}
+        {toPersianDigits(order.orderNumber)}
       </span>
     );
   }
   return (
     <Link href={`/portal/orders/${order.id}`} className={className} dir="ltr">
-      {order.orderNumber}
+      {toPersianDigits(order.orderNumber)}
     </Link>
   );
 }

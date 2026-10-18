@@ -11,7 +11,7 @@ import { DataTable, type Column } from '@/components/dashboard/data-table';
 import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
 import { ApiErrorState } from '@/components/dashboard/states';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { QUOTATION_STATUS_LABELS, formatDateTime, formatMoney, formatWeight, statusLabel } from '@/lib/utils';
+import { QUOTATION_STATUS_LABELS, formatDateTime, formatMoney, formatWeight, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function QuotationsPage() {
   const { user } = useAuth();
@@ -30,7 +30,7 @@ export default function QuotationsPage() {
       header: 'شماره',
       render: (row) => (
         <Link className="font-medium text-gold-800" href={`/dashboard/quotations/${row.id}`} dir="ltr">
-          {row.quotationNumber}
+          {toPersianDigits(row.quotationNumber)}
         </Link>
       ),
     },

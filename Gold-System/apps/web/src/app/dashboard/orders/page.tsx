@@ -18,6 +18,7 @@ import {
   formatMoney,
   formatWeight,
   orderStatusPresentation,
+  toPersianDigits,
 } from '@/lib/utils';
 
 export default function OrdersPage() {
@@ -51,7 +52,7 @@ export default function OrdersPage() {
       header: 'شماره',
       render: (row) => (
         <Link className="font-medium text-gold-800" href={`/dashboard/orders/${row.id}`} dir="ltr">
-          {row.orderNumber}
+          {toPersianDigits(row.orderNumber)}
         </Link>
       ),
     },

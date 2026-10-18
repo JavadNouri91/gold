@@ -26,6 +26,7 @@ import {
   formatMoney,
   formatWeight,
   orderStatusPresentation,
+  toPersianDigits,
   statusLabel,
 } from '@/lib/utils';
 
@@ -72,7 +73,7 @@ export default function AssignmentsPage() {
       header: 'شماره',
       render: (row) => (
         <Link className="font-medium text-gold-800" href={`/dashboard/orders/${row.id}`} dir="ltr">
-          {row.orderNumber}
+          {toPersianDigits(row.orderNumber)}
         </Link>
       ),
     },

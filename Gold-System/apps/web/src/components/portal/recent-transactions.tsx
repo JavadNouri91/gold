@@ -4,7 +4,7 @@ import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import type { Trade } from '@/lib/api';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { TRADE_STATUS_LABELS, cn, formatDate, formatWholeMoney, formatWeight } from '@/lib/utils';
+import { TRADE_STATUS_LABELS, cn, formatDate, formatWholeMoney, formatWeight, toPersianDigits } from '@/lib/utils';
 import {
   ORDER_PERIOD_LABELS,
   filterOrdersByPeriod,
@@ -117,7 +117,7 @@ export function RecentTransactions({
                   <TradeCardLink trade={trade}>
                     <div className="flex items-center justify-between gap-2">
                       <span className="font-medium" dir="ltr">
-                        {trade.tradeNumber}
+                        {toPersianDigits(trade.tradeNumber)}
                       </span>
                       <StatusBadge
                         status={trade.status}
@@ -149,13 +149,13 @@ function TradeRef({ trade }: { trade: RecentTradeRow }) {
   if (trade.demo) {
     return (
       <span className={className} dir="ltr">
-        {trade.tradeNumber}
+        {toPersianDigits(trade.tradeNumber)}
       </span>
     );
   }
   return (
     <Link href={`/portal/trades/${trade.id}`} className={className} dir="ltr">
-      {trade.tradeNumber}
+      {toPersianDigits(trade.tradeNumber)}
     </Link>
   );
 }

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { formatFaNumber } from '@/lib/utils';
 
 export function ConfirmDialog({
   open,
@@ -54,7 +55,7 @@ export function ConfirmDialog({
             value={reason}
             required
             onChange={(event) => setReason(event.target.value)}
-            hint={`حداقل ${minReason.toLocaleString('fa-IR')} نویسه`}
+            hint={`حداقل ${formatFaNumber(minReason)} نویسه`}
           />
         </div>
       ) : null}

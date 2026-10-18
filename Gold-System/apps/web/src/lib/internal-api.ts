@@ -402,6 +402,7 @@ export interface StaffPayment {
   currency: string;
   status: string;
   referenceNumber: string | null;
+  hasReceipt?: boolean;
   notes: string | null;
   receivedAt: string | null;
   validatedAt: string | null;
@@ -1167,6 +1168,23 @@ export const internalPaymentsApi = {
       method: 'POST',
       body: JSON.stringify(input),
     });
+  },
+  submitInPersonReceipt(input: {
+    customerId: string;
+    method: string;
+    amount: string;
+    referenceNumber?: string;
+    notes?: string;
+    file: File;
+  }): Promise<StaffPayment> {
+    const body = new FormData();
+    body.set('customerId', input.customerId);
+    body.set('method', input.method);
+    body.set('amount', input.amount);
+    if (input.referenceNumber) body.set('referenceNumber', input.referenceNumber);
+    if (input.notes) body.set('notes', input.notes);
+    body.set('file', input.file);
+    return request('/payments/in-person-receipts', { method: 'POST', body });
   },
 };
 

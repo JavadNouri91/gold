@@ -32,7 +32,7 @@ export function CreditLimitCard({
           <ScaleIcon />
         </span>
       </div>
-      <p className="mt-3 text-2xl font-bold leading-8 tabular-nums tracking-tight text-[#202124] sm:text-3xl">
+      <p className="mt-3 text-2xl font-bold leading-8 tabular-nums text-[#202124] sm:text-3xl">
         {formatCreditAmount(figures.limit)}
       </p>
       <p className="mt-1 text-xs text-[#6B7280]">تومان</p>

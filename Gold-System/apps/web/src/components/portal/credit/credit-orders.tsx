@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { Check, Clock, Lock, Unlock, X } from 'lucide-react';
-import { formatDate, formatWeight } from '@/lib/utils';
+import { formatDate, formatWeight, toPersianDigits } from '@/lib/utils';
 import {
   CREDIT_ORDER_KIND_LABEL,
   creditOrderKind,
@@ -82,7 +82,7 @@ export function CreditOrders({
                     <tr key={order.id} className="border-b border-[#E5E7EB] last:border-0">
                       <td className="px-2 py-3 font-semibold">
                         <Link href={`/portal/orders/${order.id}`} className="inline-flex min-h-11 items-center text-[#202124]">
-                          {order.orderNumber}
+                          {toPersianDigits(order.orderNumber)}
                         </Link>
                       </td>
                       <td className="px-2 py-3">{creditOrderSideLabel(order.side)}</td>
@@ -113,7 +113,7 @@ function OrderCard({ order }: { order: CreditOrderRow }) {
         <div className="min-w-0">
           <p className="text-xs text-[#6B7280]">شماره سفارش</p>
           <p className="mt-0.5 font-bold text-[#202124]" dir="ltr">
-            {order.orderNumber}
+            {toPersianDigits(order.orderNumber)}
           </p>
         </div>
         {kind ? <KindBadge kind={kind} /> : null}

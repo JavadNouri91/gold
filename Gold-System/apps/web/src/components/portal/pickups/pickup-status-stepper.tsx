@@ -33,17 +33,21 @@ function formatStepDate(iso: string | null | undefined, compact: boolean): strin
     const date = new Date(iso);
     if (Number.isNaN(date.getTime())) return null;
     if (compact) {
-      return date.toLocaleDateString('fa-IR', {
+      return toPersianDigits(
+        date.toLocaleDateString('fa-IR', {
+          month: 'short',
+          day: 'numeric',
+        }),
+      );
+    }
+    return toPersianDigits(
+      date.toLocaleString('fa-IR', {
         month: 'short',
         day: 'numeric',
-      });
-    }
-    return date.toLocaleString('fa-IR', {
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    );
   } catch {
     return null;
   }

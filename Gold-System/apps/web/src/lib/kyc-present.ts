@@ -177,7 +177,7 @@ export function formatKycDateTime(iso: string | null | undefined): string {
       day: '2-digit',
     });
     const time = date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-    return `${day} - ${time}`;
+    return toPersianDigits(`${day} - ${time}`);
   } catch {
     return '—';
   }

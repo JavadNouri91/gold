@@ -12,7 +12,7 @@ import { TradeApprovalPanel } from '@/components/dashboard/trade-panel';
 import { SettlementSummary } from '@/components/dashboard/payment-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { SETTLEMENT_STATUS_LABELS, TRADE_STATUS_LABELS, formatMoney, formatWeight, statusLabel } from '@/lib/utils';
+import { SETTLEMENT_STATUS_LABELS, TRADE_STATUS_LABELS, formatMoney, formatWeight, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function TradeDetailPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
@@ -31,7 +31,7 @@ export default function TradeDetailPage({ params }: { params: { id: string } }) 
 
   return (
     <div className="space-y-4">
-      <PageHeader title="جزئیات معامله" description={trade.data?.tradeNumber} />
+      <PageHeader title="جزئیات معامله" description={trade.data?.tradeNumber ? toPersianDigits(trade.data.tradeNumber) : undefined} />
       {trade.error ? <ApiErrorState error={trade.error} onRetry={() => void trade.mutate()} /> : null}
       {trade.data ? (
         <Card>

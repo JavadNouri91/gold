@@ -10,7 +10,9 @@ import { ApiErrorState } from '@/components/dashboard/states';
 import { PaymentActionPanel } from '@/components/dashboard/payment-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, formatDateTime, formatMoney, statusLabel } from '@/lib/utils';
+import { fetchBlob } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { PAYMENT_METHOD_LABELS, PAYMENT_STATUS_LABELS, formatDateTime, formatMoney, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function PaymentDetailPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
@@ -33,9 +35,25 @@ export default function PaymentDetailPage({ params }: { params: { id: string } }
           <CardContent className="space-y-2 text-sm">
             <p>مبلغ {formatMoney(payment.data.amount)}</p>
             <p>روش {statusLabel(PAYMENT_METHOD_LABELS, payment.data.method)}</p>
-            <p>ارجاع {payment.data.referenceNumber ?? '—'}</p>
+            <p>ارجاع {payment.data.referenceNumber ? toPersianDigits(payment.data.referenceNumber) : '—'}</p>
             <p>{formatDateTime(payment.data.createdAt)}</p>
+            {payment.data.notes ? <p>{payment.data.notes}</p> : null}
             <StatusBadge status={payment.data.status} label={statusLabel(PAYMENT_STATUS_LABELS, payment.data.status)} />
+            {payment.data.hasReceipt ? (
+              <Button
+                variant="outline"
+                onClick={() => {
+                  void fetchBlob(`/payments/${payment.data!.id}/receipt`)
+                    .then((blob) => {
+                      const url = URL.createObjectURL(blob);
+                      window.open(url, '_blank', 'noopener,noreferrer');
+                    })
+                    .catch(() => undefined);
+                }}
+              >
+                مشاهده فیش
+              </Button>
+            ) : null}
             <PaymentActionPanel
               payment={payment.data}
               status={status.data}

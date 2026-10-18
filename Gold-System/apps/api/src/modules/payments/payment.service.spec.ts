@@ -38,7 +38,7 @@ import { NotificationService } from '../notifications/application/notification.s
 import { PrismaService } from '../../database/prisma.service';
 import { StorageService } from '../../common/storage/storage.service';
 import { CustomerAccountRepository } from '../customer-accounts/infrastructure/repositories/customer-account.repository';
-import { ForbiddenException } from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import {
   PaymentNotFoundException,
   TradeNotPayableException,
@@ -1026,6 +1026,69 @@ describe('PaymentService', () => {
       );
       expect(result.tradeId).toBeNull();
       expect(result.relatedSide).toBeNull();
+    });
+
+    it('lets staff store a paper slip for a named customer', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-shop' });
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+      paymentRepo.createPaymentInTx.mockResolvedValue(
+        makePaymentEntity({
+          tradeId: null,
+          customerId: 'cust-shop',
+          amount: new Decimal('2500'),
+        }),
+      );
+
+      const result = await service.submitInPersonReceipt('staff-1', {
+        customerId: 'cust-shop',
+        method: PaymentMethod.BANK_TRANSFER,
+        amount: '2500',
+        referenceNumber: 'REF-IN-1',
+        notes: 'تحویل در فروشگاه',
+        file: {
+          buffer: jpeg,
+          mimetype: 'image/jpeg',
+          size: jpeg.length,
+          originalname: 'slip.jpg',
+        },
+      });
+
+      expect(storage.upload).toHaveBeenCalled();
+      expect(paymentRepo.createPaymentInTx).toHaveBeenCalledWith(
+        fakeTx,
+        expect.objectContaining({
+          tradeId: null,
+          customerId: 'cust-shop',
+          recordedByUserId: 'staff-1',
+          notes: expect.stringContaining('فیش حضوری'),
+        }),
+      );
+      expect(result.customerId).toBe('cust-shop');
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYMENT_RECEIPT_IN_PERSON' }),
+      );
+    });
+
+    it('rejects an in-person receipt when the customer does not exist', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue(null);
+      const jpeg = Buffer.from([0xff, 0xd8, 0xff, 0x00]);
+
+      await expect(
+        service.submitInPersonReceipt('staff-1', {
+          customerId: 'missing',
+          method: PaymentMethod.BANK_TRANSFER,
+          amount: '1000',
+          referenceNumber: 'REF-1',
+          file: {
+            buffer: jpeg,
+            mimetype: 'image/jpeg',
+            size: jpeg.length,
+            originalname: 'slip.jpg',
+          },
+        }),
+      ).rejects.toBeInstanceOf(NotFoundException);
+
+      expect(storage.upload).not.toHaveBeenCalled();
     });
 
     it('lets staff read a payment without an ownership filter', async () => {

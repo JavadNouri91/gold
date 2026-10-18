@@ -1,6 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
+import { formatFaNumber } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/alert';
 import { TableSkeleton } from './states';
 
@@ -74,8 +75,8 @@ export function DataTable<T extends { id: string }>({
         <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">
           <span className="text-muted-foreground">
             {total != null && pageSize
-              ? `نمایش ${Math.min((page - 1) * pageSize + 1, total).toLocaleString('fa-IR')} تا ${Math.min(page * pageSize, total).toLocaleString('fa-IR')} از ${total.toLocaleString('fa-IR')} مورد`
-              : `صفحه ${page.toLocaleString('fa-IR')} از ${totalPages.toLocaleString('fa-IR')}`}
+              ? `نمایش ${formatFaNumber(Math.min((page - 1) * pageSize + 1, total))} تا ${formatFaNumber(Math.min(page * pageSize, total))} از ${formatFaNumber(total)} مورد`
+              : `صفحه ${formatFaNumber(page)} از ${formatFaNumber(totalPages)}`}
           </span>
           <div className="flex flex-wrap items-center gap-2">
             {onPageSizeChange && pageSize ? (
@@ -88,7 +89,7 @@ export function DataTable<T extends { id: string }>({
                 >
                   {pageSizeOptions.map((size) => (
                     <option key={size} value={size}>
-                      {size.toLocaleString('fa-IR')}
+                      {formatFaNumber(size)}
                     </option>
                   ))}
                 </select>
@@ -110,7 +111,7 @@ export function DataTable<T extends { id: string }>({
                       aria-current={number === page ? 'page' : undefined}
                       onClick={() => onPageChange(number)}
                     >
-                      {number.toLocaleString('fa-IR')}
+                      {formatFaNumber(number)}
                     </Button>
                   </span>
                 );

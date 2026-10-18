@@ -62,6 +62,7 @@ describe('portal orders pagination', () => {
     renderPage();
 
     expect(await screen.findByText('نمایش ۱ تا ۱۰ از ۲۵ سفارش')).toBeInTheDocument();
+    expect(screen.getAllByText('۱ گرم').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'صفحه ۱', current: 'page' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'صفحه ۲' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'صفحه ۳' })).toBeInTheDocument();

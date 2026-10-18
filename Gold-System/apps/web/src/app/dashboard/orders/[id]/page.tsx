@@ -18,6 +18,7 @@ import {
   formatPurity,
   formatWeight,
   orderStatusPresentation,
+  toPersianDigits,
 } from '@/lib/utils';
 
 export default function OrderDetailPage({ params }: { params: { id: string } }) {
@@ -37,7 +38,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
 
   return (
     <div className="space-y-4">
-      <PageHeader title="جزئیات سفارش" description={order.data?.orderNumber} />
+      <PageHeader title="جزئیات سفارش" description={order.data?.orderNumber ? toPersianDigits(order.data.orderNumber) : undefined} />
       {order.error ? <ApiErrorState error={order.error} onRetry={() => void order.mutate()} /> : null}
       {order.data ? (
         <>
@@ -73,7 +74,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
           <ul className="divide-y text-sm">
             {(quotations.data ?? []).map((quote) => (
               <li key={quote.id} className="py-2">
-                <Link href={`/dashboard/quotations/${quote.id}`} dir="ltr">{quote.quotationNumber}</Link>
+                <Link href={`/dashboard/quotations/${quote.id}`} dir="ltr">{toPersianDigits(quote.quotationNumber)}</Link>
                 <span className="mr-3">{formatMoney(quote.totalAmountRial)}</span>
               </li>
             ))}

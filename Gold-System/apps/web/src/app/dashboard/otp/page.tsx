@@ -10,7 +10,7 @@ import { firstStaffRoute } from '@/lib/nav';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
-import { formatMobile } from '@/lib/utils';
+import { formatMobile, toLatinDigits, toPersianDigits } from '@/lib/utils';
 
 interface OtpForm {
   code: string;
@@ -27,7 +27,10 @@ export default function StaffOtpPage() {
     token: string;
     sessions: Array<{ id: string; device?: string; browser?: string; os?: string; ipAddress?: string | null }>;
   } | null>(null);
-  const { register, handleSubmit, formState: { errors } } = useForm<OtpForm>();
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<OtpForm>({
+    defaultValues: { code: '' },
+  });
+  const code = watch('code');
 
   useEffect(() => {
     const stored = sessionStorage.getItem('staff_login_mobile');
@@ -43,7 +46,7 @@ export default function StaffOtpPage() {
     setCloseToken(null);
     setIsLoading(true);
     try {
-      await verifyOtp(mobile, data.code.trim());
+      await verifyOtp(mobile, toLatinDigits(data.code).replace(/\D/g, ''));
       sessionStorage.removeItem('staff_login_mobile');
       const raw = localStorage.getItem('gold_user');
       const permissions = raw ? (JSON.parse(raw) as { permissions?: string[] }).permissions : [];
@@ -132,7 +135,7 @@ export default function StaffOtpPage() {
                 }}
               >
                 <span>{session.device ?? 'دستگاه'} · {session.browser ?? 'مرورگر'}</span>
-                <span dir="ltr">{session.ipAddress ?? ''}</span>
+                <span dir="ltr">{session.ipAddress ? toPersianDigits(session.ipAddress) : ''}</span>
               </Button>
             ))}
           </div>
@@ -141,9 +144,17 @@ export default function StaffOtpPage() {
           <Input
             label="کد تأیید"
             dir="ltr"
+            inputMode="numeric"
+            autoComplete="one-time-code"
             maxLength={6}
             error={errors.code?.message}
             {...register('code', { required: 'کد الزامی است', minLength: { value: 4, message: 'کد ناقص است' } })}
+            value={toPersianDigits(code)}
+            onChange={(event) => {
+              setValue('code', toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 6), {
+                shouldValidate: true,
+              });
+            }}
           />
           <Button className="w-full" type="submit" isLoading={isLoading}>ورود</Button>
         </form>

@@ -7,7 +7,7 @@ import { ApiClientError } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
-import { formatMobile } from '@/lib/utils';
+import { formatMobile, toLatinDigits, toPersianDigits } from '@/lib/utils';
 
 interface OtpForm {
   code: string;
@@ -30,7 +30,10 @@ export default function OtpPage() {
     setMobile(stored);
   }, [router]);
 
-  const { register, handleSubmit, formState: { errors } } = useForm<OtpForm>();
+  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<OtpForm>({
+    defaultValues: { code: '' },
+  });
+  const code = watch('code');
 
   const onSubmit = async (data: OtpForm) => {
     if (!mobile) return;
@@ -38,7 +41,7 @@ export default function OtpPage() {
     setCloseToken(null);
     setIsLoading(true);
     try {
-      await verifyOtp(mobile, data.code.trim());
+      await verifyOtp(mobile, toLatinDigits(data.code).replace(/\D/g, ''));
       sessionStorage.removeItem('login_mobile');
       router.replace('/portal/dashboard');
     } catch (err) {
@@ -108,6 +111,7 @@ export default function OtpPage() {
                 type="text"
                 inputMode="numeric"
                 maxLength={6}
+                autoComplete="one-time-code"
                 error={errors.code?.message}
                 {...register('code', {
                   required: 'کد تأیید الزامی است',
@@ -116,6 +120,12 @@ export default function OtpPage() {
                     message: 'کد تأیید باید عددی باشد',
                   },
                 })}
+                value={toPersianDigits(code)}
+                onChange={(event) => {
+                  setValue('code', toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 6), {
+                    shouldValidate: true,
+                  });
+                }}
               />
               <Button type="submit" className="w-full" isLoading={isLoading}>
                 تأیید و ورود

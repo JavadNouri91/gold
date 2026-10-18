@@ -20,6 +20,7 @@ import {
   formatWeight,
   feeLineLabel,
   orderStatusPresentation,
+  toPersianDigits,
   PAYMENT_METHOD_LABELS,
   SETTLEMENT_STATUS_LABELS,
 } from '@/lib/utils';
@@ -92,7 +93,7 @@ export default function OrderDetailPage() {
               ← بازگشت
             </button>
           </div>
-          <h1 className="text-2xl font-bold" dir="ltr">{order.orderNumber}</h1>
+          <h1 className="text-2xl font-bold" dir="ltr">{toPersianDigits(order.orderNumber)}</h1>
           <p className="text-sm text-muted-foreground">{formatDate(order.createdAt)}</p>
         </div>
         <StatusBadge {...orderStatusPresentation(order.status)} />
@@ -162,10 +163,10 @@ export default function OrderDetailPage() {
               <DetailRow label="مبلغ نهایی" value={formatMoney(activity.totalAmountRial)} />
               <DetailRow label="وزن" value={formatWeight(activity.weightGrams)} />
               {activity.quotationNumber ? (
-                <DetailRow label="شماره پیش‌فاکتور" value={activity.quotationNumber} />
+                <DetailRow label="شماره پیش‌فاکتور" value={toPersianDigits(activity.quotationNumber)} />
               ) : null}
               {activity.tradeNumber ? (
-                <DetailRow label="شماره معامله" value={activity.tradeNumber} />
+                <DetailRow label="شماره معامله" value={toPersianDigits(activity.tradeNumber)} />
               ) : null}
               {activity.paymentMethods.length > 0 ? (
                 <DetailRow

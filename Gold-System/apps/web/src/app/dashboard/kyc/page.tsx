@@ -106,7 +106,7 @@ export default function KycQueuePage() {
             {row.fullName}
           </Link>
           <p dir="ltr" className="mt-1 text-xs text-muted-foreground">
-            {row.customerNumber}
+            {toPersianDigits(row.customerNumber)}
           </p>
         </div>
       ),

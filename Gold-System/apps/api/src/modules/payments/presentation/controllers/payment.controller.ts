@@ -148,6 +148,36 @@ export class PaymentController {
   }
 
   /**
+   * Staff uploads a paper deposit slip received at the shop.
+   * POST /payments/in-person-receipts
+   */
+  @Post('in-person-receipts')
+  @RequirePermissions('payment.create')
+  @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_RECEIPT_BYTES } }))
+  submitInPersonReceipt(
+    @Request() req: { user: { userId?: string; sub?: string } },
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Body()
+    body: { customerId?: string; method?: string; amount?: string; referenceNumber?: string; notes?: string },
+  ) {
+    if (!file || file.size <= 0) throw new BadRequestException('فایل رسید انتخاب نشده است.');
+    if (!body.customerId || !body.method || !body.amount) {
+      throw new BadRequestException('اطلاعات پرداخت ناقص است.');
+    }
+    if (!Object.values(PaymentMethod).includes(body.method as PaymentMethod)) {
+      throw new BadRequestException('روش پرداخت نامعتبر است.');
+    }
+    return this.paymentService.submitInPersonReceipt(requireActorId(req.user), {
+      customerId: body.customerId,
+      method: body.method as PaymentMethod,
+      amount: body.amount,
+      referenceNumber: body.referenceNumber,
+      notes: body.notes,
+      file,
+    });
+  }
+
+  /**
    * POST /payments/:id/validate
    * Validate a PENDING payment (accountant confirmation).
    * Transitions: PENDING → VALIDATED

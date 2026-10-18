@@ -10,7 +10,7 @@ import { ForbiddenNotice, PermissionGate } from '@/components/dashboard/permissi
 import { ApiErrorState } from '@/components/dashboard/states';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { SUPPLIER_STATUS_LABELS, formatMoney, statusLabel } from '@/lib/utils';
+import { SUPPLIER_STATUS_LABELS, formatMoney, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function SupplierDetailPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
@@ -31,7 +31,7 @@ export default function SupplierDetailPage({ params }: { params: { id: string } 
 
   return (
     <div className="space-y-4">
-      <PageHeader title={supplier.data?.name ?? 'تأمین‌کننده'} description={supplier.data?.supplierNumber} />
+      <PageHeader title={supplier.data?.name ?? 'تأمین‌کننده'} description={supplier.data?.supplierNumber ? toPersianDigits(supplier.data.supplierNumber) : undefined} />
       {supplier.error ? <ApiErrorState error={supplier.error} /> : null}
       {supplier.data ? (
         <Card>
@@ -66,7 +66,7 @@ export default function SupplierDetailPage({ params }: { params: { id: string } 
           <ul className="divide-y text-sm">
             {(purchases.data ?? []).map((purchase) => (
               <li key={purchase.id} className="flex justify-between py-2">
-                <Link href={`/dashboard/purchases/${purchase.id}`} dir="ltr">{purchase.purchaseNumber}</Link>
+                <Link href={`/dashboard/purchases/${purchase.id}`} dir="ltr">{toPersianDigits(purchase.purchaseNumber)}</Link>
                 <span>{formatMoney(purchase.totalAmountRial)}</span>
               </li>
             ))}

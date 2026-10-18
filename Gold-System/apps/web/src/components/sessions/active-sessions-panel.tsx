@@ -6,7 +6,7 @@ import { Alert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { AuthSession } from '@/lib/api';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, toPersianDigits } from '@/lib/utils';
 
 const LABEL: Record<string, string> = {
   Desktop: 'رایانه',
@@ -87,7 +87,7 @@ export function ActiveSessionsPanel({
             <dl className="mt-2 grid grid-cols-1 gap-1 text-xs text-muted-foreground sm:grid-cols-2">
               <div>سیستم: {label(session.os, 'نامشخص')}</div>
               <div>
-                IP: <bdi dir="ltr">{session.ipAddress ?? '—'}</bdi>
+                IP: <bdi dir="ltr">{session.ipAddress ? toPersianDigits(session.ipAddress) : '—'}</bdi>
               </div>
               <div>ورود: {formatDateTime(session.createdAt)}</div>
               <div>آخرین فعالیت: {formatDateTime(session.lastActivityAt ?? session.createdAt)}</div>

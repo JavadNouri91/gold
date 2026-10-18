@@ -501,14 +501,14 @@ export function NotificationsInbox() {
                               <span className="min-w-0 flex-1">
                                 <span className="flex items-start justify-between gap-2">
                                   <span className={`text-sm text-[#202124] ${unread ? 'font-bold' : 'font-medium'}`}>
-                                    {title}
+                                    {toPersianDigits(title)}
                                   </span>
                                   {unread ? (
                                     <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-[#C8922E]" aria-hidden />
                                   ) : null}
                                 </span>
                                 <span className="sr-only">{unread ? 'خوانده نشده' : 'خوانده شده'}</span>
-                                <span className="mt-1 line-clamp-2 block text-sm leading-6 text-[#6B7280]">{item.body}</span>
+                                <span className="mt-1 line-clamp-2 block text-sm leading-6 text-[#6B7280]">{toPersianDigits(item.body)}</span>
                                 <span className="mt-2 flex items-center justify-between gap-2">
                                   <span className="text-xs text-[#6B7280]">{notificationStamp(item.createdAt)}</span>
                                   <span className="text-xs font-medium text-[#C8922E]">
@@ -714,7 +714,7 @@ function DetailBody({
   return (
     <div className="space-y-4 text-sm">
       <p className="text-[#6B7280]">نوع اعلان: {categoryLabel(item.type)}</p>
-      <p className="whitespace-pre-wrap leading-7 text-[#202124]">{item.body}</p>
+      <p className="whitespace-pre-wrap leading-7 text-[#202124]">{toPersianDigits(item.body)}</p>
       <p className="text-xs text-[#6B7280]">{notificationStamp(item.createdAt)}</p>
       <p className="text-xs text-[#6B7280]">{unread ? 'خوانده نشده' : 'خوانده شده'}</p>
       {relation ? (

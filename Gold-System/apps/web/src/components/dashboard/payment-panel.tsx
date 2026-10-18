@@ -8,7 +8,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { PermissionGate } from './permission-gate';
 import { internalPaymentsApi, type StaffPayment, type TradePaymentStatus } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
-import { formatMoney, tomanToRial } from '@/lib/utils';
+import { formatGroupedPersianInteger, formatMoney, tomanToRial } from '@/lib/utils';
 
 export function PaymentActionPanel({
   payment,
@@ -75,7 +75,7 @@ export function PaymentActionPanel({
           label="مبلغ تخصیص (تومان)"
           dir="ltr"
           value={amount}
-          onChange={(event) => setAmount(event.target.value)}
+          onChange={(event) => setAmount(formatGroupedPersianInteger(event.target.value))}
         />
       ) : null}
       <ConfirmDialog

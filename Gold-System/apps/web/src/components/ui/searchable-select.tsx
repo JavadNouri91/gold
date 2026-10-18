@@ -11,7 +11,7 @@
 
 import { useState, useRef, useEffect, useId, useMemo } from 'react';
 import { ChevronDown, Search, X } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatFaNumber } from '@/lib/utils';
 
 export interface SearchableSelectOption {
   value: string;
@@ -270,8 +270,8 @@ export function SearchableSelect({
           {/* Footer: count */}
           {filtered.length > 0 && (
             <p className="border-t px-3 py-1.5 text-[11px] text-muted-foreground">
-              {filtered.length.toLocaleString('fa-IR')} مورد
-              {query && ` از ${options.length.toLocaleString('fa-IR')}`}
+              {formatFaNumber(filtered.length)} مورد
+              {query && ` از ${formatFaNumber(options.length)}`}
             </p>
           )}
         </div>

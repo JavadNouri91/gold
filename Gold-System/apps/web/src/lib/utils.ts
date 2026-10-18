@@ -19,9 +19,19 @@ export function toLatinDigits(value: string): string {
   });
 }
 
-/** ASCII, Persian, or Arabic digits become Persian ۰-۹. */
+/**
+ * ASCII, Persian, or Arabic digits become Persian ۰-۹.
+ * This is the display rule for every number the site shows. Stored and
+ * API values stay Latin; call this (or a formatter that calls it) at render.
+ */
 export function toPersianDigits(value: string): string {
   return toLatinDigits(value).replace(/\d/g, (digit) => FA_DIGITS[Number(digit)] ?? digit);
+}
+
+/** Integer shown on screen. Grouping follows fa-IR; digits are always Persian. */
+export function formatFaNumber(value: number, options?: Intl.NumberFormatOptions): string {
+  if (!Number.isFinite(value)) return '—';
+  return toPersianDigits(value.toLocaleString('fa-IR', options));
 }
 
 /**
@@ -263,15 +273,20 @@ export function feeLineLabel(
 }
 
 /**
- * Format gold weight in grams (6 decimal places, trimmed).
+ * Format gold weight in grams with Persian digits and no thousands grouping.
  */
 export function formatGrams(value: string | number | null | undefined): string {
   if (value == null || value === '') return '—';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(num)) return '—';
-  // Remove trailing zeros up to 3 decimal places minimum
-  const formatted = num.toFixed(6).replace(/\.?0+$/, '');
-  return formatted + ' گرم';
+  const trimmed = String(value).trim();
+  if (!/^-?\d+(\.\d+)?$/.test(trimmed)) return '—';
+  const negative = trimmed.startsWith('-');
+  const unsigned = negative ? trimmed.slice(1) : trimmed;
+  const [intPart, fraction = ''] = unsigned.split('.');
+  const whole = (intPart ?? '0').replace(/^0+(?=\d)/, '') || '0';
+  const fractionTrimmed = fraction.replace(/0+$/, '');
+  const body = fractionTrimmed ? `${whole}.${fractionTrimmed}` : whole;
+  const signed = negative && body !== '0' ? `-${body}` : body;
+  return `${toPersianDigits(signed)} گرم`;
 }
 
 /**
@@ -290,7 +305,7 @@ export function formatPurity(value: string | null | undefined): string {
     '0.585': '۱۴ عیار',
   };
   const key = num.toFixed(3);
-  return karats[key] ?? `${(num * 100).toFixed(1)}٪`;
+  return karats[key] ?? `${toPersianDigits((num * 100).toFixed(1))}٪`;
 }
 
 // ─── Date formatting ──────────────────────────────────────────────────────────
@@ -301,11 +316,13 @@ export function formatPurity(value: string | null | undefined): string {
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleDateString('fa-IR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
+    return toPersianDigits(
+      new Date(iso).toLocaleDateString('fa-IR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      }),
+    );
   } catch {
     return '—';
   }
@@ -317,13 +334,15 @@ export function formatDate(iso: string | null | undefined): string {
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleString('fa-IR', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return toPersianDigits(
+      new Date(iso).toLocaleString('fa-IR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    );
   } catch {
     return '—';
   }
@@ -360,10 +379,12 @@ export function formatCountdown(expiresAt: string | null | undefined, now = Date
 export function formatTime(iso: string | null | undefined): string {
   if (!iso) return '—';
   try {
-    return new Date(iso).toLocaleTimeString('fa-IR', {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return toPersianDigits(
+      new Date(iso).toLocaleTimeString('fa-IR', {
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+    );
   } catch {
     return '—';
   }

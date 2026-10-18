@@ -1,12 +1,11 @@
-import type { ActivitySeriesPoint, ActivityTransaction, CurrentPrice } from '@/lib/api';
-import type { AssetChartRange } from '@/lib/asset-chart-range';
+import type { ActivitySeriesPoint, CurrentPrice } from '@/lib/api';
+import type { AssetChartRange, WeightHistoryBucket } from '@/lib/asset-chart-range';
 import type { PortfolioPosition } from '@/lib/customer-portfolio';
 import { AssetComposition } from './asset-composition';
-import { AssetQuickActions } from './asset-quick-actions';
+import { AssetTradeActions } from './asset-trade-actions';
 import { GoldBalanceHistory } from './gold-balance-history';
 import { PortfolioSummary } from './portfolio-summary';
 import { PortfolioValueChart } from './portfolio-value-chart';
-import { RecentGoldTransactions } from './recent-gold-transactions';
 
 export function AssetsPage({
   position,
@@ -19,14 +18,17 @@ export function AssetsPage({
   onRefreshPrice,
   range,
   onRangeChange,
+  weightBucket,
+  onWeightBucketChange,
   weightPoints,
   historyLoading,
   historyError,
   onRetryHistory,
-  transactions,
-  transactionsLoading,
-  transactionsError,
-  onRetryTransactions,
+  valuePoints,
+  valueLoading,
+  valueError,
+  onRetryValue,
+  availableRial,
 }: {
   position: PortfolioPosition | null;
   holdingLoading?: boolean;
@@ -36,16 +38,19 @@ export function AssetsPage({
   priceLoading?: boolean;
   priceError?: boolean;
   onRefreshPrice?: () => void;
+  availableRial?: string | null;
   range: AssetChartRange;
   onRangeChange: (range: AssetChartRange) => void;
+  weightBucket: WeightHistoryBucket;
+  onWeightBucketChange: (bucket: WeightHistoryBucket) => void;
   weightPoints: ActivitySeriesPoint[];
   historyLoading?: boolean;
   historyError?: boolean;
   onRetryHistory?: () => void;
-  transactions: ActivityTransaction[];
-  transactionsLoading?: boolean;
-  transactionsError?: boolean;
-  onRetryTransactions?: () => void;
+  valuePoints?: ActivitySeriesPoint[];
+  valueLoading?: boolean;
+  valueError?: boolean;
+  onRetryValue?: () => void;
 }) {
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 overflow-x-hidden">
@@ -72,27 +77,44 @@ export function AssetsPage({
         onRefreshPrice={onRefreshPrice}
       />
 
-      <PortfolioValueChart range={range} onRangeChange={onRangeChange} />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <AssetComposition position={position} />
-        <GoldBalanceHistory
-          points={weightPoints}
-          range={range}
-          loading={historyLoading}
-          error={historyError}
-          onRetry={onRetryHistory}
-        />
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
+        <div className="min-w-0 lg:col-span-3">
+          <PortfolioValueChart
+            range={range}
+            onRangeChange={onRangeChange}
+            points={valuePoints}
+            livePriceRial={price?.normalizedValue}
+            weightGrams={position?.weightGrams}
+            reservedPickupGrams={position?.reservedPickupGrams}
+            availableRial={availableRial}
+            loading={valueLoading}
+            error={valueError}
+            onRetry={onRetryValue}
+          />
+        </div>
+        <div className="min-w-0 lg:col-span-2">
+          <AssetComposition
+            position={position}
+            availableRial={availableRial}
+            livePriceRial={price?.normalizedValue}
+          />
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <RecentGoldTransactions
-          rows={transactions}
-          loading={transactionsLoading}
-          error={transactionsError}
-          onRetry={onRetryTransactions}
-        />
-        <AssetQuickActions />
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
+        <div className="min-w-0 lg:col-span-3">
+          <GoldBalanceHistory
+            points={weightPoints}
+            bucket={weightBucket}
+            onBucketChange={onWeightBucketChange}
+            loading={historyLoading}
+            error={historyError}
+            onRetry={onRetryHistory}
+          />
+        </div>
+        <div className="min-w-0 lg:col-span-2">
+          <AssetTradeActions position={position} price={price} />
+        </div>
       </div>
     </div>
   );

@@ -25,13 +25,15 @@ import {
   PAYMENT_STATUS_LABELS,
   TRADE_STATUS_LABELS,
   formatDateTime,
+  formatFaNumber,
   formatMoney,
   formatWeight,
   statusLabel,
+  toPersianDigits,
 } from '@/lib/utils';
 
 function count(value: number): string {
-  return value.toLocaleString('fa-IR');
+  return formatFaNumber(value);
 }
 
 export default function OverviewPage() {
@@ -92,7 +94,7 @@ export default function OverviewPage() {
                   <ul className="divide-y">
                     {data.recentTrades.map((trade) => (
                       <li key={trade.id} className="flex items-center justify-between py-3 text-sm">
-                        <Link href={`/dashboard/trades/${trade.id}`} className="font-medium" dir="ltr">{trade.tradeNumber}</Link>
+                        <Link href={`/dashboard/trades/${trade.id}`} className="font-medium" dir="ltr">{toPersianDigits(trade.tradeNumber)}</Link>
                         <span>{formatMoney(trade.totalAmountRial)}</span>
                         <StatusBadge status={trade.status} label={statusLabel(TRADE_STATUS_LABELS, trade.status)} />
                         <span className="text-xs text-muted-foreground">{formatDateTime(trade.createdAt)}</span>

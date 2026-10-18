@@ -37,6 +37,10 @@ export function compareDecimal(a: string, b: string): number {
   return as < bs ? -1 : 1;
 }
 
+export function addDecimal(a: string, b: string): string {
+  return fromScaled(toScaled(a) + toScaled(b));
+}
+
 export function subtractDecimal(a: string, b: string): string {
   return fromScaled(toScaled(a) - toScaled(b));
 }

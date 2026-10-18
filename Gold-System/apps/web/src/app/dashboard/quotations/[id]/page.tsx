@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApiClientError } from '@/lib/api';
-import { QUOTATION_STATUS_LABELS, formatDateTime, formatMoney, formatWeight, statusLabel } from '@/lib/utils';
+import { QUOTATION_STATUS_LABELS, formatDateTime, formatFaNumber, formatMoney, formatWeight, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function QuotationDetailPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
@@ -58,10 +58,10 @@ export default function QuotationDetailPage({ params }: { params: { id: string }
       {row ? (
         <Card>
           <CardHeader>
-            <CardTitle dir="ltr">{row.quotationNumber}</CardTitle>
+            <CardTitle dir="ltr">{toPersianDigits(row.quotationNumber)}</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-2 text-sm sm:grid-cols-2">
-            <p>نسخه {row.version.toLocaleString('fa-IR')}</p>
+            <p>نسخه {formatFaNumber(row.version)}</p>
             <StatusBadge status={row.status} label={statusLabel(QUOTATION_STATUS_LABELS, row.status)} />
             <p>وزن {formatWeight(row.weightGrams)}</p>
             <p>مبلغ {formatMoney(row.totalAmountRial)}</p>

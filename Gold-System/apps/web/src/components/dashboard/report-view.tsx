@@ -9,7 +9,7 @@ import { PageHeader } from './page-header';
 import { FilterBar } from './filter-bar';
 import { ForbiddenNotice } from './permission-gate';
 import { ApiErrorState } from './states';
-import { formatMoney, formatWeight } from '@/lib/utils';
+import { formatDateTime, formatMoney, formatWeight, toPersianDigits } from '@/lib/utils';
 
 export type ReportKind =
   | 'customers'
@@ -121,7 +121,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
       <SimpleTable
         headers={['شماره', 'نام', 'وضعیت', 'احراز', 'سقف اعتبار', 'در دسترس']}
         rows={report.customers.map((row) => [
-          row.customerNumber,
+          toPersianDigits(row.customerNumber),
           `${row.firstName} ${row.lastName}`,
           row.status,
           row.kycStatus ?? '—',
@@ -137,7 +137,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
       <SimpleTable
         headers={['شماره', 'وضعیت', 'مبلغ', 'وزن']}
         rows={report.orders.map((row) => [
-          row.orderNumber,
+          toPersianDigits(row.orderNumber),
           row.status,
           formatMoney(row.totalAmountRial),
           formatWeight(row.weightGrams),
@@ -152,7 +152,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
         <p className="text-sm">جمع مبلغ {formatMoney(report.totalValueRial)} — جمع وزن {formatWeight(report.totalWeightGrams)}</p>
         <SimpleTable
           headers={['شماره', 'وضعیت', 'مبلغ', 'وزن']}
-          rows={report.trades.map((row) => [row.tradeNumber, row.status, formatMoney(row.totalAmountRial), formatWeight(row.weightGrams)])}
+          rows={report.trades.map((row) => [toPersianDigits(row.tradeNumber), row.status, formatMoney(row.totalAmountRial), formatWeight(row.weightGrams)])}
         />
       </div>
     );
@@ -164,7 +164,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
         <p className="text-sm">جمع {formatMoney(report.totalValueRial)}</p>
         <SimpleTable
           headers={['روش', 'وضعیت', 'مبلغ', 'ارجاع']}
-          rows={report.payments.map((row) => [row.method, row.status, formatMoney(row.amount), row.referenceNumber ?? '—'])}
+          rows={report.payments.map((row) => [row.method, row.status, formatMoney(row.amount), row.referenceNumber ? toPersianDigits(row.referenceNumber) : '—'])}
         />
       </div>
     );
@@ -188,7 +188,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
         <SimpleTable
           headers={['کد', 'نام', 'بدهکار', 'بستانکار', 'خالص']}
           rows={report.accountBalances.map((row) => [
-            row.accountCode,
+            toPersianDigits(row.accountCode),
             row.accountName,
             formatMoney(row.totalDebit),
             formatMoney(row.totalCredit),
@@ -197,7 +197,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
         />
         <SimpleTable
           headers={['حساب', 'بدهکار', 'بستانکار', 'منبع', 'تاریخ']}
-          rows={report.entries.map((row) => [row.accountCode, formatMoney(row.debit), formatMoney(row.credit), row.sourceType, row.createdAt])}
+          rows={report.entries.map((row) => [toPersianDigits(row.accountCode), formatMoney(row.debit), formatMoney(row.credit), row.sourceType, formatDateTime(row.createdAt)])}
         />
       </div>
     );
@@ -209,7 +209,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
         <SimpleTable
           headers={['کد', 'نام', 'خالص', 'ورود', 'خروج']}
           rows={report.accountBalances.map((row) => [
-            row.accountCode,
+            toPersianDigits(row.accountCode),
             row.accountName,
             formatWeight(row.netQuantityGrams),
             formatWeight(row.totalInGrams),
@@ -218,7 +218,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
         />
         <SimpleTable
           headers={['حساب', 'جهت', 'وزن', 'منبع']}
-          rows={report.entries.map((row) => [row.accountCode, row.direction, formatWeight(row.quantity), row.sourceType])}
+          rows={report.entries.map((row) => [toPersianDigits(row.accountCode), row.direction, formatWeight(row.quantity), row.sourceType])}
         />
       </div>
     );
@@ -229,7 +229,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
       <SimpleTable
         headers={['شماره', 'نام', 'خرید', 'مانده']}
         rows={report.suppliers.map((row) => [
-          row.supplierNumber,
+          toPersianDigits(row.supplierNumber),
           row.name,
           formatMoney(row.totalPurchasedRial),
           formatMoney(row.outstandingRial),

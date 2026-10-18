@@ -18,7 +18,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { toGregorian, toJalaali, jalaaliMonthLength } from 'jalaali-js';
 import { CalendarDays, ChevronRight, ChevronLeft, ChevronUp } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { cn, formatFaNumber } from '@/lib/utils';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -115,7 +115,7 @@ export function DatePickerJalali({
   }, [value]);
 
   const displayText = selected
-    ? `${selected.jd.toLocaleString('fa-IR')} ${JALALI_MONTHS[selected.jm - 1]} ${selected.jy.toLocaleString('fa-IR', { useGrouping: false })}`
+    ? `${formatFaNumber(selected.jd)} ${JALALI_MONTHS[selected.jm - 1]} ${formatFaNumber(selected.jy, { useGrouping: false })}`
     : '';
 
   // ── Open calendar ─────────────────────────────────────────────────────────
@@ -224,8 +224,8 @@ export function DatePickerJalali({
   // ── Breadcrumb title ──────────────────────────────────────────────────────
   const breadcrumb =
     mode === 'year'  ? 'انتخاب سال' :
-    mode === 'month' ? `سال ${viewYear.toLocaleString('fa-IR', { useGrouping: false })}` :
-    `${JALALI_MONTHS[viewMonth - 1]} ${viewYear.toLocaleString('fa-IR', { useGrouping: false })}`;
+    mode === 'month' ? `سال ${formatFaNumber(viewYear, { useGrouping: false })}` :
+    `${JALALI_MONTHS[viewMonth - 1]} ${formatFaNumber(viewYear, { useGrouping: false })}`;
 
   // ─────────────────────────────────────────────────────────────────────────
   // Render
@@ -358,7 +358,7 @@ export function DatePickerJalali({
                           : 'text-foreground hover:bg-muted',
                     )}
                   >
-                    {y.toLocaleString('fa-IR', { useGrouping: false })}
+                    {formatFaNumber(y, { useGrouping: false })}
                   </button>
                 );
               })}
@@ -455,7 +455,7 @@ export function DatePickerJalali({
                               : 'text-foreground hover:bg-muted',
                       )}
                     >
-                      {cell.day.toLocaleString('fa-IR')}
+                      {formatFaNumber(cell.day)}
                     </button>
                   );
                 })}
@@ -464,8 +464,8 @@ export function DatePickerJalali({
               {/* Footer */}
               <p className="mt-2 text-center text-[11px] text-muted-foreground">
                 {JALALI_MONTHS[viewMonth - 1]}{' '}
-                {viewYear.toLocaleString('fa-IR', { useGrouping: false })} —{' '}
-                {dayCount.toLocaleString('fa-IR')} روز
+                {formatFaNumber(viewYear, { useGrouping: false })} —{' '}
+                {formatFaNumber(dayCount)} روز
               </p>
             </div>
           )}

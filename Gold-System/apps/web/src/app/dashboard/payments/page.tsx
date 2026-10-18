@@ -16,13 +16,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { PermissionGate } from '@/components/dashboard/permission-gate';
+import { InPersonReceiptForm } from '@/components/dashboard/in-person-receipt-form';
 import { ApiClientError } from '@/lib/api';
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
   formatDateTime,
+  formatGroupedPersianInteger,
   formatMoney,
   statusLabel,
+  toLatinDigits,
+  toPersianDigits,
   tomanToRial,
 } from '@/lib/utils';
 
@@ -78,7 +82,7 @@ export default function PaymentsPage() {
     },
     { key: 'amount', header: 'مبلغ', render: (row) => formatMoney(row.amount) },
     { key: 'method', header: 'روش', render: (row) => statusLabel(PAYMENT_METHOD_LABELS, row.method) },
-    { key: 'ref', header: 'ارجاع', render: (row) => row.referenceNumber ?? '—' },
+    { key: 'ref', header: 'ارجاع', render: (row) => (row.referenceNumber ? toPersianDigits(row.referenceNumber) : '—') },
     { key: 'date', header: 'تاریخ', render: (row) => formatDateTime(row.createdAt) },
     {
       key: 'status',
@@ -98,7 +102,7 @@ export default function PaymentsPage() {
         tradeId: form.tradeId.trim(),
         method: form.method,
         amount: rialAmount,
-        referenceNumber: form.referenceNumber.trim() || undefined,
+        referenceNumber: toLatinDigits(form.referenceNumber).trim() || undefined,
         notes: form.notes.trim() || undefined,
       });
       setFeedback('پرداخت ثبت شد.');
@@ -112,7 +116,10 @@ export default function PaymentsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader title="پرداخت‌ها" description="ثبت، تأیید و تخصیص فقط با مجوز حسابداری و از مسیر سرور انجام می‌شود." />
+      <PageHeader
+        title="پرداخت‌ها"
+        description="ثبت فیش حضوری، ثبت پرداخت معامله، تأیید و تخصیص فقط با مجوز حسابداری و از مسیر سرور انجام می‌شود."
+      />
       <FilterBar
         fields={[
           {
@@ -134,7 +141,15 @@ export default function PaymentsPage() {
       {feedback ? <Alert variant="success">{feedback}</Alert> : null}
       {formError ? <Alert variant="error">{formError}</Alert> : null}
       <PermissionGate anyOf="payment.create">
+        <InPersonReceiptForm
+          onRecorded={() => {
+            setFeedback('فیش حضوری ثبت شد و منتظر تأیید حسابداری است.');
+            setFormError(null);
+            void mutate();
+          }}
+        />
         <div className="grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-2">
+          <p className="text-sm font-semibold md:col-span-2">ثبت پرداخت روی معامله</p>
           <Input label="شناسه معامله" dir="ltr" value={form.tradeId} onChange={(event) => setForm({ ...form, tradeId: event.target.value })} />
           <label className="text-sm">
             روش
@@ -144,8 +159,8 @@ export default function PaymentsPage() {
               ))}
             </select>
           </label>
-          <Input label="مبلغ (تومان)" dir="ltr" value={form.amount} onChange={(event) => setForm({ ...form, amount: event.target.value })} />
-          <Input label="شماره ارجاع" dir="ltr" value={form.referenceNumber} onChange={(event) => setForm({ ...form, referenceNumber: event.target.value })} />
+          <Input label="مبلغ (تومان)" dir="ltr" value={form.amount} onChange={(event) => setForm({ ...form, amount: formatGroupedPersianInteger(event.target.value) })} />
+          <Input label="شماره ارجاع" dir="ltr" value={form.referenceNumber} onChange={(event) => setForm({ ...form, referenceNumber: toPersianDigits(event.target.value) })} />
           <Input label="یادداشت" value={form.notes} onChange={(event) => setForm({ ...form, notes: event.target.value })} />
           <div className="flex items-end">
             <Button isLoading={busy} onClick={() => void record()}>ثبت پرداخت</Button>

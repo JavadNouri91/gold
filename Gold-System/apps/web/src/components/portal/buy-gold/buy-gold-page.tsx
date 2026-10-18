@@ -575,7 +575,6 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
                           />
                           <span className="shrink-0 text-sm text-[#6B7280]">گرم</span>
                         </div>
-                        <p className="mt-1 text-xs text-[#6B7280]">حداکثر {formatWeight(sellableGrams)}</p>
                       </div>
                       <div>
                         <label htmlFor="sell-amount" className="text-sm font-medium text-[#202124]">
@@ -619,6 +618,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
                         <Coins className="h-4 w-4" aria-hidden />
                       </button>
                     </div>
+                    <p className="mt-1 w-40 text-xs text-[#6B7280]">حداکثر {formatWeight(sellableGrams)}</p>
                   </div>
                 ) : null}
               </div>
@@ -1209,7 +1209,7 @@ function PurchaseSuccess({
         </h1>
         <p className="mt-2 text-sm text-[#6B7280]">سفارش شما با موفقیت ثبت شد.</p>
         <dl className="mt-6 space-y-3 text-right text-sm">
-          <Row label="شماره سفارش" value={order.orderNumber} ltr />
+          <Row label="شماره سفارش" value={toPersianDigits(order.orderNumber)} ltr />
           <Row label="مبلغ" value={formatMoney(order.totalAmountRial)} />
           <Row label="وزن" value={formatWeight(order.weightGrams)} />
           <Row label="عیار" value={purityLabel(order.purityRatio) || formatPurity(order.purityRatio)} />

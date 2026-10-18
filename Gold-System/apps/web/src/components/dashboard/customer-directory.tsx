@@ -46,6 +46,7 @@ import {
   CUSTOMER_TYPE_LABELS,
   CUSTOMER_VERIFICATION_LABELS,
   formatDate,
+  formatFaNumber,
   formatMoney,
   toLatinDigits,
   toPersianDigits,
@@ -320,7 +321,7 @@ export function CustomerDirectory() {
       header: 'کد مشتری',
       render: (row) => (
         <Link className="font-medium text-gold-800" href={`/dashboard/customers/${row.id}`} dir="ltr">
-          {row.customerNumber}
+          {toPersianDigits(row.customerNumber)}
         </Link>
       ),
     });
@@ -360,7 +361,7 @@ export function CustomerDirectory() {
     columns.push({
       key: 'orders',
       header: 'تعداد سفارش',
-      render: (row) => (row.orderCount ?? 0).toLocaleString('fa-IR'),
+      render: (row) => formatFaNumber((row.orderCount ?? 0)),
     });
   }
   if (show('balance')) {
@@ -469,7 +470,7 @@ export function CustomerDirectory() {
           <>
             <RegisterCustomerButton
               onCreated={(customer) => {
-                setNotice(`${customer.fullName} با شماره ${customer.customerNumber} ثبت شد.`);
+                setNotice(`${customer.fullName} با شماره ${toPersianDigits(customer.customerNumber)} ثبت شد.`);
                 setToast('مشتری جدید ثبت شد.');
                 void list.mutate();
                 void summary.mutate();
@@ -507,7 +508,7 @@ export function CustomerDirectory() {
                     <SkeletonBlock className="mt-3 h-8 w-16" />
                   ) : (
                     <p className="mt-2 text-2xl font-bold tabular-nums">
-                      {card.value == null ? '—' : card.value.toLocaleString('fa-IR')}
+                      {card.value == null ? '—' : formatFaNumber(card.value)}
                     </p>
                   )}
                   <p className="mt-1 text-xs text-muted-foreground">{card.hint}</p>
@@ -558,7 +559,7 @@ export function CustomerDirectory() {
       </div>
 
       {selected.length ? (
-        <p className="text-sm text-muted-foreground">{selected.length.toLocaleString('fa-IR')} مشتری در این صفحه انتخاب شده است.</p>
+        <p className="text-sm text-muted-foreground">{formatFaNumber(selected.length)} مشتری در این صفحه انتخاب شده است.</p>
       ) : null}
       {list.error ? <ApiErrorState error={list.error} onRetry={() => void list.mutate()} /> : null}
       {summary.error ? <ApiErrorState error={summary.error} onRetry={() => void summary.mutate()} /> : null}
