@@ -521,8 +521,8 @@ export const CUSTOMER_SEGMENT_LABELS: Record<string, string> = {
 
 export const CUSTOMER_FINANCIAL_LABELS: Record<string, string> = {
   DEBTOR: 'بدهکار',
-  CREDITOR: 'بستانکار',
-  SETTLED: 'تسویه',
+  CREDITOR: 'دارای موجودی',
+  SETTLED: 'تسویه صفر',
 };
 
 export const CUSTOMER_GENDER_LABELS: Record<string, string> = {

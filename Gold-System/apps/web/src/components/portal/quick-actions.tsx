@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { History, ShoppingCart, BarChart3, WalletCards } from 'lucide-react';
 
 const ACTIONS = [
-  { href: '/portal/payments', label: 'تاریخچه پرداخت', icon: WalletCards, className: 'bg-sky-50 text-sky-800' },
+  { href: '/portal/payments', label: 'واریز و برداشت', icon: WalletCards, className: 'bg-sky-50 text-sky-800' },
   { href: '/portal/trades', label: 'تاریخچه معاملات', icon: History, className: 'bg-violet-50 text-violet-800' },
   { href: '/portal/orders/new', label: 'سفارش جدید', icon: ShoppingCart, className: 'bg-emerald-50 text-emerald-800' },
   { href: '/portal/trades', label: 'گزارش‌ها', icon: BarChart3, className: 'bg-gold-50 text-gold-800' },

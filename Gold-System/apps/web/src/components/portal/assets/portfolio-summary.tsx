@@ -1,17 +1,16 @@
 import Link from 'next/link';
-import { Coins, Package, Percent, Tag, Wallet } from 'lucide-react';
+import { FileText } from 'lucide-react';
 import type { CurrentPrice } from '@/lib/api';
-import { isZeroDecimal } from '@/lib/decimal-string';
+import { addDecimal, isZeroDecimal } from '@/lib/decimal-string';
+import { ownedGoldGrams } from '@/lib/asset-chart-range';
 import { isRegisteredHolding, type PortfolioPosition } from '@/lib/customer-portfolio';
-import { formatDateTime, formatRial, formatWeight, toPersianDigits } from '@/lib/utils';
-import {
-  AssetSkeleton,
-  CardHeading,
-  SignedMoney,
-  assetCaptionClass,
-  assetCardClass,
-  assetFigureClass,
-} from './assets-ui';
+import { moneyTone, toneClass } from '@/lib/portfolio-display';
+import { cn, formatDateTime, formatWholeMoney, formatWeight, toPersianDigits } from '@/lib/utils';
+import { pendingPickupValueRial } from './asset-composition';
+import { AssetSkeleton } from './assets-ui';
+
+const kpiCardClass =
+  'flex h-full min-w-0 flex-col rounded-2xl border border-[#E5E7EB] bg-white p-5 shadow-sm';
 
 export function PortfolioSummary({
   position,
@@ -21,6 +20,7 @@ export function PortfolioSummary({
   priceLoading,
   priceError,
   onRefreshPrice,
+  availableRial,
 }: {
   position: PortfolioPosition | null;
   holdingLoading?: boolean;
@@ -29,59 +29,78 @@ export function PortfolioSummary({
   priceLoading?: boolean;
   priceError?: boolean;
   onRefreshPrice?: () => void;
+  availableRial?: string | null;
 }) {
   const holding = isRegisteredHolding(position) ? position : null;
-  const reservedPickup = holding?.reservedPickupGrams ?? '0';
-  const hasPendingPickup = holding != null && !isZeroDecimal(reservedPickup);
+  const pendingRial = pendingPickupValueRial(holding?.reservedPickupGrams, price?.normalizedValue) ?? '0';
+  const goldRial = holding?.marketValueRial && !isZeroDecimal(holding.marketValueRial) ? holding.marketValueRial : '0';
+  const cashRial = availableRial && !isZeroDecimal(availableRial) ? availableRial : '0';
+  const totalRial = addDecimal(addDecimal(cashRial, goldRial), pendingRial);
+  const goldGrams = ownedGoldGrams(holding?.weightGrams, holding?.reservedPickupGrams);
+  const goldValueRial = addDecimal(goldRial, pendingRial);
+  const pnlTone = moneyTone(holding?.unrealizedPnlRial);
+  const hasPnl = holding?.unrealizedPnlRial != null && !isZeroDecimal(holding.unrealizedPnlRial);
 
   return (
-    <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 xl:grid-cols-5">
-      <section aria-labelledby="portfolio-value-title" className={assetCardClass}>
-        <CardHeading id="portfolio-value-title" title="ارزش روز دارایی" icon={Wallet} />
+    <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-3">
+      <section aria-labelledby="portfolio-value-title" className={kpiCardClass}>
+        <h2 id="portfolio-value-title" className="text-sm font-medium text-[#6B7280]">
+          مجموع ارزش کل دارایی
+        </h2>
         {holdingLoading ? (
           <AssetSkeleton className="mt-3 h-10 w-40" />
         ) : (
           <>
-            <p className={assetFigureClass}>{holding ? formatRial(holding.marketValueRial) : '—'}</p>
-            <p className={assetCaptionClass}>مقایسه با ماه گذشته در دسترس نیست</p>
+            <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight text-[#202124]">
+              {isZeroDecimal(totalRial) ? '—' : formatWholeMoney(totalRial)}
+            </p>
+            {hasPnl ? (
+              <p className={cn('mt-2 text-sm font-semibold tabular-nums', toneClass(pnlTone))}>
+                <span dir="ltr">
+                  {pnlTone === 'negative' ? '−' : '+'}
+                  {holding?.changePercent
+                    ? `${toPersianDigits(holding.changePercent.replace(/^-/, ''))}٪`
+                    : ''}
+                </span>
+                {holding?.unrealizedPnlRial ? (
+                  <span>
+                    {' '}
+                    ({formatWholeMoney(holding.unrealizedPnlRial.replace(/^-/, ''))}){' '}
+                    {pnlTone === 'negative' ? 'زیان کل' : 'سود کل'}
+                  </span>
+                ) : null}
+              </p>
+            ) : (
+              <p className="mt-2 text-xs leading-5 text-[#6B7280]">سود و زیان تحقق‌نیافته در دسترس نیست</p>
+            )}
+            <div className="mt-auto space-y-1 pt-4 text-xs leading-5 text-[#6B7280]">
+              <p>توان خرید (نقدی): {formatWholeMoney(cashRial)}</p>
+              <p>ارزش طلا: {formatWholeMoney(goldValueRial)}</p>
+            </div>
           </>
         )}
       </section>
 
-      <section aria-labelledby="unrealized-title" className={assetCardClass}>
-        <CardHeading id="unrealized-title" title="سود و زیان تحقق‌نیافته" icon={Percent} />
-        {holdingLoading ? (
-          <AssetSkeleton className="mt-3 h-10 w-36" />
-        ) : (
-          <>
-            <SignedMoney
-              value={holding?.unrealizedPnlRial}
-              percent={holding?.unrealizedPnlRial ? holding.changePercent : null}
-              whole
-              className="mt-3 text-xl font-bold sm:text-2xl"
-            />
-            <p className={assetCaptionClass}>ارزش روز منهای بهای خرید مانده</p>
-          </>
-        )}
-      </section>
-
-      <section aria-labelledby="gold-balance-title" className={assetCardClass}>
-        <CardHeading id="gold-balance-title" title="موجودی طلای آبشده" icon={Coins} />
+      <section aria-labelledby="gold-balance-title" className={kpiCardClass}>
+        <h2 id="gold-balance-title" className="text-sm font-medium text-[#6B7280]">
+          مجموع موجودی طلا
+        </h2>
         {holdingLoading ? (
           <AssetSkeleton className="mt-3 h-10 w-32" />
         ) : holdingError ? (
           <p className="mt-3 text-sm leading-7 text-[#6B7280]">موجودی طلا در حال حاضر قابل دریافت نیست.</p>
-        ) : holding ? (
+        ) : holding && !isZeroDecimal(goldGrams) ? (
           <>
-            <p className={assetFigureClass}>{formatWeight(holding.weightGrams)}</p>
-            <p className={assetCaptionClass}>
-              {holding.purityLabel ? `عیار ${toPersianDigits(holding.purityLabel)}` : 'خالص خرید منهای فروش'}
+            <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight text-[#202124]">
+              {formatWeight(goldGrams)}
             </p>
+            <p className="mt-2 text-sm text-[#6B7280]">معادل {formatWholeMoney(goldValueRial)}</p>
             <Link
               href="/portal/pickups/new"
-              className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[#C8922E]"
+              className="mt-auto inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-semibold text-[#C8922E]"
             >
-              تحویل حضوری
+              <FileText className="h-4 w-4" aria-hidden />
+              درخواست تحویل فیزیکی
             </Link>
           </>
         ) : (
@@ -89,7 +108,7 @@ export function PortfolioSummary({
             <p className="mt-3 text-sm leading-7 text-[#202124]">هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است.</p>
             <Link
               href="/portal/orders/new?side=buy"
-              className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[#C8922E]"
+              className="mt-auto inline-flex min-h-11 items-center pt-4 text-sm font-semibold text-[#C8922E]"
             >
               خرید طلا
             </Link>
@@ -97,36 +116,10 @@ export function PortfolioSummary({
         )}
       </section>
 
-      <section aria-labelledby="pending-pickup-title" className={assetCardClass}>
-        <CardHeading id="pending-pickup-title" title="طلای در انتظار تحویل" icon={Package} />
-        {holdingLoading ? (
-          <AssetSkeleton className="mt-3 h-10 w-32" />
-        ) : holdingError ? (
-          <p className="mt-3 text-sm leading-7 text-[#6B7280]">وضعیت تحویل در حال حاضر قابل دریافت نیست.</p>
-        ) : holding ? (
-          <>
-            <p className={assetFigureClass}>{formatWeight(reservedPickup)}</p>
-            <p className={assetCaptionClass}>
-              {hasPendingPickup
-                ? 'رزرو‌شده برای تحویل حضوری در فروشگاه (هنوز تحویل نشده)'
-                : 'درخواست تحویل حضوریِ بازی ندارید'}
-            </p>
-            <Link
-              href={hasPendingPickup ? '/portal/pickups' : '/portal/pickups/new'}
-              className="mt-3 inline-flex min-h-11 items-center text-sm font-semibold text-[#C8922E]"
-            >
-              {hasPendingPickup ? 'مشاهده درخواست‌ها' : 'ثبت درخواست تحویل'}
-            </Link>
-          </>
-        ) : (
-          <p className="mt-3 text-sm leading-7 text-[#6B7280]">
-            پس از ثبت دارایی، طلای رزرو‌شده برای تحویل اینجا دیده می‌شود.
-          </p>
-        )}
-      </section>
-
-      <section aria-labelledby="spot-price-title" className={assetCardClass}>
-        <CardHeading id="spot-price-title" title="قیمت لحظه‌ای هر گرم" icon={Tag} />
+      <section aria-labelledby="spot-price-title" className={kpiCardClass}>
+        <h2 id="spot-price-title" className="text-sm font-medium text-[#6B7280]">
+          نرخ لحظه‌ای هر گرم طلا
+        </h2>
         {priceLoading ? (
           <AssetSkeleton className="mt-3 h-10 w-36" />
         ) : priceError || !price?.normalizedValue ? (
@@ -135,25 +128,47 @@ export function PortfolioSummary({
             <button
               type="button"
               onClick={onRefreshPrice}
-              className="mt-2 inline-flex min-h-11 items-center text-sm font-semibold text-[#C8922E]"
+              className="mt-auto inline-flex min-h-11 items-center pt-4 text-sm font-semibold text-[#C8922E]"
             >
               تلاش مجدد
             </button>
           </>
         ) : (
           <>
-            <p className={assetFigureClass}>{formatRial(price.normalizedValue)}</p>
-            <p className={assetCaptionClass}>آخرین بروزرسانی: {formatDateTime(price.capturedAt)}</p>
-            <p className="mt-1 inline-flex items-center gap-1.5 text-xs font-medium text-[#202124]">
+            <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight text-[#202124]">
+              {formatWholeMoney(price.normalizedValue)}
+            </p>
+            <p className="mt-2 text-xs leading-5 text-[#6B7280]">آخرین بروزرسانی: {formatDateTime(price.capturedAt)}</p>
+            <p className="mt-auto inline-flex items-center gap-1.5 pt-4 text-xs font-medium text-[#202124]">
               <span
                 className={`h-2 w-2 rounded-full ${price.validityStatus === 'VALID' ? 'bg-[#16A34A]' : 'bg-amber-500'}`}
                 aria-hidden
               />
-              {price.validityStatus === 'VALID' ? 'بازار فعال' : 'قیمت نامعتبر'}
+              {price.validityStatus === 'VALID' ? 'بازار فعال است' : 'قیمت نامعتبر'}
             </p>
+            <GoldPriceSpark />
           </>
         )}
       </section>
     </div>
+  );
+}
+
+function GoldPriceSpark() {
+  return (
+    <svg viewBox="0 0 240 56" className="mt-3 h-14 w-full text-[#EAB308]" aria-hidden>
+      <path
+        d="M0 40 C24 38 36 28 52 30 C76 33 88 18 112 20 C136 22 148 36 172 28 C196 20 212 24 240 12"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+      />
+      <path
+        d="M0 56 L0 40 C24 38 36 28 52 30 C76 33 88 18 112 20 C136 22 148 36 172 28 C196 20 212 24 240 12 L240 56 Z"
+        fill="currentColor"
+        opacity="0.16"
+      />
+    </svg>
   );
 }

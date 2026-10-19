@@ -93,6 +93,11 @@ export class PaymentController {
         tradeId: query.tradeId,
         customerId: query.customerId,
         status: query.status,
+        statusGroup: query.statusGroup,
+        method: query.method,
+        from: query.from,
+        to: query.to,
+        q: query.q,
         limit: query.limit,
         offset: query.offset,
       });
@@ -112,6 +117,16 @@ export class PaymentController {
     @Query() query: ListPaymentsQueryDto,
   ) {
     return this.paymentService.summarizeOwn(user.userId, query);
+  }
+
+  /**
+   * GET /payments/staff-summary
+   * KPI cards for the staff payments dashboard.
+   */
+  @Get('staff-summary')
+  @RequirePermissions('payment.read')
+  async staffSummary() {
+    return this.paymentService.staffSummary();
   }
 
   /** Confirmed trades the signed-in customer can attach a receipt to. */
@@ -190,6 +205,20 @@ export class PaymentController {
     @Request() req: { user: { userId?: string; sub?: string } },
   ) {
     return this.paymentService.validatePayment(id, requireActorId(req.user));
+  }
+
+  /**
+   * POST /payments/:id/fail
+   * Reject a PENDING payment.
+   * Transitions: PENDING → FAILED
+   */
+  @Post(':id/fail')
+  @RequirePermissions('payment.validate')
+  async failPayment(
+    @Param('id') id: string,
+    @Request() req: { user: { userId?: string; sub?: string } },
+  ) {
+    return this.paymentService.failPayment(id, requireActorId(req.user));
   }
 
   /**

@@ -132,6 +132,8 @@ export interface PaymentSummary {
   successful: AmountCount;
   failed: AmountCount;
   reversed: AmountCount;
+  /** Receipts / payments waiting for accountant review (PENDING). */
+  submitted: AmountCount;
   hasAny: boolean;
 }
 
@@ -155,6 +157,7 @@ export function foldPaymentSummary(
   const successful = emptyBucket();
   const failed = emptyBucket();
   const reversed = emptyBucket();
+  const submitted = emptyBucket();
 
   for (const group of groups) {
     const amount = new Decimal(group.amount && group.amount !== '' ? group.amount : 0);
@@ -164,7 +167,9 @@ export function foldPaymentSummary(
         ? failed
         : group.status === 'REVERSED'
           ? reversed
-          : null;
+          : group.status === 'PENDING'
+            ? submitted
+            : null;
     if (!target) continue;
     target.count += group.count;
     target.amount = target.amount.plus(amount);
@@ -178,6 +183,7 @@ export function foldPaymentSummary(
     successful: publishBucket(successful),
     failed: publishBucket(failed),
     reversed: publishBucket(reversed),
+    submitted: publishBucket(submitted),
     hasAny,
   };
 }

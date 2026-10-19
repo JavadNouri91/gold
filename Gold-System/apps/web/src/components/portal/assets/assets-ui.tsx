@@ -5,6 +5,8 @@ import { formatSignedPercent, formatSignedRial, formatSignedWholeRial, moneyTone
 
 export const assetCardClass = 'min-w-0 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm md:p-5';
 
+export const assetSummaryCardClass = `${assetCardClass} flex h-full flex-col`;
+
 export const assetFigureClass = 'mt-3 text-xl font-bold tabular-nums tracking-tight text-[#202124] sm:text-2xl';
 
 export const assetCaptionClass = 'mt-1.5 text-xs leading-5 text-[#6B7280]';

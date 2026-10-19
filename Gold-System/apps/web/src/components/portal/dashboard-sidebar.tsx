@@ -58,7 +58,7 @@ const primaryNav: NavItem[] = [
   },
   {
     href: '/portal/assets',
-    label: 'دارایی من',
+    label: 'دارایی‌های من',
     icon: Coins,
     iconClassName: 'bg-sky-50 text-sky-700',
     permission: 'customer.account.read_own',
@@ -69,6 +69,20 @@ const primaryNav: NavItem[] = [
     icon: ArrowLeftRight,
     iconClassName: 'bg-blue-50 text-blue-700',
     permission: 'customer.order.create',
+  },
+  {
+    href: '/portal/payments',
+    label: 'واریز و برداشت',
+    icon: CreditCard,
+    iconClassName: 'bg-indigo-50 text-indigo-700',
+    permission: 'customer.payment.read_own',
+  },
+  {
+    href: '/portal/pickups',
+    label: 'تحویل حضوری',
+    icon: Package,
+    iconClassName: 'bg-teal-50 text-teal-700',
+    permission: 'customer.pickup.read_own',
   },
   {
     href: '/portal/orders',
@@ -84,20 +98,6 @@ const primaryNav: NavItem[] = [
     icon: BarChart3,
     iconClassName: 'bg-orange-50 text-orange-700',
     permission: 'customer.order.read_own',
-  },
-  {
-    href: '/portal/pickups',
-    label: 'تحویل حضوری',
-    icon: Package,
-    iconClassName: 'bg-teal-50 text-teal-700',
-    permission: 'customer.pickup.read_own',
-  },
-  {
-    href: '/portal/payments',
-    label: 'پرداخت‌ها',
-    icon: CreditCard,
-    iconClassName: 'bg-indigo-50 text-indigo-700',
-    permission: 'customer.payment.read_own',
   },
   {
     href: '/portal/notifications',
@@ -227,18 +227,18 @@ export function DashboardSidebar({
       permission: 'customer.order.create',
     },
     {
+      key: 'payments',
+      label: 'واریز و برداشت',
+      icon: FileText,
+      href: '/portal/payments',
+      permission: 'customer.payment.read_own',
+    },
+    {
       key: 'assets',
       label: 'دارایی‌های من',
       icon: Coins,
       href: '/portal/assets',
       permission: 'customer.account.read_own',
-    },
-    {
-      key: 'payments',
-      label: 'تراکنش‌ها و پرداخت‌ها',
-      icon: FileText,
-      href: '/portal/payments',
-      permission: 'customer.payment.read_own',
     },
     {
       key: 'kyc',

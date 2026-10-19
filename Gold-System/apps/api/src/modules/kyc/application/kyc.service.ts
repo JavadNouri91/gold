@@ -16,7 +16,7 @@ import { toLatinDigits } from '../../../common/digits';
 import { KYCVerificationEntity } from '../domain/entities/kyc-verification.entity';
 import { CustomerDocumentEntity } from '../domain/entities/customer-document.entity';
 import { KycDecisionDto, KycDecision } from './dto/kyc-decision.dto';
-import { CustomerStatus, VerificationStatus } from '@gold/shared-types';
+import { CustomerStatus, CustomerType, VerificationStatus } from '@gold/shared-types';
 import {
   buildOwnKycView,
   deleteBlockReason,
@@ -92,13 +92,28 @@ export class KycVerificationResponseDto {
   }
 }
 
+export type KycQueueDisplay = KycStaffBucket | 'rejected';
+
+function resolveKycDisplay(
+  bucket: KycStaffBucket,
+  verificationStatus: VerificationStatus | null,
+): KycQueueDisplay {
+  if (bucket === 'verified' || bucket === 'awaiting') return bucket;
+  if (verificationStatus === VerificationStatus.REJECTED) return 'rejected';
+  return 'unverified';
+}
+
 export interface KycReviewQueueItem {
   id: string;
   customerNumber: string;
   fullName: string;
   mobile: string;
+  nationalId: string;
   status: CustomerStatus;
+  customerType: string | null;
   bucket: KycStaffBucket;
+  kycDisplay: KycQueueDisplay;
+  verificationStatus: VerificationStatus | null;
   pendingDocuments: number;
   viewedDocuments: number;
   latestSubmittedAt: string;
@@ -298,7 +313,12 @@ export class KycService {
     params: {
       page?: number;
       limit?: number;
+      /** When set, only that staff bucket. When omitted, return the mixed queue. */
       bucket?: KycStaffBucket;
+      /** KYC display filter: verified | awaiting | unverified | rejected */
+      kycDisplay?: KycQueueDisplay;
+      customerStatus?: CustomerStatus;
+      customerType?: CustomerType;
       status?: VerificationStatus.PENDING | VerificationStatus.UNDER_REVIEW;
       search?: string;
     },
@@ -309,7 +329,6 @@ export class KycService {
     const limit = Number.isFinite(params.limit)
       ? Math.min(100, Math.max(1, params.limit ?? 20))
       : 20;
-    const bucket = params.bucket ?? 'awaiting';
     const [customers, latestDocuments, latestVerifications] = await Promise.all([
       this.customerRepo.findAll(),
       this.documentRepo.findLatestPerCustomerAndType(),
@@ -332,8 +351,9 @@ export class KycService {
       const required = requiredKycTypes(customer.type);
       const requiredTypes = required.map((item) => item.type);
       const latest = latestDocumentStatusByType(latestByCustomer.get(customer.id) ?? []);
+      const verificationStatus = verificationByCustomer.get(customer.id) ?? null;
       const customerBucket = kycStaffBucket({
-        verificationStatus: verificationByCustomer.get(customer.id) ?? null,
+        verificationStatus,
         requiredTypes,
         latestStatusByType: latest,
       });
@@ -345,12 +365,17 @@ export class KycService {
           (document.status === VerificationStatus.PENDING ||
             document.status === VerificationStatus.UNDER_REVIEW),
       );
-      if (customerBucket !== bucket) return [];
+      const kycDisplay = resolveKycDisplay(customerBucket, verificationStatus);
+
+      if (params.bucket && customerBucket !== params.bucket) return [];
+      if (params.kycDisplay && kycDisplay !== params.kycDisplay) return [];
+      if (params.customerStatus && customer.status !== params.customerStatus) return [];
+      if (params.customerType && customer.type !== params.customerType) return [];
       if (params.status && !awaiting.some((document) => document.status === params.status)) {
         return [];
       }
       const searchable = toLatinDigits(
-        `${customer.fullName} ${customer.mobile} ${customer.customerNumber}`,
+        `${customer.fullName} ${customer.mobile} ${customer.customerNumber} ${customer.nationalId}`,
       ).toLocaleLowerCase('fa-IR');
       if (search && !searchable.includes(search)) return [];
 
@@ -366,8 +391,12 @@ export class KycService {
           customerNumber: customer.customerNumber,
           fullName: customer.fullName,
           mobile: customer.mobile,
+          nationalId: customer.nationalId,
           status: customer.status,
+          customerType: customer.type,
           bucket: customerBucket,
+          kycDisplay,
+          verificationStatus,
           pendingDocuments: awaiting.filter(
             (document) => document.status === VerificationStatus.PENDING,
           ).length,
@@ -389,7 +418,17 @@ export class KycService {
       action: 'KYC_REVIEW_QUEUE_ACCESSED',
       entityType: 'KYCReviewQueue',
       entityId: 'queue',
-      after: { page, limit, total, bucket, status: params.status ?? null, summary },
+      after: {
+        page,
+        limit,
+        total,
+        bucket: params.bucket ?? null,
+        kycDisplay: params.kycDisplay ?? null,
+        customerStatus: params.customerStatus ?? null,
+        customerType: params.customerType ?? null,
+        status: params.status ?? null,
+        summary,
+      },
       ipAddress,
     });
 

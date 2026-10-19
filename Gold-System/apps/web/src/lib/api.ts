@@ -1102,6 +1102,8 @@ export interface PaymentSummary {
   successful: PaymentAmountCount;
   failed: PaymentAmountCount;
   reversed: PaymentAmountCount;
+  /** Receipts waiting for accountant review (PENDING). */
+  submitted: PaymentAmountCount;
   hasAny: boolean;
 }
 

@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@gold/shared-types'],
+  transpilePackages: ['@gold/shared-types', 'recharts'],
   async headers() {
     return [
       {

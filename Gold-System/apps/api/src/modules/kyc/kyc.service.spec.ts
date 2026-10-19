@@ -476,6 +476,8 @@ describe('KycService', () => {
         expect.objectContaining({
           id: 'cust-1',
           bucket: 'awaiting',
+          kycDisplay: 'awaiting',
+          nationalId: '0012345678',
           pendingDocuments: 1,
           viewedDocuments: 1,
         }),
@@ -485,6 +487,44 @@ describe('KycService', () => {
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'KYC_REVIEW_QUEUE_ACCESSED' }),
       );
+    });
+
+    it('returns the mixed queue when bucket is omitted and matches nationalId search', async () => {
+      mockDocRepo.findLatestPerCustomerAndType.mockResolvedValue([]);
+      mockCustomerRepo.findAll.mockResolvedValue([makeCustomer(CustomerStatus.ACTIVE)]);
+      mockKycRepo.findLatestPerCustomer.mockResolvedValue([]);
+
+      const result = await service.getReviewQueue({ search: '0012345678' }, 'reviewer-1');
+
+      expect(result.items).toEqual([
+        expect.objectContaining({
+          id: 'cust-1',
+          bucket: 'unverified',
+          kycDisplay: 'unverified',
+        }),
+      ]);
+      expect(result.summary).toEqual({ verified: 0, unverified: 1, awaiting: 0 });
+    });
+
+    it('exposes rejected display separately from unverified when verification was rejected', async () => {
+      mockDocRepo.findLatestPerCustomerAndType.mockResolvedValue([]);
+      mockCustomerRepo.findAll.mockResolvedValue([makeCustomer(CustomerStatus.ACTIVE)]);
+      mockKycRepo.findLatestPerCustomer.mockResolvedValue([
+        makeVerification({ status: VerificationStatus.REJECTED }),
+      ]);
+
+      const all = await service.getReviewQueue({}, 'reviewer-1');
+      expect(all.items[0]).toEqual(
+        expect.objectContaining({
+          bucket: 'unverified',
+          kycDisplay: 'rejected',
+          verificationStatus: VerificationStatus.REJECTED,
+        }),
+      );
+
+      const filtered = await service.getReviewQueue({ kycDisplay: 'rejected' }, 'reviewer-1');
+      expect(filtered.items).toHaveLength(1);
+      expect(filtered.items[0]?.kycDisplay).toBe('rejected');
     });
   });
 

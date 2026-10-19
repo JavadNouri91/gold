@@ -5,9 +5,10 @@ import { CustomerDirectoryService } from './application/customer-directory.servi
 import { CustomerRepository } from './infrastructure/repositories/customer.repository';
 import { UsersModule } from '../users/users.module';
 import { CustomerAccountsModule } from '../customer-accounts/customer-accounts.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [UsersModule, CustomerAccountsModule],
+  imports: [UsersModule, CustomerAccountsModule, NotificationsModule],
   controllers: [CustomersController],
   providers: [CustomersService, CustomerDirectoryService, CustomerRepository],
   exports: [CustomersService, CustomerRepository],

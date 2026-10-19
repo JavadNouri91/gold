@@ -45,11 +45,39 @@ export const PAYMENT_STATUS_CHIPS: { id: '' | PaymentStatusGroup; label: string 
 ];
 
 export const PAYMENT_TYPE_FILTERS: { id: '' | PaymentLedgerType; label: string }[] = [
-  { id: '', label: 'همه انواع' },
+  { id: '', label: 'همه' },
+  { id: 'OTHER', label: 'واریز / افزایش اعتبار' },
   { id: 'BUY', label: 'پرداخت سفارش خرید' },
   { id: 'SELL', label: 'پرداخت سفارش فروش' },
-  { id: 'OTHER', label: 'افزایش اعتبار' },
 ];
+
+export const PAYMENT_STATUS_FILTERS_COMPACT: { id: '' | PaymentStatusGroup; label: string }[] = [
+  { id: '', label: 'همه' },
+  { id: 'successful', label: 'موفق' },
+  { id: 'submitted', label: 'در انتظار' },
+  { id: 'failed', label: 'ناموفق' },
+];
+
+/** Short tracking / reference shown in the ledger table. */
+export function paymentTrackingCode(payment: {
+  id: string;
+  referenceNumber?: string | null;
+}): string {
+  const ref = payment.referenceNumber?.trim();
+  if (ref) return ref;
+  const compact = payment.id.replace(/-/g, '').slice(0, 8).toUpperCase();
+  return `PAY-${compact}`;
+}
+
+/** Type + method in one cell, e.g. «افزایش اعتبار / فیش بانکی». */
+export function paymentTypeMethodLabel(
+  payment: { relatedSide?: 'BUY' | 'SELL' | null; method: string },
+  methodLabels: Record<string, string>,
+): string {
+  const type = paymentTypeLabel(payment.relatedSide);
+  const method = methodLabels[payment.method] ?? payment.method;
+  return `${type} / ${method}`;
+}
 
 export function paymentStamp(iso: string | null | undefined): string {
   if (!iso) return '—';

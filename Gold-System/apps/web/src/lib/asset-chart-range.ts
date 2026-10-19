@@ -53,7 +53,6 @@ export function assetChartBounds(range: AssetChartRange, now = new Date()): { fr
 export function assetChartBucket(range: AssetChartRange): ActivityBucket {
   if (range === '7d' || range === '30d') return 'day';
   if (range === '3m') return 'week';
-  if (range === 'all') return 'quarter';
   return 'month';
 }
 
@@ -104,6 +103,7 @@ export interface PortfolioValuePoint {
   key: string;
   label: string;
   valueRial: string;
+  grams: string;
 }
 
 function floorZero(value: string): string {
@@ -164,8 +164,8 @@ export function portfolioValueSeries(
   if (ordered.length === 0) {
     const now = valueOf(goldNow);
     return [
-      { key: 'start', label: 'شروع', valueRial: now },
-      { key: 'now', label: 'اکنون', valueRial: now },
+      { key: 'start', label: 'شروع', valueRial: now, grams: goldNow },
+      { key: 'now', label: 'اکنون', valueRial: now, grams: goldNow },
     ];
   }
 
@@ -176,7 +176,7 @@ export function portfolioValueSeries(
     grams = '0';
   }
   const series: PortfolioValuePoint[] = [
-    { key: `open:${ordered[0]!.key}`, label: 'شروع', valueRial: valueOf(grams) },
+    { key: `open:${ordered[0]!.key}`, label: 'شروع', valueRial: valueOf(grams), grams },
   ];
   for (const point of ordered) {
     const net = netBookedGrams(point) ?? '0';
@@ -189,6 +189,7 @@ export function portfolioValueSeries(
       key: point.key,
       label: seriesPointLabel(point.key),
       valueRial: valueOf(grams),
+      grams,
     });
   }
   return series;

@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '@/components/ui/button';
-import { formatFaNumber } from '@/lib/utils';
+import { cn, formatFaNumber } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/alert';
 import { TableSkeleton } from './states';
 
@@ -26,6 +26,7 @@ export function DataTable<T extends { id: string }>({
   onPageSizeChange,
   stickyHeader = false,
   caption,
+  density = 'default',
 }: {
   columns: Column<T>[];
   rows: T[];
@@ -40,29 +41,66 @@ export function DataTable<T extends { id: string }>({
   onPageSizeChange?: (size: number) => void;
   stickyHeader?: boolean;
   caption?: string;
+  density?: 'default' | 'compact';
 }) {
   if (isLoading) return <TableSkeleton />;
   if (!rows.length) return <EmptyState message={emptyMessage} />;
 
+  const compact = density === 'compact';
+  const cellPad = compact ? 'px-3 py-2' : 'px-4 py-3';
+
   return (
     <div className="space-y-3">
-      <div className={`overflow-auto rounded-xl border bg-white ${stickyHeader ? 'max-h-[640px]' : ''}`}>
-        <table className="min-w-full text-sm">
+      <div
+        className={cn(
+          'overflow-auto rounded-xl border bg-background',
+          stickyHeader && 'max-h-[640px]',
+        )}
+      >
+        <table
+          className={cn(
+            'min-w-full text-sm',
+            compact && 'border-separate border-spacing-0',
+          )}
+        >
           {caption ? <caption className="sr-only">{caption}</caption> : null}
-          <thead className={`bg-muted/60 text-muted-foreground ${stickyHeader ? 'sticky top-0 z-10' : ''}`}>
+          <thead
+            className={cn(
+              'bg-muted/60 text-muted-foreground',
+              stickyHeader && 'sticky top-0 z-10',
+            )}
+          >
             <tr>
               {columns.map((column) => (
-                <th key={column.key} className="px-4 py-3 text-right font-medium whitespace-nowrap">
+                <th
+                  key={column.key}
+                  className={cn(cellPad, 'text-right font-medium whitespace-nowrap border-b border-border')}
+                >
                   {column.header}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody className="divide-y">
+          <tbody className={compact ? undefined : 'divide-y'}>
             {rows.map((row) => (
-              <tr key={row.id} className="hover:bg-muted/30">
+              <tr
+                key={row.id}
+                className={cn(
+                  compact
+                    ? 'hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                    : 'hover:bg-muted/30',
+                )}
+              >
                 {columns.map((column) => (
-                  <td key={column.key} className={`px-4 py-3 align-middle ${column.className ?? ''}`}>
+                  <td
+                    key={column.key}
+                    className={cn(
+                      cellPad,
+                      'align-middle',
+                      compact && 'border-b border-border',
+                      column.className,
+                    )}
+                  >
                     {column.render(row)}
                   </td>
                 ))}
@@ -83,7 +121,7 @@ export function DataTable<T extends { id: string }>({
               <label className="flex items-center gap-2 text-muted-foreground">
                 تعداد در صفحه
                 <select
-                  className="h-8 rounded-md border bg-white px-2"
+                  className="h-8 rounded-md border bg-background px-2"
                   value={pageSize}
                   onChange={(event) => onPageSizeChange(Number(event.target.value))}
                 >

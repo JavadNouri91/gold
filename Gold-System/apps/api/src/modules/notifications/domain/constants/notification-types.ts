@@ -70,6 +70,9 @@ export enum NotificationType {
   PICKUP_CANCELLED = 'PICKUP_CANCELLED',
   /** Internal: new pickup request awaiting staff */
   INTERNAL_NEW_PICKUP = 'INTERNAL_NEW_PICKUP',
+
+  /** Staff-initiated SMS to selected customers from the directory */
+  STAFF_CUSTOMER_SMS = 'STAFF_CUSTOMER_SMS',
 }
 
 /** Which channels are used per notification type */
@@ -95,4 +98,5 @@ export const NOTIFICATION_CHANNELS: Record<NotificationType, NotificationChannel
   [NotificationType.PICKUP_DELIVERED]: [NotificationChannel.IN_APP],
   [NotificationType.PICKUP_CANCELLED]: [NotificationChannel.IN_APP],
   [NotificationType.INTERNAL_NEW_PICKUP]: [NotificationChannel.IN_APP],
+  [NotificationType.STAFF_CUSTOMER_SMS]: [NotificationChannel.SMS],
 };

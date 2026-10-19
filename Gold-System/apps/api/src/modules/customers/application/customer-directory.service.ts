@@ -16,6 +16,11 @@ import { formatMobile, toLatinDigits } from '../../../common/digits';
 import { PrismaService } from '../../../database/prisma.service';
 import { AuditService } from '../../audit/application/audit.service';
 import { CurrentUserData } from '../../../common/decorators/current-user.decorator';
+import { NotificationService } from '../../notifications/application/notification.service';
+import {
+  NotificationStatus,
+  NotificationType,
+} from '../../notifications/domain/constants/notification-types';
 import { CustomersService } from './customers.service';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { ListCustomersDto } from './dto/list-customers.dto';
@@ -23,6 +28,7 @@ import { UpdateCustomerDto } from './dto/update-customer.dto';
 import { SetAccountStatusDto } from './dto/set-account-status.dto';
 import { CreateCustomerNoteDto } from './dto/customer-note.dto';
 import { ImportCustomersDto } from './dto/import-customers.dto';
+import { BulkSmsDto } from './dto/bulk-sms.dto';
 import {
   CustomerFinancialStatus,
   CustomerSegment,
@@ -67,29 +73,37 @@ export class CustomerDirectoryService {
     private readonly prisma: PrismaService,
     private readonly customers: CustomersService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationService,
   ) {}
 
   async summary(user: CurrentUserData) {
     const canFinance = this.canReadFinance(user);
     const now = new Date();
     const newSince = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const [total, active, vip, newCustomers, stats] = await Promise.all([
+    const [total, active, vip, newCustomers, pendingVerification, stats] = await Promise.all([
       this.prisma.customer.count(),
       this.prisma.customer.count({ where: { accountStatus: 'ACTIVE' } }),
       this.prisma.customer.count({ where: { type: 'VIP' } }),
       this.prisma.customer.count({ where: { createdAt: { gte: newSince } } }),
+      this.prisma.customer.count({ where: { status: CustomerStatus.UNDER_REVIEW } }),
       canFinance ? this.loadStats() : Promise.resolve(new Map<string, CustomerStats>()),
     ]);
 
     let debtors: number | null = null;
+    let debtorsBalanceRial: string | null = null;
     if (canFinance) {
       debtors = 0;
+      let debtSum = new Prisma.Decimal(0);
       for (const row of stats.values()) {
-        if (row.balance.lessThan(0)) debtors += 1;
+        if (row.balance.lessThan(0)) {
+          debtors += 1;
+          debtSum = debtSum.plus(row.balance.abs());
+        }
       }
+      debtorsBalanceRial = debtSum.toFixed(2);
     }
 
-    return { total, active, vip, debtors, newCustomers };
+    return { total, active, vip, debtors, debtorsBalanceRial, newCustomers, pendingVerification };
   }
 
   async list(dto: ListCustomersDto, user: CurrentUserData) {
@@ -152,6 +166,49 @@ export class CustomerDirectoryService {
       lines.push(cells.map(csvCell).join(','));
     }
     return { content: `\uFEFF${lines.join('\r\n')}` };
+  }
+
+  async sendBulkSms(dto: BulkSmsDto, actorId: string, ipAddress?: string) {
+    const uniqueIds = [...new Set(dto.ids)];
+    if (uniqueIds.length > 50) {
+      throw new BadRequestException('حداکثر ۵۰ مشتری در هر ارسال مجاز است');
+    }
+    const body = dto.body.trim();
+    const customers = await this.prisma.customer.findMany({
+      where: { id: { in: uniqueIds } },
+      select: { id: true, mobile: true, userId: true },
+    });
+    const found = new Map(customers.map((row) => [row.id, row]));
+    let sent = 0;
+    let failed = 0;
+    for (const id of uniqueIds) {
+      const customer = found.get(id);
+      if (!customer?.mobile) {
+        failed += 1;
+        continue;
+      }
+      const results = await this.notifications.dispatch({
+        recipientId: customer.userId,
+        recipientMobile: customer.mobile,
+        type: NotificationType.STAFF_CUSTOMER_SMS,
+        body,
+        relatedEntityType: 'Customer',
+        relatedEntityId: id,
+      });
+      const ok = results.some((row) => row.status === NotificationStatus.SENT);
+      if (ok) sent += 1;
+      else failed += 1;
+    }
+    await this.audit.log({
+      actorId,
+      action: 'CUSTOMER_BULK_SMS',
+      entityType: 'Customer',
+      entityId: uniqueIds[0] ?? 'bulk',
+      after: { count: uniqueIds.length, sent, failed },
+      reason: body.slice(0, 200),
+      ipAddress,
+    });
+    return { sent, failed, total: uniqueIds.length };
   }
 
   async importRows(dto: ImportCustomersDto, ipAddress?: string) {

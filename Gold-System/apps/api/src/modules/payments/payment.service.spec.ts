@@ -171,6 +171,8 @@ describe('PaymentService', () => {
             findByTradeId: jest.fn().mockResolvedValue([]),
             findAll: jest.fn().mockResolvedValue([]),
             count: jest.fn().mockResolvedValue(0),
+            sumAmount: jest.fn().mockResolvedValue('0.00'),
+            buildStaffListWhere: jest.fn().mockReturnValue({}),
             queryLedger: jest.fn().mockResolvedValue({ total: 0, rows: [] }),
             summarizeLedger: jest.fn().mockResolvedValue([]),
             findOwned: jest.fn().mockResolvedValue(null),
@@ -503,6 +505,51 @@ describe('PaymentService', () => {
       await expect(service.validatePayment('pay-1', 'user-1')).rejects.toThrow(
         InvalidPaymentTransitionException,
       );
+    });
+  });
+
+  describe('failPayment', () => {
+    it('should transition PENDING → FAILED', async () => {
+      const pending = makePaymentEntity({ status: PaymentStatus.PENDING });
+      const failed = makePaymentEntity({ status: PaymentStatus.FAILED });
+      paymentRepo.findById.mockResolvedValue(pending);
+      paymentRepo.updateStatusInTx.mockResolvedValue(failed);
+
+      const result = await service.failPayment('pay-1', 'user-1');
+
+      expect(result.status).toBe(PaymentStatus.FAILED);
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYMENT_FAILED' }),
+      );
+      expect(customerAccounts.grantCreditInTx).not.toHaveBeenCalled();
+    });
+
+    it('should throw InvalidPaymentTransitionException if not PENDING', async () => {
+      const validated = makePaymentEntity({ status: PaymentStatus.VALIDATED });
+      paymentRepo.findById.mockResolvedValue(validated);
+
+      await expect(service.failPayment('pay-1', 'user-1')).rejects.toThrow(
+        InvalidPaymentTransitionException,
+      );
+    });
+  });
+
+  describe('staffSummary', () => {
+    it('returns pending count and successful amount totals', async () => {
+      paymentRepo.count.mockResolvedValue(7);
+      paymentRepo.sumAmount
+        .mockResolvedValueOnce('250000.00')
+        .mockResolvedValueOnce('9000000.00');
+
+      const summary = await service.staffSummary();
+
+      expect(summary).toEqual({
+        pendingCount: 7,
+        todayValidatedAmountRial: '250000.00',
+        totalSuccessfulAmountRial: '9000000.00',
+      });
+      expect(paymentRepo.count).toHaveBeenCalledWith({ status: PaymentStatus.PENDING });
+      expect(paymentRepo.sumAmount).toHaveBeenCalledTimes(2);
     });
   });
 
@@ -1100,7 +1147,7 @@ describe('PaymentService', () => {
       expect(paymentRepo.findOwned).not.toHaveBeenCalled();
     });
 
-    it('folds summary amounts with Decimal and excludes pending groups', async () => {
+    it('folds summary amounts with Decimal and includes pending as submitted', async () => {
       (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-real' });
       paymentRepo.summarizeLedger.mockResolvedValue([
         { status: 'COMPLETED', count: 2, amount: '100.10' },
@@ -1115,6 +1162,7 @@ describe('PaymentService', () => {
       expect(summary.successful).toEqual({ count: 2, amountRial: '100.10' });
       expect(summary.failed).toEqual({ count: 1, amountRial: '0.20' });
       expect(summary.reversed).toEqual({ count: 1, amountRial: '50.00' });
+      expect(summary.submitted).toEqual({ count: 9, amountRial: '999.00' });
       expect(summary.totalPaid).toEqual({ count: 3, amountRial: '100.30' });
       expect(summary.hasAny).toBe(true);
       const where = paymentRepo.summarizeLedger.mock.calls[0]?.[0];

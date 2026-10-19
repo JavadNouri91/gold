@@ -75,7 +75,9 @@ export interface CustomerSummary {
   active: number;
   vip: number;
   debtors: number | null;
+  debtorsBalanceRial: string | null;
   newCustomers: number;
+  pendingVerification: number;
 }
 
 export interface CustomerWorkspace {
@@ -175,14 +177,19 @@ export interface KycHistoryRecord {
 }
 
 export type KycStaffBucket = 'verified' | 'unverified' | 'awaiting';
+export type KycQueueDisplay = KycStaffBucket | 'rejected';
 
 export interface KycReviewQueueItem {
   id: string;
   customerNumber: string;
   fullName: string;
   mobile: string;
+  nationalId?: string;
   status: string;
+  customerType?: string | null;
   bucket?: KycStaffBucket;
+  kycDisplay?: KycQueueDisplay;
+  verificationStatus?: string | null;
   pendingDocuments: number;
   viewedDocuments: number;
   latestSubmittedAt: string;
@@ -397,6 +404,10 @@ export interface StaffPayment {
   id: string;
   tradeId: string | null;
   customerId: string;
+  customerName?: string | null;
+  customerMobile?: string | null;
+  tradeNumber?: string | null;
+  orderNumber?: string | null;
   method: string;
   amount: string;
   currency: string;
@@ -408,6 +419,12 @@ export interface StaffPayment {
   validatedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface StaffPaymentSummary {
+  pendingCount: number;
+  todayValidatedAmountRial: string;
+  totalSuccessfulAmountRial: string;
 }
 
 export interface TradePaymentStatus {
@@ -916,6 +933,12 @@ export const internalCustomersApi = {
       body: JSON.stringify({ type, reason }),
     });
   },
+  sendBulkSms(ids: string[], body: string): Promise<{ sent: number; failed: number; total: number }> {
+    return request('/customers/bulk-sms', {
+      method: 'POST',
+      body: JSON.stringify({ ids, body }),
+    });
+  },
   register(body: {
     firstName: string;
     lastName: string;
@@ -971,6 +994,9 @@ export const internalKycApi = {
     page?: number;
     limit?: number;
     bucket?: KycStaffBucket;
+    kycDisplay?: KycQueueDisplay;
+    customerStatus?: string;
+    customerType?: string;
     status?: string;
     search?: string;
   }): Promise<KycReviewQueue> {
@@ -1135,10 +1161,18 @@ export const internalPaymentsApi = {
     tradeId?: string;
     customerId?: string;
     status?: string;
+    statusGroup?: string;
+    method?: string;
+    from?: string;
+    to?: string;
+    q?: string;
     limit?: number;
     offset?: number;
   }): Promise<{ data: StaffPayment[]; meta: PaginationMeta }> {
     return request(`/payments${toQuery(params ?? {})}`);
+  },
+  staffSummary(): Promise<StaffPaymentSummary> {
+    return request('/payments/staff-summary');
   },
   getById(id: string): Promise<StaffPayment> {
     return request(`/payments/${id}`);
@@ -1159,6 +1193,12 @@ export const internalPaymentsApi = {
   },
   validate(id: string): Promise<StaffPayment> {
     return request(`/payments/${id}/validate`, {
+      method: 'POST',
+      body: JSON.stringify({}),
+    });
+  },
+  fail(id: string): Promise<StaffPayment> {
+    return request(`/payments/${id}/fail`, {
       method: 'POST',
       body: JSON.stringify({}),
     });

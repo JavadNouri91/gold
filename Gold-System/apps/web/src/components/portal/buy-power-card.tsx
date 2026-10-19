@@ -6,7 +6,7 @@ import { Scale } from 'lucide-react';
 import { ApiClientError, customerApi, type CurrentPrice } from '@/lib/api';
 import { buyableGoldGrams } from '@/lib/buyable-gold';
 import { readAvailableCredit } from '@/lib/credit-view';
-import { formatRial, formatWeight } from '@/lib/utils';
+import { formatRial, formatWholeMoney, formatWeight } from '@/lib/utils';
 
 const ACCOUNT_KEY = 'customer/me/account';
 
@@ -35,7 +35,7 @@ export function BuyPowerCard({ price }: { price?: CurrentPrice }) {
   } else {
     body = {
       grams,
-      hint: `با ${formatRial(available)} توان خرید و قیمت ${formatRial(livePrice)} هر گرم`,
+      hint: `با ${formatWholeMoney(available)} توان خرید و قیمت ${formatRial(livePrice)} هر گرم`,
     };
   }
 

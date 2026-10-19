@@ -42,7 +42,6 @@ export function displayedStatus(row: StaffCustomer): { code: string; label: stri
   const account = accountStatusOf(row);
   if (account === 'BLOCKED') return { code: 'BLOCKED', label: 'مسدود' };
   if (account === 'INACTIVE') return { code: 'INACTIVE', label: 'غیرفعال' };
-  if (balanceTone(row.balanceRial) === 'neg') return { code: 'DEBTOR', label: 'بدهکار' };
   return { code: 'ACTIVE', label: 'فعال' };
 }
 

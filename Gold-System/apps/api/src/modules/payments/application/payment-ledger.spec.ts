@@ -46,6 +46,8 @@ describe('payment ledger', () => {
     expect(summary.totalPaid.amountRial).toBe('1.60');
     expect(summary.totalPaid.count).toBe(5);
     expect(summary.reversed.amountRial).toBe('4.00');
+    expect(summary.submitted.amountRial).toBe('100.00');
+    expect(summary.submitted.count).toBe(8);
   });
 
   it('searches payment, reference, order, and trade numbers', () => {

@@ -27,7 +27,7 @@ import {
 import { KycService } from '../../application/kyc.service';
 import { KycDecisionDto } from '../../application/dto/kyc-decision.dto';
 import { SubmitDocumentDto } from '../../application/dto/submit-document.dto';
-import { VerificationStatus } from '@gold/shared-types';
+import { CustomerStatus, CustomerType, VerificationStatus } from '@gold/shared-types';
 import type { KycStaffBucket } from '../../domain/kyc-workflow';
 
 const MIME_BY_EXTENSION: Record<string, string> = {
@@ -136,12 +136,15 @@ export class KycController {
 
   @Get('kyc/queue')
   @RequirePermissions('kyc.review', 'customer.read')
-  @ApiOperation({ summary: 'Customers whose latest required documents await a KYC decision' })
+  @ApiOperation({ summary: 'Staff KYC queue with optional bucket / display / type filters' })
   getReviewQueue(
     @CurrentUser() user: CurrentUserData,
     @Query('page') page: string | undefined,
     @Query('limit') limit: string | undefined,
     @Query('bucket') bucket: string | undefined,
+    @Query('kycDisplay') kycDisplay: string | undefined,
+    @Query('customerStatus') customerStatus: string | undefined,
+    @Query('customerType') customerType: string | undefined,
     @Query('status') status: string | undefined,
     @Query('search') search: string | undefined,
     @Req() req: Request,
@@ -154,11 +157,27 @@ export class KycController {
       bucket === 'verified' || bucket === 'unverified' || bucket === 'awaiting'
         ? bucket
         : undefined;
+    const display =
+      kycDisplay === 'verified' ||
+      kycDisplay === 'unverified' ||
+      kycDisplay === 'awaiting' ||
+      kycDisplay === 'rejected'
+        ? kycDisplay
+        : undefined;
+    const statusFilter = Object.values(CustomerStatus).includes(customerStatus as CustomerStatus)
+      ? (customerStatus as CustomerStatus)
+      : undefined;
+    const typeFilter = Object.values(CustomerType).includes(customerType as CustomerType)
+      ? (customerType as CustomerType)
+      : undefined;
     return this.kyc.getReviewQueue(
       {
         page: page ? Number(page) : undefined,
         limit: limit ? Number(limit) : undefined,
         bucket: staffBucket,
+        kycDisplay: display,
+        customerStatus: statusFilter,
+        customerType: typeFilter,
         status: documentStatus,
         search,
       },

@@ -110,7 +110,7 @@ export function SearchableSelect({
   useEffect(() => {
     if (!open || !listRef.current) return;
     const item = listRef.current.children[highlighted] as HTMLElement | undefined;
-    item?.scrollIntoView({ block: 'nearest' });
+    item?.scrollIntoView?.({ block: 'nearest' });
   }, [highlighted, open]);
 
   // ── Keyboard navigation ───────────────────────────────────────────────────

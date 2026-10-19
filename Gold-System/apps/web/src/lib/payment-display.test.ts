@@ -13,7 +13,7 @@ describe('payment display', () => {
     expect(paymentStatusLabel('FAILED')).toBe('ناموفق');
     expect(paymentStatusLabel('REVERSED')).toBe('مسترد شده');
     expect(paymentTone('REVERSED')).toBe('blue');
-    expect(paymentStatusLabel('PENDING')).not.toContain('انتظار');
+    expect(paymentStatusLabel('PENDING')).toBe('در انتظار تأیید');
   });
 
   it('labels only supported payment types', () => {

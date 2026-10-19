@@ -142,11 +142,12 @@ async function calculateFiveGrams() {
   await screen.findAllByText('مبلغ قابل پرداخت');
 }
 
-async function openConfirm() {
+async function openConfirm(side: 'buy' | 'sell' = 'buy') {
+  const cta = side === 'sell' ? 'تأیید و فروش طلا' : 'تأیید و خرید طلا';
   fireEvent.click(screen.getByRole('checkbox'));
-  fireEvent.click(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' }));
+  fireEvent.click(screen.getByRole('button', { name: cta }));
   await screen.findByRole('dialog');
-  const confirmButtons = screen.getAllByRole('button', { name: 'تأیید و ثبت سفارش' });
+  const confirmButtons = screen.getAllByRole('button', { name: cta });
   return confirmButtons[confirmButtons.length - 1]!;
 }
 
@@ -245,7 +246,7 @@ describe('BuyGoldPage', () => {
     renderPage();
     expect(await screen.findByText('احراز هویت تکمیل نشده است.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'تکمیل احراز هویت' })).toHaveAttribute('href', '/portal/kyc');
-    expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'تأیید و خرید طلا' })).toBeDisabled();
   });
 
   it('shows a shortfall when credit cannot cover the calculated total', async () => {
@@ -256,7 +257,7 @@ describe('BuyGoldPage', () => {
     expect(screen.queryByText('روش پرداخت')).not.toBeInTheDocument();
     expect(screen.getByText('ارزش این وزن از دارایی ریالی شما بیشتر است.')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('checkbox'));
-    expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'تأیید و خرید طلا' })).toBeDisabled();
   });
 
   it('keeps the reviewed price when the live snapshot changes', async () => {
@@ -266,7 +267,7 @@ describe('BuyGoldPage', () => {
     await calculateFiveGrams();
     fireEvent.click(screen.getByRole('button', { name: 'بروزرسانی قیمت' }));
     expect(await screen.findByText('قیمت طلا تغییر کرده است.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'تأیید و خرید طلا' })).toBeDisabled();
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
@@ -276,13 +277,13 @@ describe('BuyGoldPage', () => {
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     await calculateFiveGrams();
     expect(screen.getByText('قیمت این سفارش منقضی شده است.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'تأیید و ثبت سفارش' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'تأیید و خرید طلا' })).toBeDisabled();
   });
 
   it('prices the opposite panel while the weight is typed', async () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.change(screen.getByLabelText('وزن طلا'), { target: { value: '۲' } });
+    fireEvent.change(screen.getByLabelText('وزن طلا (گرم)'), { target: { value: '۲' } });
     expect((await screen.findAllByText('مبلغ قابل پرداخت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
     expect(screen.queryByRole('button', { name: 'محاسبه قیمت' })).not.toBeInTheDocument();
@@ -292,7 +293,7 @@ describe('BuyGoldPage', () => {
   it('fills weight when a custom toman amount is typed', async () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.change(screen.getByLabelText('مبلغ'), { target: { value: '۲۰۰۰۰۰۰۰' } });
+    fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '۲۰۰۰۰۰۰۰' } });
     expect(await screen.findByDisplayValue('۱۶.۱۹۴')).toBeInTheDocument();
     expect((await screen.findAllByText('مبلغ قابل پرداخت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '1' }));
@@ -308,7 +309,7 @@ describe('BuyGoldPage', () => {
     expect(await screen.findByDisplayValue('۱۶.۱۹۴')).toBeInTheDocument();
     expect(slider).toHaveValue('20000000');
     expect(screen.getByText('۴۰٪')).toBeInTheDocument();
-    fireEvent.change(screen.getByLabelText('وزن طلا'), { target: { value: '۲' } });
+    fireEvent.change(screen.getByLabelText('وزن طلا (گرم)'), { target: { value: '۲' } });
     expect(await screen.findByDisplayValue('۲,۴۷۰,۰۰۰')).toBeInTheDocument();
     expect(await screen.findByLabelText('میزان خرید از مانده')).toHaveValue('2470000');
   });
@@ -344,7 +345,7 @@ describe('BuyGoldPage', () => {
   it('rejects a zero weight before calling the pricing API', async () => {
     renderPage();
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.change(screen.getByLabelText('وزن طلا'), { target: { value: '۰' } });
+    fireEvent.change(screen.getByLabelText('وزن طلا (گرم)'), { target: { value: '۰' } });
     expect(await screen.findByText('وزن باید عددی بزرگ‌تر از صفر باشد.')).toBeInTheDocument();
     expect(mockCalculate).not.toHaveBeenCalled();
   });
@@ -384,11 +385,10 @@ describe('BuyGoldPage', () => {
   it('lets the seller pick their gold holding and caps typed weight to it', async () => {
     renderPage('sell');
     expect(await screen.findByRole('tab', { name: 'فروش طلا' })).toHaveAttribute('aria-selected', 'true');
-    const holding = await screen.findByRole('button', { name: /طلای آبشده/ });
-    expect(holding).toHaveTextContent('۲ گرم');
+    expect(await screen.findByText(/موجودی طلا:/)).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: '۲ گرم' })).toBeEnabled();
     expect(screen.getByRole('button', { name: '۵ گرم' })).toBeDisabled();
-    fireEvent.change(screen.getByLabelText('وزن فروش'), { target: { value: '۵' } });
+    fireEvent.change(screen.getByLabelText('وزن طلا (گرم)'), { target: { value: '۵' } });
     expect(screen.getByDisplayValue('۲')).toBeInTheDocument();
     expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
     expect(mockCalculate).toHaveBeenCalledWith(expect.objectContaining({ weightGrams: '2' }));
@@ -419,10 +419,10 @@ describe('BuyGoldPage', () => {
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     const slider = await screen.findByLabelText('میزان فروش از دارایی');
     expect(slider).toHaveAttribute('max', '2470000');
-    fireEvent.change(screen.getByLabelText('مبلغ'), { target: { value: '1000000' } });
+    fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '1000000' } });
     expect(await screen.findByDisplayValue('۰.۸۰۹')).toBeInTheDocument();
     expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
-    fireEvent.change(screen.getByLabelText('وزن فروش'), { target: { value: '۱' } });
+    fireEvent.change(screen.getByLabelText('وزن طلا (گرم)'), { target: { value: '۱' } });
     expect(await screen.findByDisplayValue('۱,۲۳۵,۰۰۰')).toBeInTheDocument();
     expect(await screen.findByLabelText('میزان فروش از دارایی')).toHaveValue('1235000');
   });
@@ -430,9 +430,9 @@ describe('BuyGoldPage', () => {
   it('creates a sell order from the selected gold holding', async () => {
     renderPage('sell');
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.click(await screen.findByRole('button', { name: /طلای آبشده/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'فروش همه طلای موجود' }));
     expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
-    fireEvent.click(await openConfirm());
+    fireEvent.click(await openConfirm('sell'));
     expect(await screen.findByText('سفارش فروش ثبت شد')).toBeInTheDocument();
     expect(mockCreate).toHaveBeenCalledWith(expect.objectContaining({ side: 'SELL', weightGrams: '2' }));
   });
@@ -443,9 +443,9 @@ describe('BuyGoldPage', () => {
     );
     renderPage('sell');
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
-    fireEvent.click(await screen.findByRole('button', { name: /طلای آبشده/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'فروش همه طلای موجود' }));
     expect((await screen.findAllByText('مبلغ قابل دریافت')).length).toBeGreaterThan(0);
-    fireEvent.click(await openConfirm());
+    fireEvent.click(await openConfirm('sell'));
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'موجودی طلای کافی برای ثبت این سفارش فروش ندارید.',
     );

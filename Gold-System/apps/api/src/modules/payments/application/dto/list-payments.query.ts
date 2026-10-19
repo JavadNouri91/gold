@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
-import { PaymentStatus } from '../../domain/constants/payment-methods';
+import { PaymentMethod, PaymentStatus } from '../../domain/constants/payment-methods';
 
 /**
  * Shared query for staff listing and the customer ledger.
@@ -20,6 +20,11 @@ export class ListPaymentsQueryDto {
   @IsOptional()
   @IsIn(Object.values(PaymentStatus))
   status?: PaymentStatus;
+
+  /** Exact payment method. Staff listing only. */
+  @IsOptional()
+  @IsIn(Object.values(PaymentMethod))
+  method?: PaymentMethod;
 
   @IsOptional()
   @Type(() => Number)

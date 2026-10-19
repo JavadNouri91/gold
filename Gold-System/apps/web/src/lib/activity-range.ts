@@ -1,10 +1,9 @@
 export type ActivityRangePreset = 'today' | '7d' | '30d' | '90d' | '3m' | '6m' | '1y' | 'custom';
 
 export const PAYMENT_RANGE_OPTIONS: { id: ActivityRangePreset; label: string }[] = [
-  { id: 'today', label: 'امروز' },
-  { id: '7d', label: '۷ روز گذشته' },
   { id: '30d', label: '۳۰ روز گذشته' },
-  { id: '90d', label: '۹۰ روز گذشته' },
+  { id: '3m', label: '۳ ماه گذشته' },
+  { id: '1y', label: '۱ سال گذشته' },
   { id: 'custom', label: 'سفارشی' },
 ];
 

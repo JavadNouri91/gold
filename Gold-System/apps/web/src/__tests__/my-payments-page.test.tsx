@@ -14,7 +14,15 @@ jest.mock('next/link', () => ({
 }));
 
 jest.mock('@/components/portal/payments/submit-receipt-sheet', () => ({
-  SubmitReceiptButton: () => null,
+  SubmitReceiptButton: ({ label }: { label?: string }) => (
+    <button type="button">{label ?? 'افزایش اعتبار'}</button>
+  ),
+}));
+
+jest.mock('@/components/portal/payments/withdraw-request-sheet', () => ({
+  WithdrawRequestButton: ({ label }: { label?: string }) => (
+    <button type="button">{label ?? 'درخواست برداشت وجه'}</button>
+  ),
 }));
 
 const summary: PaymentSummary = {
@@ -22,6 +30,7 @@ const summary: PaymentSummary = {
   successful: { count: 2, amountRial: '25000000.00' },
   failed: { count: 1, amountRial: '10000000.00' },
   reversed: { count: 1, amountRial: '5000000.00' },
+  submitted: { count: 1, amountRial: '1000000000.00' },
   hasAny: true,
 };
 
@@ -54,26 +63,34 @@ function renderPage(overrides: Partial<React.ComponentProps<typeof MyPaymentsPag
       onRetryList={() => undefined}
       meta={{ page: 1, limit: 10, total: 0, totalPages: 0 }}
       rangeReady
+      availableRial="20843140400"
       onReceiptSubmitted={() => undefined}
       {...overrides}
     />,
   );
 }
 
-describe('MyPaymentsPage status cards', () => {
+describe('MyPaymentsPage cash management', () => {
+  it('shows the cash management title and deposit CTA', () => {
+    renderPage();
+    expect(screen.getByRole('heading', { name: 'مدیریت واریز و برداشت' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '+ افزایش اعتبار (واریز)' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'درخواست برداشت وجه' })).toBeInTheDocument();
+  });
+
   it('filters the list when a status summary card is clicked', async () => {
     const user = userEvent.setup();
     const onStatusGroup = jest.fn();
     renderPage({ onStatusGroup });
 
-    await user.click(screen.getByRole('button', { name: 'فیلتر پرداخت‌های موفق' }));
+    await user.click(screen.getByRole('button', { name: 'فیلتر در انتظار تأیید حسابداری' }));
+    expect(onStatusGroup).toHaveBeenCalledWith('submitted');
+
+    await user.click(screen.getByRole('button', { name: 'فیلتر مجموع واریزهای موفق' }));
     expect(onStatusGroup).toHaveBeenCalledWith('successful');
 
-    await user.click(screen.getByRole('button', { name: 'فیلتر پرداخت‌های ناموفق' }));
+    await user.click(screen.getByRole('button', { name: 'فیلتر تراکنش‌های ناموفق / مسترد شده' }));
     expect(onStatusGroup).toHaveBeenCalledWith('failed');
-
-    await user.click(screen.getByRole('button', { name: 'فیلتر مبالغ برگشتی' }));
-    expect(onStatusGroup).toHaveBeenCalledWith('reversed');
   });
 
   it('clears the status filter when the active card is clicked again', async () => {
@@ -81,7 +98,7 @@ describe('MyPaymentsPage status cards', () => {
     const onStatusGroup = jest.fn();
     renderPage({ statusGroup: 'successful', onStatusGroup });
 
-    await user.click(screen.getByRole('button', { name: 'فیلتر پرداخت‌های موفق' }));
+    await user.click(screen.getByRole('button', { name: 'فیلتر مجموع واریزهای موفق' }));
     expect(onStatusGroup).toHaveBeenCalledWith('');
   });
 });

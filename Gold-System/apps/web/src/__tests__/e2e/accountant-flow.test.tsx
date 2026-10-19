@@ -12,7 +12,10 @@ jest.mock('@/lib/auth', () => ({
 }));
 
 jest.mock('@/lib/internal-api', () => ({
-  internalPaymentsApi: { list: jest.fn() },
+  internalPaymentsApi: {
+    list: jest.fn(),
+    staffSummary: jest.fn(),
+  },
   financialLedgerApi: {
     accounts: jest.fn(),
     balances: jest.fn(),
@@ -21,7 +24,7 @@ jest.mock('@/lib/internal-api', () => ({
 }));
 
 const api = jest.requireMock('@/lib/internal-api') as {
-  internalPaymentsApi: { list: jest.Mock };
+  internalPaymentsApi: { list: jest.Mock; staffSummary: jest.Mock };
   financialLedgerApi: { accounts: jest.Mock; balances: jest.Mock; journals: jest.Mock };
 };
 
@@ -40,6 +43,10 @@ describe('accountant flow', () => {
           id: 'pay-1',
           tradeId: 'tr-1',
           customerId: 'c1',
+          customerName: 'علی رضایی',
+          customerMobile: '09121111111',
+          tradeNumber: 'T-1',
+          orderNumber: null,
           method: 'CASH',
           amount: '80.00',
           currency: 'IRR',
@@ -54,7 +61,13 @@ describe('accountant flow', () => {
       ],
       meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
     });
+    api.internalPaymentsApi.staffSummary.mockResolvedValue({
+      pendingCount: 1,
+      todayValidatedAmountRial: '0.00',
+      totalSuccessfulAmountRial: '0.00',
+    });
     const payments = render(<PaymentsPage />);
+    expect(await screen.findByText('مدیریت پرداخت‌ها و فیش‌ها')).toBeInTheDocument();
     expect(await screen.findByText(toPersianDigits('R-8'))).toBeInTheDocument();
     payments.unmount();
 

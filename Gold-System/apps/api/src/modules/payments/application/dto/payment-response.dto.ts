@@ -14,6 +14,14 @@ export class PaymentResponseDto {
   idempotencyKey: string;
   tradeId: string | null;
   customerId: string;
+  /** Staff list enrichment — display name. */
+  customerName: string | null;
+  /** Staff list enrichment — mobile (Latin digits). */
+  customerMobile: string | null;
+  /** Staff list enrichment — trade number when linked. */
+  tradeNumber: string | null;
+  /** Staff list enrichment — order number when linked. */
+  orderNumber: string | null;
   method: string;
   amount: string;
   currency: string;
@@ -29,12 +37,24 @@ export class PaymentResponseDto {
   createdAt: string;
   updatedAt: string;
 
-  static from(entity: PaymentEntity): PaymentResponseDto {
+  static from(
+    entity: PaymentEntity,
+    extras?: {
+      customerName?: string | null;
+      customerMobile?: string | null;
+      tradeNumber?: string | null;
+      orderNumber?: string | null;
+    },
+  ): PaymentResponseDto {
     const dto = new PaymentResponseDto();
     dto.id = entity.id;
     dto.idempotencyKey = entity.idempotencyKey;
     dto.tradeId = entity.tradeId;
     dto.customerId = entity.customerId;
+    dto.customerName = extras?.customerName ?? null;
+    dto.customerMobile = extras?.customerMobile ?? null;
+    dto.tradeNumber = extras?.tradeNumber ?? null;
+    dto.orderNumber = extras?.orderNumber ?? null;
     dto.method = entity.method;
     dto.amount = entity.amount.toFixed(2);
     dto.currency = entity.currency;
@@ -50,6 +70,13 @@ export class PaymentResponseDto {
     dto.updatedAt = entity.updatedAt.toISOString();
     return dto;
   }
+}
+
+/** KPI cards for the staff payments dashboard. */
+export class StaffPaymentSummaryDto {
+  pendingCount: number;
+  todayValidatedAmountRial: string;
+  totalSuccessfulAmountRial: string;
 }
 
 export class PaymentAllocationResponseDto {
@@ -97,7 +124,7 @@ export class TradePaymentStatusDto {
     dto.remaining = params.tradeTotal.minus(params.totalAllocated).toFixed(2);
     dto.isFullyPaid = params.totalAllocated.greaterThanOrEqualTo(params.tradeTotal);
     dto.settlementStatus = params.settlementStatus;
-    dto.payments = params.payments.map(PaymentResponseDto.from);
+    dto.payments = params.payments.map((payment) => PaymentResponseDto.from(payment));
     dto.allocations = params.allocations.map(PaymentAllocationResponseDto.from);
     return dto;
   }
@@ -146,6 +173,8 @@ export class PaymentSummaryDto {
   successful: AmountCountDto;
   failed: AmountCountDto;
   reversed: AmountCountDto;
+  /** Receipts waiting for accountant review. */
+  submitted: AmountCountDto;
   /** True when the customer has any non-pending payment, ignoring the current filters. */
   hasAny: boolean;
 }

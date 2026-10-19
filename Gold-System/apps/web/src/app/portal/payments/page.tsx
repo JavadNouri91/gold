@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import useSWR from 'swr';
-import { paymentsApi, type PaymentLedgerType, type PaymentStatusGroup } from '@/lib/api';
+import { customerApi, paymentsApi, type PaymentLedgerType, type PaymentStatusGroup } from '@/lib/api';
 import { activityBounds, type ActivityRangePreset } from '@/lib/activity-range';
+import { readAvailableCredit } from '@/lib/credit-view';
 import { MyPaymentsPage } from '@/components/portal/payments/my-payments-page';
 
 export default function PaymentsPage() {
@@ -29,6 +30,9 @@ export default function PaymentsPage() {
   useEffect(() => {
     setPage(1);
   }, [from, to, statusGroup, type, query, limit]);
+
+  const account = useSWR('customer/me/account', () => customerApi.getMyAccount());
+  const availableRial = account.data ? readAvailableCredit(account.data) : null;
 
   const summary = useSWR(from && to ? ['payments/summary', from, to, type, query] : null, () =>
     paymentsApi.summary({
@@ -80,9 +84,11 @@ export default function PaymentsPage() {
       onRetryList={() => void list.mutate()}
       meta={list.data?.meta}
       rangeReady={Boolean(bounds)}
+      availableRial={availableRial}
       onReceiptSubmitted={() => {
         void summary.mutate();
         void list.mutate();
+        void account.mutate();
       }}
     />
   );

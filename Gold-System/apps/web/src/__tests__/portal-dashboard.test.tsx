@@ -71,7 +71,7 @@ describe('KycStatusCard', () => {
 describe('QuickActions', () => {
   it('links to existing portal routes', () => {
     render(<QuickActions />);
-    expect(screen.getByText('تاریخچه پرداخت').closest('a')).toHaveAttribute('href', '/portal/payments');
+    expect(screen.getByText('واریز و برداشت').closest('a')).toHaveAttribute('href', '/portal/payments');
     expect(screen.getByText('سفارش جدید').closest('a')).toHaveAttribute(
       'href',
       '/portal/orders/new',

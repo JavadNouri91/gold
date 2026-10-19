@@ -28,6 +28,27 @@ export interface LedgerPaymentRecord {
   relatedSide: 'BUY' | 'SELL' | null;
 }
 
+export interface StaffPaymentRecord {
+  payment: PaymentEntity;
+  customerName: string;
+  customerMobile: string;
+  orderNumber: string | null;
+  tradeNumber: string | null;
+}
+
+export interface StaffPaymentListOpts {
+  limit?: number;
+  offset?: number;
+  tradeId?: string;
+  customerId?: string;
+  status?: PaymentStatus;
+  statusGroup?: 'successful' | 'failed' | 'reversed' | 'submitted';
+  method?: PaymentMethod;
+  from?: Date;
+  to?: Date;
+  q?: string;
+}
+
 const ledgerInclude = {
   trade: {
     select: {
@@ -48,7 +69,24 @@ const ledgerInclude = {
   },
 } satisfies Prisma.PaymentInclude;
 
+const staffListInclude = {
+  customer: { select: { firstName: true, lastName: true, mobile: true } },
+  trade: {
+    select: {
+      tradeNumber: true,
+      order: { select: { orderNumber: true } },
+    },
+  },
+} satisfies Prisma.PaymentInclude;
+
 type LedgerRow = Prisma.PaymentGetPayload<{ include: typeof ledgerInclude }>;
+type StaffListRow = Prisma.PaymentGetPayload<{ include: typeof staffListInclude }>;
+
+const SUCCESSFUL_STATUSES: PaymentStatus[] = [
+  PaymentStatus.VALIDATED,
+  PaymentStatus.ALLOCATED,
+  PaymentStatus.COMPLETED,
+];
 
 @Injectable()
 export class PaymentRepository {
@@ -120,24 +158,74 @@ export class PaymentRepository {
     return row ? this.mapLedgerRow(row) : null;
   }
 
-  async findAll(opts: {
-    limit?: number;
-    offset?: number;
-    tradeId?: string;
-    customerId?: string;
-    status?: PaymentStatus;
-  }): Promise<PaymentEntity[]> {
+  buildStaffListWhere(opts: StaffPaymentListOpts): Prisma.PaymentWhereInput {
+    const filters: Prisma.PaymentWhereInput[] = [];
+    if (opts.tradeId) filters.push({ tradeId: opts.tradeId });
+    if (opts.customerId) filters.push({ customerId: opts.customerId });
+    if (opts.method) filters.push({ method: opts.method });
+    if (opts.from || opts.to) {
+      filters.push({
+        createdAt: {
+          ...(opts.from ? { gte: opts.from } : {}),
+          ...(opts.to ? { lte: opts.to } : {}),
+        },
+      });
+    }
+
+    if (opts.status) {
+      filters.push({ status: opts.status });
+    } else if (opts.statusGroup) {
+      const group = opts.statusGroup;
+      filters.push({
+        status: {
+          in:
+            group === 'successful'
+              ? SUCCESSFUL_STATUSES
+              : group === 'failed'
+                ? [PaymentStatus.FAILED]
+                : group === 'reversed'
+                  ? [PaymentStatus.REVERSED]
+                  : [PaymentStatus.PENDING],
+        },
+      });
+    }
+
+    const q = opts.q?.trim();
+    if (q) {
+      filters.push({
+        OR: [
+          { id: { contains: q, mode: 'insensitive' } },
+          { referenceNumber: { contains: q, mode: 'insensitive' } },
+          { customer: { mobile: { contains: q } } },
+          { customer: { firstName: { contains: q, mode: 'insensitive' } } },
+          { customer: { lastName: { contains: q, mode: 'insensitive' } } },
+          { trade: { tradeNumber: { contains: q, mode: 'insensitive' } } },
+          { trade: { order: { orderNumber: { contains: q, mode: 'insensitive' } } } },
+        ],
+      });
+    }
+
+    return filters.length ? { AND: filters } : {};
+  }
+
+  async findAll(opts: StaffPaymentListOpts): Promise<StaffPaymentRecord[]> {
+    const where = this.buildStaffListWhere(opts);
     const rows = await this.prisma.payment.findMany({
-      where: {
-        ...(opts.tradeId ? { tradeId: opts.tradeId } : {}),
-        ...(opts.customerId ? { customerId: opts.customerId } : {}),
-        ...(opts.status ? { status: opts.status } : {}),
-      },
+      where,
+      include: staffListInclude,
       orderBy: { createdAt: 'desc' },
       take: opts.limit ?? 50,
       skip: opts.offset ?? 0,
     });
-    return rows.map((r) => this.mapRow(r));
+    return rows.map((row) => this.mapStaffListRow(row));
+  }
+
+  async sumAmount(where: Prisma.PaymentWhereInput): Promise<string> {
+    const result = await this.prisma.payment.aggregate({
+      where,
+      _sum: { amount: true },
+    });
+    return result._sum.amount == null ? '0.00' : new Decimal(result._sum.amount.toString()).toFixed(2);
   }
 
   async findAllocationsByTradeId(tradeId: string): Promise<PaymentAllocationEntity[]> {
@@ -319,6 +407,16 @@ export class PaymentRepository {
       orderNumber: row.trade?.order?.orderNumber ?? null,
       tradeNumber: row.trade?.tradeNumber ?? null,
       relatedSide: readPaymentSide(item?.metadata),
+    };
+  }
+
+  private mapStaffListRow(row: StaffListRow): StaffPaymentRecord {
+    return {
+      payment: this.mapRow(row),
+      customerName: `${row.customer.firstName} ${row.customer.lastName}`.trim(),
+      customerMobile: row.customer.mobile,
+      orderNumber: row.trade?.order?.orderNumber ?? null,
+      tradeNumber: row.trade?.tradeNumber ?? null,
     };
   }
 

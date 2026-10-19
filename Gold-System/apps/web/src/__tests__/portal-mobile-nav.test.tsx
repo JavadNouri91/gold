@@ -178,7 +178,7 @@ describe('DashboardSidebar mobile drawer', () => {
       'href',
       '/portal/orders/new',
     );
-    expect(within(nav).getByRole('link', { name: 'تراکنش‌ها و پرداخت‌ها' })).toHaveAttribute(
+    expect(within(nav).getByRole('link', { name: 'واریز و برداشت' })).toHaveAttribute(
       'href',
       '/portal/payments',
     );

@@ -1,9 +1,7 @@
 import type { ActivitySeriesPoint, CurrentPrice } from '@/lib/api';
-import type { AssetChartRange, WeightHistoryBucket } from '@/lib/asset-chart-range';
+import type { AssetChartRange } from '@/lib/asset-chart-range';
 import type { PortfolioPosition } from '@/lib/customer-portfolio';
 import { AssetComposition } from './asset-composition';
-import { AssetTradeActions } from './asset-trade-actions';
-import { GoldBalanceHistory } from './gold-balance-history';
 import { PortfolioSummary } from './portfolio-summary';
 import { PortfolioValueChart } from './portfolio-value-chart';
 
@@ -18,12 +16,6 @@ export function AssetsPage({
   onRefreshPrice,
   range,
   onRangeChange,
-  weightBucket,
-  onWeightBucketChange,
-  weightPoints,
-  historyLoading,
-  historyError,
-  onRetryHistory,
   valuePoints,
   valueLoading,
   valueError,
@@ -41,12 +33,6 @@ export function AssetsPage({
   availableRial?: string | null;
   range: AssetChartRange;
   onRangeChange: (range: AssetChartRange) => void;
-  weightBucket: WeightHistoryBucket;
-  onWeightBucketChange: (bucket: WeightHistoryBucket) => void;
-  weightPoints: ActivitySeriesPoint[];
-  historyLoading?: boolean;
-  historyError?: boolean;
-  onRetryHistory?: () => void;
   valuePoints?: ActivitySeriesPoint[];
   valueLoading?: boolean;
   valueError?: boolean;
@@ -75,10 +61,11 @@ export function AssetsPage({
         priceLoading={priceLoading}
         priceError={priceError}
         onRefreshPrice={onRefreshPrice}
+        availableRial={availableRial}
       />
 
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
-        <div className="min-w-0 lg:col-span-3">
+      <div className="grid grid-cols-1 items-stretch gap-4 lg:grid-cols-5">
+        <div className="h-full min-h-0 min-w-0 lg:col-span-3">
           <PortfolioValueChart
             range={range}
             onRangeChange={onRangeChange}
@@ -92,28 +79,12 @@ export function AssetsPage({
             onRetry={onRetryValue}
           />
         </div>
-        <div className="min-w-0 lg:col-span-2">
+        <div className="h-full min-h-0 min-w-0 lg:col-span-2">
           <AssetComposition
             position={position}
             availableRial={availableRial}
             livePriceRial={price?.normalizedValue}
           />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-5">
-        <div className="min-w-0 lg:col-span-3">
-          <GoldBalanceHistory
-            points={weightPoints}
-            bucket={weightBucket}
-            onBucketChange={onWeightBucketChange}
-            loading={historyLoading}
-            error={historyError}
-            onRetry={onRetryHistory}
-          />
-        </div>
-        <div className="min-w-0 lg:col-span-2">
-          <AssetTradeActions position={position} price={price} />
         </div>
       </div>
     </div>

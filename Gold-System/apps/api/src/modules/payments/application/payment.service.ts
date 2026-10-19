@@ -41,9 +41,16 @@ import {
   SettlementResponseDto,
   LedgerPaymentDto,
   PaymentSummaryDto,
+  StaffPaymentSummaryDto,
 } from './dto/payment-response.dto';
 import { ListPaymentsQueryDto } from './dto/list-payments.query';
-import { customerLedgerWhere, foldPaymentSummary, parseLedgerBounds } from './payment-ledger';
+import {
+  customerLedgerWhere,
+  foldPaymentSummary,
+  parseLedgerBounds,
+  SUCCESSFUL_PAYMENT_STATUSES,
+} from './payment-ledger';
+import { tehranDateStartUtc, tehranParts } from '../../trading-policy/domain/trading-time';
 
 export { PaymentEntity, PaymentAllocationEntity };
 
@@ -324,6 +331,39 @@ export class PaymentService {
     return PaymentResponseDto.from(updated);
   }
 
+  /**
+   * Rejects a PENDING payment (accountant rejection).
+   * Transitions: PENDING → FAILED only (not from VALIDATED).
+   */
+  async failPayment(paymentId: string, actorUserId: string): Promise<PaymentResponseDto> {
+    const payment = await this.paymentRepo.findById(paymentId);
+    if (!payment) throw new PaymentNotFoundException(paymentId);
+
+    if (payment.status !== PaymentStatus.PENDING || !payment.canTransitionTo(PaymentStatus.FAILED)) {
+      throw new InvalidPaymentTransitionException(
+        paymentId,
+        payment.status,
+        PaymentStatus.FAILED,
+      );
+    }
+
+    const updated = await this.prisma.$transaction(async (tx) =>
+      this.paymentRepo.updateStatusInTx(tx, paymentId, PaymentStatus.FAILED),
+    );
+
+    await this.audit.log({
+      actorId: actorUserId,
+      actorType: 'USER',
+      action: 'PAYMENT_FAILED',
+      entityType: 'Payment',
+      entityId: paymentId,
+      before: { status: payment.status },
+      after: { status: PaymentStatus.FAILED },
+    });
+
+    return PaymentResponseDto.from(updated);
+  }
+
   // ─── Allocate Payment ─────────────────────────────────────────────────────
 
   /**
@@ -524,6 +564,7 @@ export class PaymentService {
   /**
    * Staff listing. customerId in the query is trusted only because the
    * controller requires payment.read. Includes every status, including PENDING.
+   * Enriches rows with customer name/mobile and trade/order numbers.
    */
   async listPayments(opts: {
     limit?: number;
@@ -531,26 +572,84 @@ export class PaymentService {
     tradeId?: string;
     customerId?: string;
     status?: PaymentStatus;
+    statusGroup?: 'successful' | 'failed' | 'reversed' | 'submitted';
+    method?: PaymentMethod;
+    from?: string;
+    to?: string;
+    q?: string;
   }): Promise<{ data: PaymentResponseDto[]; meta: PaginationMeta }> {
     const limit = opts.limit ?? 50;
     const offset = opts.offset ?? 0;
-    const where = {
-      ...(opts.tradeId ? { tradeId: opts.tradeId } : {}),
-      ...(opts.customerId ? { customerId: opts.customerId } : {}),
-      ...(opts.status ? { status: opts.status } : {}),
+    const listOpts = {
+      tradeId: opts.tradeId,
+      customerId: opts.customerId,
+      status: opts.status,
+      statusGroup: opts.statusGroup,
+      method: opts.method,
+      from: opts.from ? new Date(opts.from) : undefined,
+      to: opts.to ? new Date(opts.to) : undefined,
+      q: opts.q?.trim() || undefined,
+      limit,
+      offset,
     };
-    const [payments, total] = await Promise.all([
-      this.paymentRepo.findAll({ ...opts, limit, offset }),
+    const where = this.paymentRepo.buildStaffListWhere(listOpts);
+    const [rows, total] = await Promise.all([
+      this.paymentRepo.findAll(listOpts),
       this.paymentRepo.count(where),
     ]);
     return {
-      data: payments.map(PaymentResponseDto.from),
+      data: rows.map((row) =>
+        PaymentResponseDto.from(row.payment, {
+          customerName: row.customerName,
+          customerMobile: row.customerMobile,
+          tradeNumber: row.tradeNumber,
+          orderNumber: row.orderNumber,
+        }),
+      ),
       meta: {
         page: Math.floor(offset / limit) + 1,
         limit,
         total,
         totalPages: total === 0 ? 0 : Math.ceil(total / limit),
       },
+    };
+  }
+
+  /**
+   * Staff KPI cards for the payments dashboard (Asia/Tehran day for "today").
+   */
+  async staffSummary(): Promise<StaffPaymentSummaryDto> {
+    const todayKey = tehranParts(new Date()).dateKey;
+    const todayStart = tehranDateStartUtc(todayKey);
+    const tomorrowStart = tehranDateStartUtc(
+      (() => {
+        const next = new Date(todayStart.getTime() + 24 * 60 * 60 * 1000);
+        return tehranParts(next).dateKey;
+      })(),
+    );
+    const successful = [...SUCCESSFUL_PAYMENT_STATUSES] as PaymentStatus[];
+
+    const [pendingCount, todayValidatedAmountRial, totalSuccessfulAmountRial] = await Promise.all([
+      this.paymentRepo.count({ status: PaymentStatus.PENDING }),
+      this.paymentRepo.sumAmount({
+        status: { in: successful },
+        OR: [
+          { validatedAt: { gte: todayStart, lt: tomorrowStart } },
+          {
+            AND: [
+              { validatedAt: null },
+              { createdAt: { gte: todayStart, lt: tomorrowStart } },
+            ],
+          },
+        ],
+      }),
+      this.paymentRepo.sumAmount({ status: { in: successful } }),
+    ]);
+
+    return {
+      pendingCount,
+      todayValidatedAmountRial,
+      totalSuccessfulAmountRial,
     };
   }
 

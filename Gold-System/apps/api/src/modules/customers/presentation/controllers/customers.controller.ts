@@ -29,6 +29,7 @@ import { UpdateOwnProfileDto } from '../../application/dto/update-own-profile.dt
 import { SetAccountStatusDto } from '../../application/dto/set-account-status.dto';
 import { CreateCustomerNoteDto } from '../../application/dto/customer-note.dto';
 import { ImportCustomersDto } from '../../application/dto/import-customers.dto';
+import { BulkSmsDto } from '../../application/dto/bulk-sms.dto';
 import { MAX_AVATAR_BYTES } from '../../domain/avatar-file';
 import { Public } from '../../../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../../../common/decorators/permissions.decorator';
@@ -83,6 +84,19 @@ export class CustomersController {
   @ApiOperation({ summary: 'Import customers from parsed spreadsheet rows' })
   importRows(@Body() dto: ImportCustomersDto, @Req() req: Request) {
     return this.directory.importRows(dto, req.ip ?? undefined);
+  }
+
+  @Post('bulk-sms')
+  @ApiBearerAuth()
+  @RequirePermissions('customer.group.assign')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Send an SMS to up to 50 selected customers' })
+  sendBulkSms(
+    @Body() dto: BulkSmsDto,
+    @CurrentUser() user: CurrentUserData,
+    @Req() req: Request,
+  ) {
+    return this.directory.sendBulkSms(dto, user.userId, req.ip ?? undefined);
   }
 
   @Get()
