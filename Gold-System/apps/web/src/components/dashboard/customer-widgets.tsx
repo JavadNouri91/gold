@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { MobileInput } from '@/components/ui/mobile-input';
+import { NationalIdInput } from '@/components/ui/national-id-input';
 import { Modal } from '@/components/ui/modal';
 import { Alert } from '@/components/ui/alert';
 import { ApiClientError } from '@/lib/api';
@@ -163,7 +164,7 @@ export function CustomerEditDialog({
           <Input label="نام" value={form.firstName} onChange={(event) => setForm({ ...form, firstName: event.target.value })} />
           <Input label="نام خانوادگی" value={form.lastName} onChange={(event) => setForm({ ...form, lastName: event.target.value })} />
           <MobileInput label="موبایل" value={form.mobile} onValueChange={(mobile) => setForm({ ...form, mobile })} />
-          <Input label="کد ملی" dir="ltr" value={form.nationalId} onChange={(event) => setForm({ ...form, nationalId: event.target.value })} />
+          <NationalIdInput label="کد ملی" value={form.nationalId} onValueChange={(nationalId) => setForm({ ...form, nationalId })} />
           <Input label="ایمیل" dir="ltr" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} />
           <Input label="آدرس" value={form.address} onChange={(event) => setForm({ ...form, address: event.target.value })} />
         </div>

@@ -1,21 +1,16 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import { ChevronLeft } from 'lucide-react';
 import useSWR from 'swr';
+import type { Order } from '@/lib/api';
 import { ordersApi } from '@/lib/api';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PageSpinner } from '@/components/ui/spinner';
 import { Alert, EmptyState } from '@/components/ui/alert';
-import { StatusBadge } from '@/components/portal/status-badge';
-import { OrderRemainingSteps } from '@/components/portal/order-remaining-steps';
-import {
-  formatRial,
-  formatGrams,
-  formatDate,
-  orderStatusPresentation,
-  toPersianDigits,
-} from '@/lib/utils';
+import { OrderTimeline } from '@/components/portal/order-remaining-steps';
+import { SideBadge, TransactionStatus } from '@/components/portal/trades/activity-transactions';
+import { cn, formatMoney, formatPurity, formatWeight, toPersianDigits } from '@/lib/utils';
 
 const PAGE_SIZE = 10;
 
@@ -42,51 +37,33 @@ export default function OrdersPage() {
 
   if (isLoading && !data) return <PageSpinner />;
 
+  const rows = data?.data ?? [];
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold">سفارش‌های من</h1>
+    <div className="mx-auto w-full min-w-0 max-w-[1400px] space-y-4 overflow-x-hidden">
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-[#202124]">سفارش‌های من</h1>
+          <p className="mt-1 text-sm text-[#6B7280]">مشاهده و پیگیری سفارش‌های خرید و فروش</p>
+        </div>
         <Link href="/portal/orders/new">
           <Button>+ ثبت سفارش جدید</Button>
         </Link>
-      </div>
+      </header>
 
       {error && <Alert variant="error">خطا در بارگذاری سفارش‌ها</Alert>}
 
-      {!error && data?.data?.length === 0 ? (
+      {!error && rows.length === 0 ? (
         <EmptyState
           icon="📋"
           message="هنوز سفارشی ندارید"
           description="برای ثبت اولین سفارش روی دکمه بالا کلیک کنید"
         />
-      ) : (
+      ) : rows.length > 0 ? (
         <>
-          <div className="space-y-3">
-            {data?.data?.map((order) => (
-              <Link key={order.id} href={`/portal/orders/${order.id}`}>
-                <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                  <CardContent className="py-4">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-1">
-                        <p className="font-medium" dir="ltr">{toPersianDigits(order.orderNumber)}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {formatDate(order.createdAt)}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-4 text-sm">
-                        <span>{formatGrams(order.weightGrams)}</span>
-                        <span className="tabular-nums font-medium">{formatRial(order.totalAmountRial)}</span>
-                        <StatusBadge {...orderStatusPresentation(order.status)} />
-                      </div>
-                    </div>
-                    <div className="mt-2">
-                      <OrderRemainingSteps status={order.status} compact />
-                    </div>
-                  </CardContent>
-                </Card>
-              </Link>
-            ))}
-          </div>
+          <h2 className="text-base font-bold text-[#202124]">سفارش‌ها</h2>
+          <OrderCards rows={rows} />
+          <OrderTable rows={rows} />
 
           {data?.meta && data.meta.total > 0 ? (
             <OrdersPagination
@@ -97,8 +74,128 @@ export default function OrdersPage() {
             />
           ) : null}
         </>
-      )}
+      ) : null}
     </div>
+  );
+}
+
+const ORDER_COLUMNS = [
+  'شماره سفارش',
+  'تاریخ و ساعت',
+  'نوع',
+  'مقدار',
+  'عیار',
+  'قیمت واحد',
+  'مبلغ کل',
+  'وضعیت',
+  'عملیات',
+] as const;
+
+function stamp(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return '—';
+  const day = date.toLocaleDateString('fa-IR');
+  const time = date.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  return `${day} - ${time}`;
+}
+
+function OrderCards({ rows }: { rows: Order[] }) {
+  return (
+    <ul className="space-y-3 lg:hidden">
+      {rows.map((order) => (
+        <li key={order.id}>
+          <article
+            className={cn(
+              'rounded-2xl border bg-white p-4 shadow-sm',
+              order.side === 'SELL' ? 'border-red-100' : order.side === 'BUY' ? 'border-green-100' : 'border-[#E5E7EB]',
+            )}
+          >
+            <div className="flex items-start justify-between gap-3">
+              <SideBadge side={order.side ?? null} />
+              <TransactionStatus status={order.status} />
+            </div>
+            <p className="mt-2 font-semibold tabular-nums text-[#202124]" dir="ltr">
+              {toPersianDigits(order.orderNumber)}
+            </p>
+            <p className="mt-3 text-base font-bold tabular-nums text-[#202124]">{formatWeight(order.weightGrams)}</p>
+            <p className="text-sm text-[#6B7280]">عیار {formatPurity(order.purityRatio)}</p>
+            <p className="mt-3 text-xs text-[#6B7280]">قیمت واحد</p>
+            <p className="text-sm font-semibold tabular-nums text-[#202124]">{formatMoney(order.unitPriceRial)}</p>
+            <p className="mt-3 text-xs text-[#6B7280]">مبلغ کل</p>
+            <p className="text-base font-bold tabular-nums text-[#202124]">{formatMoney(order.totalAmountRial)}</p>
+            <p className="mt-3 text-xs text-[#6B7280]">{stamp(order.createdAt)}</p>
+            <OrderTimeline status={order.status} className="mt-4" />
+            <Link
+              href={`/portal/orders/${order.id}`}
+              className="mt-3 inline-flex min-h-11 w-full items-center justify-between rounded-xl bg-[#F8F9FA] px-3 text-sm font-semibold text-[#202124]"
+            >
+              مشاهده جزئیات
+              <ChevronLeft className="h-4 w-4" aria-hidden />
+            </Link>
+          </article>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function OrderTable({ rows }: { rows: Order[] }) {
+  return (
+    <div className="hidden overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm lg:block">
+      <table className="w-full text-sm">
+        <thead className="bg-[#F8F9FA] text-[#6B7280]">
+          <tr>
+            {ORDER_COLUMNS.map((heading) => (
+              <th key={heading} scope="col" className="px-3 py-3 text-right font-medium">
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((order) => (
+            <OrderTableRow key={order.id} order={order} />
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function OrderTableRow({ order }: { order: Order }) {
+  return (
+    <>
+      <tr className="border-t border-[#E5E7EB]">
+        <td className="px-3 py-4 font-semibold tabular-nums" dir="ltr">
+          {toPersianDigits(order.orderNumber)}
+        </td>
+        <td className="whitespace-nowrap px-3 py-4 text-[#6B7280]">{stamp(order.createdAt)}</td>
+        <td className="px-3 py-4">
+          <SideBadge side={order.side ?? null} />
+        </td>
+        <td className="px-3 py-4 tabular-nums">{formatWeight(order.weightGrams)}</td>
+        <td className="px-3 py-4">{formatPurity(order.purityRatio)}</td>
+        <td className="px-3 py-4 tabular-nums">{formatMoney(order.unitPriceRial)}</td>
+        <td className="px-3 py-4 font-semibold tabular-nums">{formatMoney(order.totalAmountRial)}</td>
+        <td className="px-3 py-4">
+          <TransactionStatus status={order.status} />
+        </td>
+        <td className="px-3 py-4">
+          <Link
+            href={`/portal/orders/${order.id}`}
+            className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-[#C8922E]"
+          >
+            جزئیات
+          </Link>
+        </td>
+      </tr>
+      <tr>
+        <td colSpan={ORDER_COLUMNS.length} className="bg-[#FCFCFD] px-3 pb-4 pt-0">
+          <OrderTimeline status={order.status} />
+        </td>
+      </tr>
+    </>
   );
 }
 

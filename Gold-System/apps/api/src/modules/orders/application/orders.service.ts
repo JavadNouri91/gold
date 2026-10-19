@@ -964,6 +964,7 @@ export class OrdersService {
     dto.purityRatio = order.purityRatio.toFixed(6);
     dto.customerType = order.customerType;
     dto.side = order.side;
+    dto.unitPriceRial = order.unitPriceRial ? order.unitPriceRial.toFixed(6) : null;
     dto.submittedAt = order.submittedAt;
     dto.cancelledAt = order.cancelledAt;
     dto.rejectedAt = order.rejectedAt;

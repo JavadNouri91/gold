@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { MyTradesPage } from '../components/portal/trades/my-trades-page';
 import { activityBounds } from '../lib/activity-range';
 import { activityBucketLabel } from '../lib/activity-bucket-label';
+import { toPersianDigits } from '../lib/utils';
 import type { ActivitySummary } from '../lib/api';
 
 jest.mock('next/link', () => ({
@@ -126,7 +127,7 @@ describe('MyTradesPage', () => {
     expect(screen.queryByText(/\+۷\.۸/)).not.toBeInTheDocument();
     expect(screen.getByText('مجموع خرید')).toBeInTheDocument();
     expect(screen.getByText('مجموع فروش')).toBeInTheDocument();
-    expect(screen.getAllByText('ORD-000125').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(toPersianDigits('ORD-000125')).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'جزئیات' })).toHaveAttribute('href', '/portal/orders/order-1');
   });
 

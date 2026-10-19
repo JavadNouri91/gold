@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { ReviewContextPanel } from '@/components/dashboard/review-panel';
 import type { ReviewContext } from '@/lib/internal-api';
 import { signIn } from './auth-state';
+import { toPersianDigits } from '@/lib/utils';
 
 jest.mock('@/lib/auth', () => ({
   useAuth: () => require('./auth-state').authState,
@@ -70,7 +71,7 @@ describe('order review', () => {
   it('shows approval only for the trade.approve permission and keeps the order number', () => {
     signIn(['trade.review', 'trade.approve']);
     render(<ReviewContextPanel context={context} onChanged={jest.fn()} />);
-    expect(screen.getByText('ORD-9')).toBeInTheDocument();
+    expect(screen.getByText(toPersianDigits('ORD-9'))).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'تأیید نهایی' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'شروع بررسی' })).not.toBeInTheDocument();
   });

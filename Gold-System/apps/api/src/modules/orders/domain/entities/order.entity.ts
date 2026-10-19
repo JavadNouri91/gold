@@ -58,6 +58,9 @@ export class OrderEntity {
   /** BUY/SELL from the first order item. Null when the order was never classified. */
   readonly side: 'BUY' | 'SELL' | null;
 
+  /** Locked price per gram from the first order item. Null when the order has no item. */
+  readonly unitPriceRial: Decimal | null;
+
   readonly submittedAt: Date | null;
   readonly cancelledAt: Date | null;
   readonly rejectedAt: Date | null;
@@ -86,6 +89,7 @@ export class OrderEntity {
     purityRatio: Decimal;
     customerType: CustomerType | null;
     side?: 'BUY' | 'SELL' | null;
+    unitPriceRial?: Decimal | null;
     submittedAt: Date | null;
     cancelledAt: Date | null;
     rejectedAt: Date | null;
@@ -98,6 +102,7 @@ export class OrderEntity {
   }) {
     Object.assign(this, props);
     this.side = props.side ?? null;
+    this.unitPriceRial = props.unitPriceRial ?? null;
   }
 
   // ─── State machine guards ─────────────────────────────────────

@@ -11,6 +11,7 @@ import { PortfolioCard } from '../components/portal/portfolio-card';
 import { PendingPickupCard } from '../components/portal/pending-pickup-card';
 import { GoldPriceChart } from '../components/portal/gold-price-chart';
 import { demoPriceSeries, DEMO_ACTIVE_ORDERS, DEMO_RECENT_TRADES } from '../lib/portal-demo';
+import { toPersianDigits } from '../lib/utils';
 
 const mockPortfolio = jest.fn();
 
@@ -141,8 +142,8 @@ describe('ActiveOrders', () => {
 
   it('shows today orders by default', () => {
     render(<ActiveOrders orders={DEMO_ACTIVE_ORDERS} now={now} />);
-    expect(screen.getAllByText('ORD-1405-0034').length).toBeGreaterThan(0);
-    expect(screen.queryByText('ORD-1405-0030')).not.toBeInTheDocument();
+    expect(screen.getAllByText(toPersianDigits('ORD-1405-0034')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(toPersianDigits('ORD-1405-0030'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'امروز' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -151,11 +152,11 @@ describe('ActiveOrders', () => {
     render(<ActiveOrders orders={DEMO_ACTIVE_ORDERS} now={now} />);
 
     await user.click(screen.getByRole('button', { name: 'هفته' }));
-    expect(screen.getAllByText('ORD-1405-0033').length).toBeGreaterThan(0);
-    expect(screen.queryByText('ORD-1405-0030')).not.toBeInTheDocument();
+    expect(screen.getAllByText(toPersianDigits('ORD-1405-0033')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(toPersianDigits('ORD-1405-0030'))).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'سال' }));
-    expect(screen.getAllByText('ORD-1405-0030').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(toPersianDigits('ORD-1405-0030')).length).toBeGreaterThan(0);
   });
 
   it('labels buy and sell from order.side', () => {
@@ -225,8 +226,8 @@ describe('RecentTransactions', () => {
 
   it('shows today trades by default', () => {
     render(<RecentTransactions trades={DEMO_RECENT_TRADES} now={now} />);
-    expect(screen.getAllByText('TRX-1405-00125').length).toBeGreaterThan(0);
-    expect(screen.queryByText('TRX-1405-00121')).not.toBeInTheDocument();
+    expect(screen.getAllByText(toPersianDigits('TRX-1405-00125')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(toPersianDigits('TRX-1405-00121'))).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'امروز' })).toHaveAttribute('aria-pressed', 'true');
   });
 
@@ -235,11 +236,11 @@ describe('RecentTransactions', () => {
     render(<RecentTransactions trades={DEMO_RECENT_TRADES} now={now} />);
 
     await user.click(screen.getByRole('button', { name: 'هفته' }));
-    expect(screen.getAllByText('TRX-1405-00124').length).toBeGreaterThan(0);
-    expect(screen.queryByText('TRX-1405-00121')).not.toBeInTheDocument();
+    expect(screen.getAllByText(toPersianDigits('TRX-1405-00124')).length).toBeGreaterThan(0);
+    expect(screen.queryByText(toPersianDigits('TRX-1405-00121'))).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'سال' }));
-    expect(screen.getAllByText('TRX-1405-00121').length).toBeGreaterThan(0);
+    expect(screen.getAllByText(toPersianDigits('TRX-1405-00121')).length).toBeGreaterThan(0);
   });
 
   it('shows trade prices as whole toman', () => {

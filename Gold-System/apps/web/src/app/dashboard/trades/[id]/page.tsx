@@ -40,8 +40,8 @@ export default function TradeDetailPage({ params }: { params: { id: string } }) 
             <StatusBadge status={trade.data.status} label={statusLabel(TRADE_STATUS_LABELS, trade.data.status)} />
             <p>مبلغ {formatMoney(trade.data.totalAmountRial)}</p>
             <p>وزن {formatWeight(trade.data.weightGrams)}</p>
-            <p>قیمت واحد <span dir="ltr">{trade.data.unitPriceRial}</span></p>
-            <p>تأییدکننده <span dir="ltr">{trade.data.confirmedByUserId}</span></p>
+            <p>قیمت واحد <span dir="ltr">{formatMoney(trade.data.unitPriceRial)}</span></p>
+            <p>تأییدکننده <span dir="ltr">{trade.data.confirmedByUserId ? toPersianDigits(trade.data.confirmedByUserId) : '—'}</span></p>
             <p>دلیل برگشت: {trade.data.reversalReason ?? '—'}</p>
             <Link href={`/dashboard/customers/${trade.data.customerId}`}>مشتری</Link>
             <Link href={`/dashboard/orders/${trade.data.orderId}`}>سفارش</Link>

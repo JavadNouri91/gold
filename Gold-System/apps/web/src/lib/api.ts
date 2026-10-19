@@ -713,6 +713,7 @@ export interface Order {
   purityRatio: string;
   customerType?: string;
   side?: 'BUY' | 'SELL' | null;
+  unitPriceRial?: string | null;
   reservedAmountRial: string;
   pricingCalculationId?: string;
   submittedAt?: string;

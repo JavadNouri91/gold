@@ -634,7 +634,7 @@ export function AuditPanel({
 
 function Snapshot({ value }: { value: unknown }) {
   if (value == null) return <span className="text-muted-foreground">—</span>;
-  return <pre className="max-w-xs overflow-x-auto whitespace-pre-wrap text-[11px] leading-5" dir="ltr">{JSON.stringify(value)}</pre>;
+  return <pre className="max-w-xs overflow-x-auto whitespace-pre-wrap text-[11px] leading-5" dir="ltr">{toPersianDigits(JSON.stringify(value))}</pre>;
 }
 
 function actionLabel(action: string): string {

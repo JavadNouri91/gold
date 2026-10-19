@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import CustomersPage from '@/app/dashboard/customers/page';
 import { signIn } from './auth-state';
+import { toPersianDigits } from '@/lib/utils';
 
 jest.mock('@/lib/auth', () => ({
   useAuth: () => require('./auth-state').authState,
@@ -53,7 +54,7 @@ describe('customer list', () => {
 
     render(<CustomersPage />);
     expect(await screen.findByText('علی رضایی')).toBeInTheDocument();
-    expect(screen.getByText('C-100')).toBeInTheDocument();
+    expect(screen.getByText(toPersianDigits('C-100'))).toBeInTheDocument();
     await waitFor(() => {
       expect(internalCustomersApi.list).toHaveBeenCalled();
     });

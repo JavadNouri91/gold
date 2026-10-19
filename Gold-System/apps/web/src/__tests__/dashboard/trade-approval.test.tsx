@@ -25,7 +25,7 @@ describe('trade approval UI', () => {
     render(<TradeApprovalPanel tradeId="tr-1" status="CONFIRMED" onChanged={jest.fn()} />);
     expect(screen.getByText(/وضعیت فعلی/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'برگشت معامله' }));
-    await user.type(screen.getByLabelText('دلیل'), 'اشتباه در ثبت مرجع پرداخت');
+    await user.type(screen.getByLabelText(/دلیل/), 'اشتباه در ثبت مرجع پرداخت');
     await user.click(screen.getByRole('button', { name: 'ثبت برگشت' }));
     expect(internalTradesApi.reverse).toHaveBeenCalledWith('tr-1', 'اشتباه در ثبت مرجع پرداخت');
   });

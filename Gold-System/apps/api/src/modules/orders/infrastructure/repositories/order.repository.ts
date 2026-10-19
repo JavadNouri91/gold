@@ -257,6 +257,7 @@ export class OrderRepository {
       purityRatio: new Decimal(row.purityRatio.toString()),
       customerType: (row.customerType as CustomerType) ?? null,
       side: readOrderSide(firstItem?.metadata),
+      unitPriceRial: firstItem ? new Decimal(firstItem.unitPriceRial.toString()) : null,
       submittedAt: row.submittedAt ?? null,
       cancelledAt: row.cancelledAt ?? null,
       rejectedAt: row.rejectedAt ?? null,

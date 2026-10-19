@@ -18,6 +18,7 @@ import { StatusBadge } from '@/components/portal/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { MobileNumber } from '@/components/ui/mobile-input';
+import { NationalIdNumber } from '@/components/ui/national-id-input';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ApiClientError } from '@/lib/api';
@@ -205,7 +206,7 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
           <Card>
             <CardHeader><CardTitle>پرونده</CardTitle></CardHeader>
             <CardContent className="space-y-2 text-sm">
-              <p dir="ltr">{profile.nationalId}</p>
+              <NationalIdNumber value={profile.nationalId} />
               <p>{profile.email ?? '—'}</p>
               <p>{profile.address ?? '—'}</p>
               <p>نوع: {statusLabel(CUSTOMER_TYPE_LABELS, profile.type)}</p>

@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { SWRConfig } from 'swr';
 import OrdersPage from '../app/portal/orders/page';
 import type { ListOrdersResponse, Order } from '../lib/api';
+import { toPersianDigits } from '../lib/utils';
 
 const list = jest.fn();
 
@@ -27,6 +28,8 @@ function order(index: number): Order {
     totalAmountRial: '1000',
     weightGrams: '1.000',
     purityRatio: '0.750',
+    side: 'BUY',
+    unitPriceRial: '1000000',
     reservedAmountRial: '0',
     createdAt: '2026-10-01T08:00:00.000Z',
   };
@@ -62,7 +65,13 @@ describe('portal orders pagination', () => {
     renderPage();
 
     expect(await screen.findByText('نمایش ۱ تا ۱۰ از ۲۵ سفارش')).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'شماره سفارش' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'قیمت واحد' })).toBeInTheDocument();
+    expect(screen.getByRole('columnheader', { name: 'وضعیت' })).toBeInTheDocument();
     expect(screen.getAllByText('۱ گرم').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('list', { name: 'مراحل سفارش' }).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('پیش‌فاکتور در حال صدور است.').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('صدور پیش‌فاکتور').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: 'صفحه ۱', current: 'page' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'صفحه ۲' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'صفحه ۳' })).toBeInTheDocument();
@@ -76,6 +85,6 @@ describe('portal orders pagination', () => {
     });
     expect(await screen.findByText('نمایش ۱۱ تا ۲۰ از ۲۵ سفارش')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'صفحه ۲', current: 'page' })).toBeInTheDocument();
-    expect(screen.getByText('ORD-11')).toBeInTheDocument();
+    expect(screen.getAllByText(toPersianDigits('ORD-11')).length).toBeGreaterThan(0);
   });
 });

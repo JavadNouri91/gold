@@ -2,6 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import QuotationDetailPage from '@/app/dashboard/quotations/[id]/page';
 import { signIn } from './auth-state';
+import { toPersianDigits } from '@/lib/utils';
 
 jest.mock('@/lib/auth', () => ({
   useAuth: () => require('./auth-state').authState,
@@ -44,7 +45,7 @@ describe('quotation display', () => {
       items: [],
     });
     render(<QuotationDetailPage params={{ id: 'q1' }} />);
-    expect(await screen.findByText('QT-44')).toBeInTheDocument();
+    expect(await screen.findByText(toPersianDigits('QT-44'))).toBeInTheDocument();
     expect(screen.getByText(/مقادیر تاریخی دوباره محاسبه نمی‌شوند/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'دریافت سند' })).not.toBeInTheDocument();
   });

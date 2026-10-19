@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import { LedgerTable, GoldLedgerTable } from '@/components/dashboard/ledger-tables';
+import { toPersianDigits } from '@/lib/utils';
 
 describe('ledger views', () => {
   it('renders debit and credit from the journal payload', () => {
@@ -62,6 +63,6 @@ describe('ledger views', () => {
       />,
     );
     expect(screen.getByText(/موجودی فروشگاه/)).toBeInTheDocument();
-    expect(screen.getByText('0.750000')).toBeInTheDocument();
+    expect(screen.getByText(toPersianDigits('0.750000'))).toBeInTheDocument();
   });
 });

@@ -9,7 +9,7 @@ import { PageHeader } from '@/components/dashboard/page-header';
 import { FilterBar } from '@/components/dashboard/filter-bar';
 import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
 import { ApiErrorState } from '@/components/dashboard/states';
-import { formatDateTime } from '@/lib/utils';
+import { formatDateTime, toPersianDigits } from '@/lib/utils';
 
 export default function AuditPage() {
   const { user } = useAuth();
@@ -79,11 +79,11 @@ export default function AuditPage() {
             {(report.data?.logs ?? []).map((log) => (
               <tr key={log.id} className="border-t">
                 <td className="px-3 py-2">{formatDateTime(log.createdAt)}</td>
-                <td className="px-3 py-2" dir="ltr">{log.actorId ?? log.actorType}</td>
-                <td className="px-3 py-2" dir="ltr">{log.action}</td>
+                <td className="px-3 py-2" dir="ltr">{log.actorId ? toPersianDigits(log.actorId) : log.actorType}</td>
+                <td className="px-3 py-2" dir="ltr">{toPersianDigits(log.action)}</td>
                 <td className="px-3 py-2">{log.entityType ?? '—'}</td>
-                <td className="px-3 py-2" dir="ltr">{log.entityId ?? '—'}</td>
-                <td className="px-3 py-2">{log.reason ?? '—'}</td>
+                <td className="px-3 py-2" dir="ltr">{log.entityId ? toPersianDigits(log.entityId) : '—'}</td>
+                <td className="px-3 py-2">{log.reason ? toPersianDigits(log.reason) : '—'}</td>
               </tr>
             ))}
           </tbody>

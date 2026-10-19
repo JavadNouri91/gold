@@ -8,7 +8,7 @@ import { ConfirmDialog } from './confirm-dialog';
 import { PermissionGate } from './permission-gate';
 import { internalPaymentsApi, type StaffPayment, type TradePaymentStatus } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
-import { formatGroupedPersianInteger, formatMoney, tomanToRial } from '@/lib/utils';
+import { formatDateTime, formatGroupedPersianInteger, formatMoney, tomanToRial } from '@/lib/utils';
 
 export function PaymentActionPanel({
   payment,
@@ -116,7 +116,7 @@ export function SettlementSummary({
         <p>مبلغ تسویه‌شده: {formatMoney(settled)}</p>
         <p>جمع مرجع: {formatMoney(total)}</p>
         <p>وضعیت: {status}</p>
-        <p>تاریخ: {settledAt ?? '—'}</p>
+        <p>تاریخ: {settledAt ? formatDateTime(settledAt) : '—'}</p>
       </div>
     </div>
   );

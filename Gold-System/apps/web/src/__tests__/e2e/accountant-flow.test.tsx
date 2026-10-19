@@ -5,6 +5,7 @@ import FinancialLedgerPage from '@/app/dashboard/ledger/financial/page';
 import { SettlementSummary } from '@/components/dashboard/payment-panel';
 import { visibleNav } from '@/lib/nav';
 import { signIn } from '../dashboard/auth-state';
+import { toPersianDigits } from '@/lib/utils';
 
 jest.mock('@/lib/auth', () => ({
   useAuth: () => require('../dashboard/auth-state').authState,
@@ -33,29 +34,32 @@ describe('accountant flow', () => {
       expect.arrayContaining(['/dashboard/payments', '/dashboard/settlements', '/dashboard/ledger/financial']),
     );
 
-    api.internalPaymentsApi.list.mockResolvedValue([
-      {
-        id: 'pay-1',
-        tradeId: 'tr-1',
-        customerId: 'c1',
-        method: 'CASH',
-        amount: '80.00',
-        currency: 'IRR',
-        status: 'PENDING',
-        referenceNumber: 'R-8',
-        notes: null,
-        receivedAt: null,
-        validatedAt: null,
-        createdAt: '2026-06-01T00:00:00.000Z',
-        updatedAt: '2026-06-01T00:00:00.000Z',
-      },
-    ]);
+    api.internalPaymentsApi.list.mockResolvedValue({
+      data: [
+        {
+          id: 'pay-1',
+          tradeId: 'tr-1',
+          customerId: 'c1',
+          method: 'CASH',
+          amount: '80.00',
+          currency: 'IRR',
+          status: 'PENDING',
+          referenceNumber: 'R-8',
+          notes: null,
+          receivedAt: null,
+          validatedAt: null,
+          createdAt: '2026-06-01T00:00:00.000Z',
+          updatedAt: '2026-06-01T00:00:00.000Z',
+        },
+      ],
+      meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
+    });
     const payments = render(<PaymentsPage />);
-    expect(await screen.findByText('R-8')).toBeInTheDocument();
+    expect(await screen.findByText(toPersianDigits('R-8'))).toBeInTheDocument();
     payments.unmount();
 
     render(<SettlementSummary total="100.00" settled="80.00" status="جزئی" settledAt={null} />);
-    expect(screen.getByText(/۸۰/)).toBeInTheDocument();
+    expect(screen.getByText(/۸ تومان/)).toBeInTheDocument();
 
     api.financialLedgerApi.accounts.mockResolvedValue([
       { code: 'FA-01', name: 'Cash', nameFa: 'صندوق', active: true, blockedReason: null },

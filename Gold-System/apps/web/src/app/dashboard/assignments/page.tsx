@@ -113,7 +113,7 @@ export default function AssignmentsPage() {
       header: 'سفارش',
       render: (row) => <Link className="text-gold-800" href={`/dashboard/orders/${row.orderId}`}>مشاهده</Link>,
     },
-    { key: 'to', header: 'بررسی‌کننده', render: (row) => <span dir="ltr">{row.assignedToId}</span> },
+    { key: 'to', header: 'بررسی‌کننده', render: (row) => <span dir="ltr">{toPersianDigits(row.assignedToId)}</span> },
     {
       key: 'status',
       header: 'وضعیت',

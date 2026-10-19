@@ -10,7 +10,7 @@ import { ForbiddenNotice, PermissionGate } from '@/components/dashboard/permissi
 import { ApiErrorState } from '@/components/dashboard/states';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { SUPPLIER_STATUS_LABELS, formatMoney, statusLabel, toPersianDigits } from '@/lib/utils';
+import { SUPPLIER_STATUS_LABELS, formatMobile, formatMoney, statusLabel, toPersianDigits } from '@/lib/utils';
 
 export default function SupplierDetailPage({ params }: { params: { id: string } }) {
   const { user } = useAuth();
@@ -39,7 +39,7 @@ export default function SupplierDetailPage({ params }: { params: { id: string } 
           <CardContent className="space-y-2 text-sm">
             <StatusBadge status={supplier.data.status} label={statusLabel(SUPPLIER_STATUS_LABELS, supplier.data.status)} />
             <p>{supplier.data.contactName ?? '—'}</p>
-            <p dir="ltr">{supplier.data.contactPhone ?? '—'}</p>
+            <p dir="ltr">{formatMobile(supplier.data.contactPhone)}</p>
             <p>حالت ارتباط: {supplier.data.integrationMode}</p>
           </CardContent>
         </Card>

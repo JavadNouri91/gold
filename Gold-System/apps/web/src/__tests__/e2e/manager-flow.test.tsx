@@ -7,6 +7,7 @@ import TradesPage from '@/app/dashboard/trades/page';
 import ReportsHomePage from '@/app/dashboard/reports/page';
 import { firstStaffRoute } from '@/lib/nav';
 import { signIn } from '../dashboard/auth-state';
+import { toPersianDigits } from '@/lib/utils';
 
 jest.mock('@/lib/auth', () => ({
   useAuth: () => require('../dashboard/auth-state').authState,
@@ -155,11 +156,11 @@ describe('manager flow', () => {
     customers.unmount();
 
     const orders = render(<OrdersPage />);
-    expect(await screen.findByText('ORD-1')).toBeInTheDocument();
+    expect(await screen.findByText(toPersianDigits('ORD-1'))).toBeInTheDocument();
     orders.unmount();
 
     const trades = render(<TradesPage />);
-    expect(await screen.findByText('TR-1')).toBeInTheDocument();
+    expect(await screen.findByText(toPersianDigits('TR-1'))).toBeInTheDocument();
     trades.unmount();
 
     render(<ReportsHomePage />);

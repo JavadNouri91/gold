@@ -48,6 +48,8 @@ export class OrderResponseDto {
   customerType: CustomerType | null;
   /** BUY/SELL from order item metadata. Null when unclassified. */
   side: 'BUY' | 'SELL' | null;
+  /** Locked price per gram from the first order item. */
+  unitPriceRial: string | null;
 
   submittedAt: Date | null;
   cancelledAt: Date | null;

@@ -47,7 +47,7 @@ describe('settlement', () => {
         settledAt="2026-03-02T00:00:00.000Z"
       />,
     );
-    expect(screen.getByText(/۵۰۰\.۲۵/)).toBeInTheDocument();
+    expect(screen.getByText(/۵۰\.۰۲۵ تومان/)).toBeInTheDocument();
     expect(screen.getByText(/تسویه جزئی/)).toBeInTheDocument();
   });
 });

@@ -171,7 +171,7 @@ export default function PaymentsPage() {
       <DataTable columns={columns} rows={data?.data ?? []} isLoading={isLoading} />
       <div className="flex gap-2">
         <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>قبلی</Button>
-        <Button variant="outline" size="sm" disabled={(data?.data.length ?? 0) < LIMIT} onClick={() => setPage((current) => current + 1)}>بعدی</Button>
+        <Button variant="outline" size="sm" disabled={(data?.data?.length ?? 0) < LIMIT} onClick={() => setPage((current) => current + 1)}>بعدی</Button>
       </div>
     </div>
   );

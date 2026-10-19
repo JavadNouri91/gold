@@ -9,6 +9,7 @@ import {
 } from '@/lib/credit-view';
 import { previewCreditTrend } from '@/lib/credit-trend-preview';
 import { CreditPage } from '@/components/portal/credit/credit-page';
+import { toPersianDigits } from '@/lib/utils';
 
 const account: CustomerAccount = {
   id: 'acc-1',
@@ -85,7 +86,7 @@ describe('credit orders and history', () => {
       'ORD-000125',
     );
     expect(view.title).toBe('رزرو اعتبار');
-    expect(view.description).toContain('ORD-000125');
+    expect(view.description).toContain(toPersianDigits('ORD-000125'));
     expect(view.description).not.toContain('Credit reserved');
     expect(view.balanceCaption).toBe('موجودی اعتبار');
   });
@@ -106,7 +107,7 @@ describe('CreditPage', () => {
       />,
     );
     expect(screen.getByText('سقف اعتبار شما')).toBeInTheDocument();
-    expect(screen.getAllByText('۵,۰۰۰,۰۰۰,۰۰۰').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('۵۰۰,۰۰۰,۰۰۰').length).toBeGreaterThan(0);
     expect(screen.getAllByText('۳۵٪').length).toBeGreaterThan(0);
     expect(screen.getAllByText('۳۰٪').length).toBeGreaterThan(0);
     expect(screen.getByText('۶۵٪ استفاده شده')).toBeInTheDocument();

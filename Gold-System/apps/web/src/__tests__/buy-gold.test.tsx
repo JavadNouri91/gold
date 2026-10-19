@@ -3,6 +3,7 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { SWRConfig } from 'swr';
 import { BuyGoldPage } from '../components/portal/buy-gold/buy-gold-page';
 import { ApiClientError, type CurrentPrice, type CustomerAccount, type CustomerProfile, type Order, type PricingCalculationResult } from '../lib/api';
+import { toPersianDigits } from '../lib/utils';
 
 const mockPush = jest.fn();
 const mockGetMe = jest.fn();
@@ -226,7 +227,7 @@ describe('BuyGoldPage', () => {
 
     await screen.findByRole('status');
     expect(screen.getByText('سفارش خرید ثبت شد')).toBeInTheDocument();
-    expect(screen.getByText('ORD-000125')).toBeInTheDocument();
+    expect(screen.getByText(toPersianDigits('ORD-000125'))).toBeInTheDocument();
     expect(screen.getByText('در حال بررسی')).toBeInTheDocument();
     expect(mockCreate).toHaveBeenCalledTimes(1);
     expect(mockCreate).toHaveBeenCalledWith({
