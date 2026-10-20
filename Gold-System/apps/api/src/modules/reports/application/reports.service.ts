@@ -58,6 +58,19 @@ function iso(d: Date | null | undefined): string | null {
   return d.toISOString();
 }
 
+function personName(
+  person?: { firstName?: string | null; lastName?: string | null } | null,
+): string | null {
+  const name = [person?.firstName, person?.lastName].filter(Boolean).join(' ').trim();
+  return name || null;
+}
+
+function orderSide(metadata: unknown): 'BUY' | 'SELL' | null {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+  const side = (metadata as { side?: unknown }).side;
+  return side === 'BUY' || side === 'SELL' ? side : null;
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 /**
@@ -123,6 +136,9 @@ export class ReportsService {
     const recentTrades: RecentTradeDto[] = stats.recentTrades.map((t) => ({
       id: t.id,
       tradeNumber: t.tradeNumber,
+      customerId: t.customerId ?? null,
+      customerName: personName(t.customer),
+      side: orderSide(t.order?.items?.[0]?.metadata),
       status: t.status,
       totalAmountRial: toStr2(t.totalAmountRial)!,
       weightGrams: toStr6(t.weightGrams)!,
@@ -133,9 +149,12 @@ export class ReportsService {
     const recentPayments: RecentPaymentDto[] = stats.recentPayments.map((p) => ({
       id: p.id,
       tradeId: p.tradeId,
+      customerId: p.customerId ?? null,
+      customerName: personName(p.customer),
       method: p.method,
       amount: toStr2(p.amount)!,
       status: p.status,
+      hasReceipt: Boolean(p.receiptKey),
       createdAt: p.createdAt.toISOString(),
     }));
 

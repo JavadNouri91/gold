@@ -7,7 +7,7 @@ import {
   dayStatus,
   limitReached,
   minuteCovered,
-  resolveCaps,
+  resolvePersonalCaps,
   sessionStatus,
 } from '../domain/trading-rules';
 import { sessionWindow, tehranParts } from '../domain/trading-time';
@@ -90,17 +90,12 @@ export class TradingPolicyService {
     return assessment.active?.session ?? null;
   }
 
-  async getRemainingLimits(at?: Date, context: LimitContext = {}): Promise<RemainingLimits | null> {
+  async getRemainingLimits(at?: Date, _context: LimitContext = {}): Promise<RemainingLimits | null> {
     const moment = at ?? this.clock();
     const assessment = await this.assess(moment);
     const active = assessment.active;
     if (!active) return null;
-    const limits = await this.repo.limitsForSessions([active.session.id]);
-    const caps = resolveCaps(
-      active.session,
-      limits.filter((limit) => limit.sessionId === active.session.id),
-      context,
-    );
+    const caps = active.session;
     const amountRemaining = remainingString(caps.maxAmountRial, active.usage.amountRial, 2);
     const weightRemaining = remainingString(caps.maxWeightGrams, active.usage.weightGrams, 6);
     const countRemaining =
@@ -157,11 +152,28 @@ export class TradingPolicyService {
       active.session.startMinute,
       active.session.endMinute,
     );
-    const usage = await this.repo.usageBetween(window.start, window.end, input.tx);
+    const marketUsage = await this.repo.usageBetween(window.start, window.end, input.tx);
     const limits = await this.repo.limitsForSessions([active.session.id], input.tx);
     const context = await this.resolveContext(input);
-    const caps = resolveCaps(active.session, limits, context);
-    assertCandidateFits(caps, usage, amount, weight);
+
+    // Market-wide session caps (aggregate + per-trade mins/maxes).
+    assertCandidateFits(active.session, marketUsage, amount, weight);
+
+    // Per-customer quota from CUSTOMER / CUSTOMER_TYPE limits.
+    const personalCaps = resolvePersonalCaps(limits, context);
+    if (personalCaps && input.customerId) {
+      const personalUsage = await this.repo.usageBetween(
+        window.start,
+        window.end,
+        input.tx,
+        input.customerId,
+      );
+      assertCandidateFits(personalCaps, personalUsage, amount, weight, {
+        amount: TRADING_MESSAGES.personalAmount,
+        weight: TRADING_MESSAGES.personalWeight,
+        count: TRADING_MESSAGES.personalCount,
+      });
+    }
   }
 
   async assess(at: Date): Promise<TradingAssessment> {
@@ -242,13 +254,18 @@ export class TradingPolicyService {
 
   private async resolveContext(input: TransactionCheck): Promise<LimitContext> {
     let userId = input.userId;
-    if (!userId && input.customerId) {
-      userId = (await this.repo.userIdForCustomer(input.customerId)) ?? undefined;
+    let customerType: string | undefined;
+    if (input.customerId) {
+      if (!userId) {
+        userId = (await this.repo.userIdForCustomer(input.customerId)) ?? undefined;
+      }
+      customerType = (await this.repo.customerTypeForCustomer(input.customerId)) ?? undefined;
     }
     const roleIds = input.roleIds ?? (userId ? await this.repo.roleIdsForUser(userId) : []);
     return {
       userId,
       customerId: input.customerId,
+      customerType,
       roleIds,
       transactionType: input.transactionType,
     };

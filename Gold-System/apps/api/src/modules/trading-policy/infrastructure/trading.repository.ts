@@ -310,11 +310,37 @@ export class TradingRepository {
     sessionIds: string[],
     tx?: Prisma.TransactionClient,
   ): Promise<LimitView[]> {
-    if (sessionIds.length === 0) return [];
     const rows = await this.db(tx).tradingLimit.findMany({
-      where: { sessionId: { in: sessionIds } },
+      where: {
+        OR: [
+          ...(sessionIds.length > 0 ? [{ sessionId: { in: sessionIds } }] : []),
+          {
+            sessionId: null,
+            scope: { in: ['CUSTOMER', 'CUSTOMER_TYPE', 'ROLE', 'USER', 'TRANSACTION_TYPE'] },
+          },
+        ],
+      },
     });
     return rows.map(toLimit);
+  }
+
+  async listScopedLimits(
+    scopes: TradingLimitScope[] = ['CUSTOMER', 'CUSTOMER_TYPE'],
+  ): Promise<LimitView[]> {
+    const rows = await this.prisma.tradingLimit.findMany({
+      where: { scope: { in: scopes } },
+      orderBy: [{ scope: 'asc' }, { scopeKey: 'asc' }, { updatedAt: 'desc' }],
+    });
+    return rows.map(toLimit);
+  }
+
+  async findLimit(id: string): Promise<LimitView | null> {
+    const row = await this.prisma.tradingLimit.findUnique({ where: { id } });
+    return row ? toLimit(row) : null;
+  }
+
+  async deleteLimit(id: string): Promise<void> {
+    await this.prisma.tradingLimit.delete({ where: { id } });
   }
 
   async syncGlobalLimit(session: SessionView): Promise<LimitView> {
@@ -332,6 +358,21 @@ export class TradingRepository {
       ? await this.prisma.tradingLimit.update({ where: { id: existing.id }, data })
       : await this.prisma.tradingLimit.create({ data });
     return toLimit(row);
+  }
+
+  async findScopedLimit(input: {
+    sessionId: string | null;
+    scope: TradingLimitScope;
+    scopeKey: string | null;
+  }): Promise<LimitView | null> {
+    const row = await this.prisma.tradingLimit.findFirst({
+      where: {
+        sessionId: input.sessionId,
+        scope: input.scope,
+        scopeKey: input.scopeKey,
+      },
+    });
+    return row ? toLimit(row) : null;
   }
 
   async upsertScopedLimit(input: {
@@ -361,11 +402,17 @@ export class TradingRepository {
     return { limit: toLimit(row), previous: existing ? toLimit(existing) : null };
   }
 
-  async usageBetween(start: Date, end: Date, tx?: Prisma.TransactionClient): Promise<Usage> {
+  async usageBetween(
+    start: Date,
+    end: Date,
+    tx?: Prisma.TransactionClient,
+    customerId?: string,
+  ): Promise<Usage> {
     const aggregate = await this.db(tx).trade.aggregate({
       where: {
         status: { in: CONSUMING_TRADE_STATUSES },
         confirmedAt: { gte: start, lt: end },
+        ...(customerId ? { customerId } : {}),
       },
       _sum: { totalAmountRial: true, weightGrams: true },
       _count: { _all: true },
@@ -399,6 +446,49 @@ export class TradingRepository {
       select: { userId: true },
     });
     return row?.userId ?? null;
+  }
+
+  async customerTypeForCustomer(customerId: string): Promise<string | null> {
+    const row = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { type: true },
+    });
+    return row?.type ?? null;
+  }
+
+  async customerSummaries(
+    ids: string[],
+  ): Promise<
+    Array<{
+      id: string;
+      firstName: string;
+      lastName: string;
+      mobile: string;
+      type: string | null;
+      customerNumber: string;
+    }>
+  > {
+    if (ids.length === 0) return [];
+    const rows = await this.prisma.customer.findMany({
+      where: { id: { in: ids } },
+      select: {
+        id: true,
+        firstName: true,
+        lastName: true,
+        mobile: true,
+        type: true,
+        customerNumber: true,
+      },
+    });
+    return rows;
+  }
+
+  async customerExists(customerId: string): Promise<boolean> {
+    const row = await this.prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { id: true },
+    });
+    return row != null;
   }
 
   async listAudit(

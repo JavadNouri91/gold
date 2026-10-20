@@ -22,7 +22,7 @@ export function HeaderKycStatus({ className }: { className?: string }) {
   return (
     <HeaderHoverTip content={hint} tone={verified ? 'emerald' : 'amber'}>
       <Link
-        href="/portal/kyc"
+        href="/portal/profile#kyc"
         aria-label={label}
         className={cn(
           'inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 sm:h-12 sm:w-12',

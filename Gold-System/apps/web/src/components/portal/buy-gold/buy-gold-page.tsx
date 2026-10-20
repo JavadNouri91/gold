@@ -821,7 +821,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
           {activeQuote && !calculating && creditShort && shortfall ? (
             <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm">
               <p className="font-medium">ارزش این وزن از دارایی ریالی شما بیشتر است.</p>
-              <p className="mt-1">کمبود: {formatMoney(shortfall)}</p>
+              <p className="mt-1">کمبود: {formatWholeToman(shortfall)}</p>
               <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-amber-700">
                 مشاهده دارایی ریالی
               </Link>
@@ -861,6 +861,14 @@ function wholeTomanDigitsFromRial(rial: string): string {
   if (toman == null || isZeroDecimal(toman)) return '';
   const [whole = '0'] = toman.split('.');
   return whole.replace(/^0+(?=\d)/, '') || '0';
+}
+
+/** Toman display with the fractional part dropped, matching the amount field. */
+function formatWholeToman(rial: string | null | undefined): string {
+  if (rial == null || rial === '') return formatMoney(rial);
+  const whole = wholeTomanDigitsFromRial(rial);
+  if (!whole) return formatMoney(rial);
+  return `${formatGroupedPersianInteger(whole)} تومان`;
 }
 
 /** Coarser steps on large balances so the range input stays usable. */
@@ -977,14 +985,19 @@ function BalanceSlider({
 
 function feeLabel(view: PricingView, selling?: boolean): string {
   const feeParts: string[] = [];
-  if (view.feeTotalRial && !isZeroDecimal(view.feeTotalRial)) {
-    feeParts.push(formatMoney(view.feeTotalRial));
+  if (view.charges.length === 1) {
+    feeParts.push(formatWholeToman(view.charges[0]!.amount));
+  } else if (view.charges.length > 1) {
+    for (const charge of view.charges) {
+      feeParts.push(
+        `${charge.labelFa || (selling ? 'کارمزد فروش' : 'کارمزد خرید')}: ${formatWholeToman(charge.amount)}`,
+      );
+    }
+  } else if (view.feeTotalRial && !isZeroDecimal(view.feeTotalRial)) {
+    feeParts.push(formatWholeToman(view.feeTotalRial));
   }
-  for (const charge of view.charges) {
-    feeParts.push(`${charge.labelFa || (selling ? 'کارمزد فروش' : 'کارمزد خرید')}: ${formatMoney(charge.amount)}`);
-  }
-  if (view.taxAmount) feeParts.push(`مالیات: ${formatMoney(view.taxAmount)}`);
-  if (view.wageAmount) feeParts.push(`اجرت: ${formatMoney(view.wageAmount)}`);
+  if (view.taxAmount) feeParts.push(`مالیات: ${formatWholeToman(view.taxAmount)}`);
+  if (view.wageAmount) feeParts.push(`اجرت: ${formatWholeToman(view.wageAmount)}`);
   return feeParts.length > 0 ? feeParts.join(' · ') : 'رایگان';
 }
 
@@ -1018,7 +1031,7 @@ function InvoiceCard({
       {view ? (
         <>
           <dl className="mt-3 space-y-2.5 text-sm">
-            <Row label="نرخ واحد معامله" value={formatMoney(view.unitPricePerGram)} />
+            <Row label="نرخ واحد معامله" value={formatWholeToman(view.unitPricePerGram)} />
             <Row label="وزن خالص سفارش" value={formatWeight(view.weightGrams)} />
             <Row label="کارمزد معامله" value={feeLabel(view, selling)} />
           </dl>
@@ -1027,7 +1040,7 @@ function InvoiceCard({
               {selling ? 'مبلغ قابل دریافت' : 'مبلغ قابل پرداخت'}
             </p>
             <p className="mt-1 text-left text-2xl font-bold text-gray-900 md:text-3xl" dir="ltr">
-              {formatMoney(view.customerTotalRial)}
+              {formatWholeToman(view.customerTotalRial)}
             </p>
           </div>
         </>
@@ -1137,7 +1150,7 @@ function LivePriceCard({
             <p className="mt-3 text-sm text-gray-900">قیمت لحظه‌ای در دسترس نیست.</p>
           ) : (
             <p className="mt-2 text-2xl font-bold text-gray-900 md:text-3xl">
-              {formatMoney(value)}
+              {formatWholeToman(value)}
               <span className="mr-1 text-sm font-medium text-gray-500">/ گرم</span>
             </p>
           )}
@@ -1175,7 +1188,7 @@ function LivePriceCard({
                 {sellMaxRial && !isZeroDecimal(sellMaxRial) ? (
                   <span className="text-rose-700/80">
                     {' '}
-                    (معادل {formatMoney(sellMaxRial)})
+                    (معادل {formatWholeToman(sellMaxRial)})
                   </span>
                 ) : null}
               </p>
@@ -1185,7 +1198,7 @@ function LivePriceCard({
           ) : availableRial && !isZeroDecimal(availableRial) ? (
             <p>
               <span className="font-medium">توان خرید:</span>{' '}
-              <span dir="ltr">{formatMoney(availableRial)}</span>
+              <span dir="ltr">{formatWholeToman(availableRial)}</span>
             </p>
           ) : (
             <p>توان خرید در دسترس نیست.</p>
@@ -1317,7 +1330,7 @@ function PurchaseSuccess({
         <p className="mt-2 text-sm text-[#6B7280]">سفارش شما با موفقیت ثبت شد.</p>
         <dl className="mt-6 space-y-3 text-right text-sm">
           <Row label="شماره سفارش" value={toPersianDigits(order.orderNumber)} ltr />
-          <Row label="مبلغ" value={formatMoney(order.totalAmountRial)} />
+          <Row label="مبلغ" value={formatWholeToman(order.totalAmountRial)} />
           <Row label="وزن" value={formatWeight(order.weightGrams)} />
           <Row label="عیار" value={purityLabel(order.purityRatio) || formatPurity(order.purityRatio)} />
           <Row label="وضعیت" value={status} />
@@ -1383,17 +1396,17 @@ function ConfirmPurchase({
         </p>
         <dl className="mt-3 text-sm">
           <Row label="عیار" value={purityLabel(purity)} />
-          <Row label="قیمت" value={formatMoney(view.unitPricePerGram)} />
+          <Row label="قیمت" value={formatWholeToman(view.unitPricePerGram)} />
           {view.charges.map((c) => (
             <Row
               key={`${c.code}-${c.side}`}
               label={c.labelFa || (selling ? 'کارمزد فروش' : 'کارمزد خرید')}
-              value={formatMoney(c.amount)}
+              value={formatWholeToman(c.amount)}
             />
           ))}
           <Row
             label={selling ? 'مبلغ قابل دریافت' : 'مبلغ قابل پرداخت'}
-            value={formatMoney(view.customerTotalRial)}
+            value={formatWholeToman(view.customerTotalRial)}
             strong
           />
         </dl>

@@ -18,6 +18,7 @@ import {
   meterLabel,
   money,
 } from './trading-widgets';
+import { ScopedLimitsPanel } from './scoped-limits-panel';
 
 const MONTHS = [
   'فروردین', 'اردیبهشت', 'خرداد', 'تیر', 'مرداد', 'شهریور',
@@ -437,10 +438,16 @@ export function LimitsPanel({
   data,
   canEdit,
   onEdit,
+  busy,
+  onBusy,
+  onNotice,
 }: {
   data: TradingOverview;
   canEdit: boolean;
   onEdit: (session: TradingSessionView) => void;
+  busy: boolean;
+  onBusy: (action: () => Promise<void>) => Promise<void>;
+  onNotice: (message: string | null) => void;
 }) {
   const sessions = data.weekly.flatMap((day) => day.sessions.map((session) => ({ ...session, day: day.label })));
   return (
@@ -455,6 +462,12 @@ export function LimitsPanel({
         <p className="text-sm text-muted-foreground">بازه‌ای در حال اجرا نیست. سقف‌ها روی بازه‌های هفتگی تنظیم می‌شوند.</p>
       )}
       <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">سقف بازه بازار</CardTitle>
+          <p className="text-xs text-muted-foreground">
+            سقف کلی معاملات در هر بازه زمانی برای تمام بازار.
+          </p>
+        </CardHeader>
         <CardContent className="overflow-x-auto p-0">
           <table className="w-full min-w-[720px] text-right text-sm">
             <thead className="text-xs text-muted-foreground">
@@ -490,6 +503,7 @@ export function LimitsPanel({
           </table>
         </CardContent>
       </Card>
+      <ScopedLimitsPanel canEdit={canEdit} busy={busy} onBusy={onBusy} onNotice={onNotice} />
     </div>
   );
 }

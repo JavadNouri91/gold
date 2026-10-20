@@ -23,6 +23,7 @@ import {
   AuditQueryDto,
   CopySessionDto,
   LimitDto,
+  MarketToggleDto,
   OverrideDto,
   OverviewQueryDto,
   SessionDto,
@@ -46,6 +47,12 @@ export class TradingController {
   @RequireAnyPermission(...READ_PERMISSIONS)
   overview(@Query() query: OverviewQueryDto) {
     return this.trading.overview(query.from, query.to);
+  }
+
+  @Patch('market')
+  @RequirePermissions('trading.schedule.manage')
+  setMarket(@CurrentUser() user: CurrentUserData, @Body() body: MarketToggleDto) {
+    return this.trading.setMarketOpen(user.userId, body.enabled);
   }
 
   @Post('sessions')
@@ -104,10 +111,22 @@ export class TradingController {
     return this.trading.deleteOverride(user.userId, id);
   }
 
+  @Get('limits')
+  @RequireAnyPermission('trading.limits.view', 'trading.limits.manage', 'trading.schedule.view')
+  listLimits() {
+    return this.trading.listScopedLimits();
+  }
+
   @Put('limits')
   @RequirePermissions('trading.limits.manage')
   upsertLimit(@CurrentUser() user: CurrentUserData, @Body() body: LimitDto) {
     return this.trading.upsertLimit(user.userId, body);
+  }
+
+  @Delete('limits/:id')
+  @RequirePermissions('trading.limits.manage')
+  deleteLimit(@CurrentUser() user: CurrentUserData, @Param('id') id: string) {
+    return this.trading.deleteLimit(user.userId, id);
   }
 
   @Get('audit')

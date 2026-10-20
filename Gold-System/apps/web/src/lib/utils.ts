@@ -225,6 +225,39 @@ export function formatMoney(value: string | number | null | undefined): string {
 }
 
 /**
+ * Compact Toman for KPI cards: میلیارد / میلیون / هزار.
+ * Uses the integer Toman part only; two fraction digits are truncated, not rounded.
+ */
+export function formatCompactToman(value: string | number | null | undefined): string {
+  const toman = rialToToman(value);
+  if (toman == null) {
+    if (value == null || value === '') return '—';
+    return formatAuthoritativeDecimal(value, 'تومان');
+  }
+  const negative = toman.startsWith('-');
+  const unsigned = negative ? toman.slice(1) : toman;
+  const intPart = (unsigned.split('.')[0] ?? '0').replace(/^0+(?=\d)/, '') || '0';
+  const scaled = compactScale(intPart);
+  if (!scaled) return formatAuthoritativeDecimal(negative && intPart !== '0' ? `-${intPart}` : intPart, 'تومان');
+  const prefix = negative && intPart !== '0' ? '−' : '';
+  return `${prefix}${toPersianDigits(scaled.coeff)} ${scaled.unit} تومان`;
+}
+
+function compactScale(intPart: string): { coeff: string; unit: string } | null {
+  if (intPart.length >= 10) return { coeff: twoPlaceCoeff(intPart, 9), unit: 'میلیارد' };
+  if (intPart.length >= 7) return { coeff: twoPlaceCoeff(intPart, 6), unit: 'میلیون' };
+  if (intPart.length >= 4) return { coeff: twoPlaceCoeff(intPart, 3), unit: 'هزار' };
+  return null;
+}
+
+function twoPlaceCoeff(intPart: string, scale: number): string {
+  const whole = intPart.slice(0, intPart.length - scale) || '0';
+  const frac = intPart.slice(intPart.length - scale, intPart.length - scale + 2).padEnd(2, '0');
+  const trimmed = frac.replace(/0+$/, '');
+  return trimmed ? `${whole}.${trimmed}` : whole;
+}
+
+/**
  * Format a Rial amount as whole Toman. Fractional toman are dropped, not rounded,
  * so the shown purchasing power never exceeds the stored balance.
  */
@@ -485,6 +518,8 @@ export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   HOUSEHOLD: 'خانگی',
   PARTNER: 'همکار',
   VIP: 'VIP',
+  WHOLESALE: 'عمده',
+  CORPORATE: 'حقوقی',
 };
 
 /** Badge label for the signed-in customer. Household keeps the «مشتری» prefix. */
@@ -615,6 +650,8 @@ export function getStatusColor(status: string): string {
     'ALLOCATED',
     'SETTLED',
     'TRADE_CREATED',
+    'DELIVERED',
+    'READY',
   ];
   const red = [
     'REJECTED',
@@ -637,6 +674,8 @@ export function getStatusColor(status: string): string {
     'AWAITING_REVIEW',
     'IN_REVIEW',
     'REVISION_REQUESTED',
+    'REQUESTED',
+    'PREPARING',
   ];
   if (green.includes(status)) return 'green';
   if (red.includes(status)) return 'red';

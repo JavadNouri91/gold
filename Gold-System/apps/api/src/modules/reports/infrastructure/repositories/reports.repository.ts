@@ -94,28 +94,42 @@ export class ReportsRepository {
 
       this.prisma.trade.findMany({
         orderBy: { createdAt: 'desc' },
-        take: 10,
+        take: 8,
         select: {
           id: true,
           tradeNumber: true,
+          customerId: true,
           status: true,
           totalAmountRial: true,
           weightGrams: true,
           confirmedAt: true,
           createdAt: true,
+          customer: { select: { firstName: true, lastName: true } },
+          order: {
+            select: {
+              items: {
+                select: { metadata: true },
+                orderBy: { createdAt: 'asc' },
+                take: 1,
+              },
+            },
+          },
         },
       }),
 
       this.prisma.payment.findMany({
         orderBy: { createdAt: 'desc' },
-        take: 10,
+        take: 8,
         select: {
           id: true,
           tradeId: true,
+          customerId: true,
           method: true,
           amount: true,
           status: true,
+          receiptKey: true,
           createdAt: true,
+          customer: { select: { firstName: true, lastName: true } },
         },
       }),
 

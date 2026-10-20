@@ -11,7 +11,6 @@ import {
   CreditCard,
   Bell,
   UserRound,
-  ShieldCheck,
   Headset,
   Settings,
   X,
@@ -86,7 +85,7 @@ const primaryNav: NavItem[] = [
   },
   {
     href: '/portal/orders',
-    label: 'سفارش‌ها',
+    label: 'سفارشات',
     icon: ShoppingCart,
     iconClassName: 'bg-violet-50 text-violet-700',
     exact: true,
@@ -115,12 +114,6 @@ const accountNav: NavItem[] = [
     iconClassName: 'bg-sky-50 text-sky-700',
     permission: 'customer.profile.read',
   },
-  {
-    href: '/portal/kyc',
-    label: 'احراز هویت',
-    icon: ShieldCheck,
-    iconClassName: 'bg-emerald-50 text-emerald-700',
-  },
 ];
 
 type MobileNavItem = {
@@ -140,30 +133,35 @@ function itemHref(item: NavItem): string {
   return `${item.href}?${params.toString()}`;
 }
 
+function pathOnly(href: string): string {
+  return href.split('#')[0] ?? href;
+}
+
 function isActive(pathname: string, search: string, item: NavItem): boolean {
+  const hrefPath = pathOnly(item.href);
   if (item.query) {
     const params = new URLSearchParams(search);
     return (
-      pathname === item.href &&
+      pathname === hrefPath &&
       Object.entries(item.query).every(([key, value]) => params.get(key) === value)
     );
   }
-  if (item.href === '/portal/orders' && item.exact) {
+  if (hrefPath === '/portal/orders' && item.exact) {
     if (pathname === '/portal/orders/new') return false;
     return pathname === '/portal/orders' || pathname.startsWith('/portal/orders/');
   }
-  if (item.exact) return pathname === item.href;
-  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  if (item.exact) return pathname === hrefPath;
+  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
 }
 
 function isMobileActive(pathname: string, item: MobileNavItem): boolean {
   if (!item.href) return false;
+  const hrefPath = pathOnly(item.href);
   if (item.href.includes('#')) {
-    const [path] = item.href.split('#');
-    return pathname === path;
+    return pathname === hrefPath;
   }
-  if (item.exact) return pathname === item.href;
-  if (item.href === '/portal/payments') {
+  if (item.exact) return pathname === hrefPath;
+  if (hrefPath === '/portal/payments') {
     return (
       pathname === '/portal/payments' ||
       pathname.startsWith('/portal/payments/') ||
@@ -171,7 +169,7 @@ function isMobileActive(pathname: string, item: MobileNavItem): boolean {
       pathname.startsWith('/portal/trades/')
     );
   }
-  return pathname === item.href || pathname.startsWith(`${item.href}/`);
+  return pathname === hrefPath || pathname.startsWith(`${hrefPath}/`);
 }
 
 function canShow(permissions: readonly string[] | undefined | null, permission?: string): boolean {
@@ -239,12 +237,6 @@ export function DashboardSidebar({
       icon: Coins,
       href: '/portal/assets',
       permission: 'customer.account.read_own',
-    },
-    {
-      key: 'kyc',
-      label: 'احراز هویت',
-      icon: ShieldCheck,
-      href: '/portal/kyc',
     },
     {
       key: 'profile',

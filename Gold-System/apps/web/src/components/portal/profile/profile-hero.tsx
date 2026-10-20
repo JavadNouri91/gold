@@ -1,11 +1,18 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Camera } from 'lucide-react';
-import { customerApi, fetchBlob, type CustomerProfile } from '@/lib/api';
-import { UserStatusBadge } from '@/components/portal/user-status-badge';
+import { Camera, Check } from 'lucide-react';
+import { customerApi, fetchBlob, type CustomerProfile, type KycPhase } from '@/lib/api';
+import { kycSummaryBadge } from '@/components/portal/settings/kyc-summary';
+import { Badge } from '@/components/ui/badge';
+import { MobileNumber } from '@/components/ui/mobile-input';
 import { Modal } from '@/components/ui/modal';
-import { formatDate, toPersianDigits } from '@/lib/utils';
+import {
+  CUSTOMER_ACCOUNT_STATUS_LABELS,
+  CUSTOMER_STATUS_LABELS,
+  cn,
+  toPersianDigits,
+} from '@/lib/utils';
 import { AvatarImageEditor } from './avatar-image-editor';
 import { friendlyApiMessage } from './friendly-message';
 
@@ -14,9 +21,11 @@ const ACCEPTED_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export function ProfileHero({
   customer,
+  kycPhase,
   onUpdated,
 }: {
   customer: CustomerProfile;
+  kycPhase?: KycPhase;
   onUpdated: () => Promise<unknown> | unknown;
 }) {
   const name = `${customer.firstName} ${customer.lastName}`.trim();
@@ -25,6 +34,22 @@ export function ProfileHero({
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const accountStatus = customer.accountStatus ?? customer.status;
+  const accountActive = accountStatus === 'ACTIVE' || accountStatus === 'APPROVED';
+  const accountLabel =
+    CUSTOMER_ACCOUNT_STATUS_LABELS[accountStatus] ??
+    CUSTOMER_STATUS_LABELS[accountStatus] ??
+    accountStatus;
+  const kycBadge = kycPhase
+    ? kycPhase === 'VERIFIED'
+      ? { label: 'احراز هویت: تکمیل‌شده', variant: 'green' as const }
+      : {
+          label: `احراز هویت: ${kycSummaryBadge(kycPhase).label}`,
+          variant: kycSummaryBadge(kycPhase).variant,
+          className: kycSummaryBadge(kycPhase).className,
+        }
+    : null;
 
   useEffect(() => {
     if (!customer.hasAvatar) {
@@ -85,56 +110,81 @@ export function ProfileHero({
         >
           <GoldMark />
         </div>
-        <div className="relative flex items-center gap-4 p-5 md:p-6">
-          <div className="relative shrink-0">
-            {src ? (
-              <img
-                src={src}
-                alt=""
-                className="h-16 w-16 rounded-full border border-gold-200 object-cover shadow-sm md:h-20 md:w-20"
+        <div className="relative flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between md:p-6">
+          <div className="flex min-w-0 items-center gap-4">
+            <div className="relative shrink-0">
+              {src ? (
+                <img
+                  src={src}
+                  alt=""
+                  className="h-16 w-16 rounded-full border border-gold-200 object-cover shadow-sm md:h-20 md:w-20"
+                />
+              ) : (
+                <AvatarInitials name={name} />
+              )}
+              <button
+                type="button"
+                className="absolute -bottom-1 -left-1 flex h-8 w-8 items-center justify-center rounded-full border border-gold-200 bg-white text-gold-800 shadow-sm hover:bg-gold-50 disabled:opacity-60"
+                aria-label="تغییر عکس پروفایل"
+                disabled={uploading}
+                onClick={() => inputRef.current?.click()}
+              >
+                <Camera className="h-4 w-4" aria-hidden />
+              </button>
+              <input
+                ref={inputRef}
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                className="sr-only"
+                aria-label="انتخاب عکس پروفایل"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  event.target.value = '';
+                  if (file) onFile(file);
+                }}
               />
-            ) : (
-              <AvatarInitials name={name} />
-            )}
-            <button
-              type="button"
-              className="absolute -bottom-1 -left-1 flex h-8 w-8 items-center justify-center rounded-full border border-gold-200 bg-white text-gold-800 shadow-sm hover:bg-gold-50 disabled:opacity-60"
-              aria-label="تغییر عکس پروفایل"
-              disabled={uploading}
-              onClick={() => inputRef.current?.click()}
-            >
-              <Camera className="h-4 w-4" aria-hidden />
-            </button>
-            <input
-              ref={inputRef}
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              className="sr-only"
-              aria-label="انتخاب عکس پروفایل"
-              onChange={(event) => {
-                const file = event.target.files?.[0];
-                event.target.value = '';
-                if (file) onFile(file);
-              }}
-            />
-          </div>
-          <div className="min-w-0">
-            <h2 className="truncate text-xl font-bold text-slate-900 md:text-2xl">{name}</h2>
-            <p className="mt-2 text-sm text-slate-600">
-              شماره مشتری:{' '}
-              <span dir="ltr" className="font-medium text-slate-800">
-                {toPersianDigits(customer.customerNumber)}
-              </span>
-            </p>
-            <p className="mt-1 text-sm text-slate-600">
-              عضویت از:{' '}
-              <span className="font-medium text-slate-800">{formatDate(customer.createdAt)}</span>
-            </p>
-            <div className="mt-3">
-              <UserStatusBadge type={customer.type} status={customer.status} />
             </div>
-            {uploading ? <p className="mt-2 text-xs text-muted-foreground">در حال ذخیره عکس…</p> : null}
-            {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+            <div className="min-w-0">
+              <h2 className="truncate text-xl font-bold text-slate-900 md:text-2xl">{name}</h2>
+              <p className="mt-2 text-sm text-slate-600">
+                موبایل:{' '}
+                <MobileNumber value={customer.mobile} className="font-medium text-slate-800" />
+              </p>
+              <p className="mt-1 text-sm text-slate-600">
+                شماره مشتری:{' '}
+                <span dir="ltr" className="font-medium text-slate-800">
+                  {toPersianDigits(customer.customerNumber)}
+                </span>
+              </p>
+              {uploading ? <p className="mt-2 text-xs text-muted-foreground">در حال ذخیره عکس…</p> : null}
+              {error ? <p className="mt-2 text-xs text-red-700">{error}</p> : null}
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
+            {kycBadge ? (
+              <Badge
+                variant={kycBadge.variant}
+                className={cn(
+                  'gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold',
+                  kycPhase === 'VERIFIED' && 'bg-emerald-600 text-white',
+                  'className' in kycBadge ? kycBadge.className : undefined,
+                )}
+              >
+                {kycPhase === 'VERIFIED' ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
+                {kycBadge.label}
+              </Badge>
+            ) : null}
+            <Badge
+              variant={accountActive ? 'green' : 'gray'}
+              className={cn(
+                'gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold',
+                accountActive && 'bg-emerald-600 text-white',
+              )}
+            >
+              {accountActive ? <Check className="h-3.5 w-3.5" aria-hidden /> : null}
+              وضعیت حساب: {accountLabel}
+            </Badge>
           </div>
         </div>
       </section>

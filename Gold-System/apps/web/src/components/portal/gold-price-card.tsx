@@ -1,15 +1,10 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { RefreshCw } from 'lucide-react';
 import type { CurrentPrice } from '@/lib/api';
 import { cn, formatRial, formatTime } from '@/lib/utils';
-import {
-  CHART_PERIOD_LABELS,
-  DEMO_REFERENCE_PRICE_RIAL,
-  demoPriceSeries,
-  type ChartPeriod,
-} from '@/lib/portal-demo';
+import { DEMO_REFERENCE_PRICE_RIAL, demoPriceSeries } from '@/lib/portal-demo';
 import { GoldPriceChart } from '@/components/portal/gold-price-chart';
 
 export function GoldPriceCard({
@@ -21,82 +16,45 @@ export function GoldPriceCard({
   onRefresh?: () => void;
   isRefreshing?: boolean;
 }) {
-  const [period, setPeriod] = useState<ChartPeriod>('1d');
   const live = price?.normalizedValue ? Number(price.normalizedValue) : NaN;
   const hasLive = Number.isFinite(live) && live > 0;
   const displayPrice = hasLive ? live : DEMO_REFERENCE_PRICE_RIAL;
-  const series = useMemo(() => demoPriceSeries(displayPrice, period), [displayPrice, period]);
+  const series = useMemo(() => demoPriceSeries(displayPrice, '1d'), [displayPrice]);
   const marketOpen = !price || price.validityStatus === 'VALID';
+  const quote = formatRial(hasLive ? price!.normalizedValue : DEMO_REFERENCE_PRICE_RIAL);
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <h2 className="text-base font-bold text-slate-800">قیمت طلای آبشده</h2>
-          <p className="mt-0.5 text-xs text-muted-foreground">قیمت به ازای هر گرم</p>
+    <section className="flex h-full flex-col rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="text-sm font-bold text-slate-800">قیمت لحظه‌ای طلای آبشده</h2>
+          <p className="mt-0.5 text-[11px] text-slate-500">
+            {price?.capturedAt ? `بروزرسانی ${formatTime(price.capturedAt)}` : 'قیمت هر گرم'}
+          </p>
         </div>
-        <div className="flex items-center gap-2 text-xs">
-          <span className="inline-flex items-center gap-1.5 text-slate-600">
-            <span
-              className={cn('h-2 w-2 rounded-full', marketOpen ? 'bg-emerald-500' : 'bg-amber-500')}
-              aria-hidden
-            />
-            {marketOpen ? 'بازار فعال' : 'قیمت نامعتبر'}
-          </span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span
+            className={cn('h-2 w-2 rounded-full', marketOpen ? 'bg-emerald-500' : 'bg-amber-500')}
+            aria-hidden
+          />
           <button
             type="button"
             onClick={onRefresh}
             className="rounded-lg p-1.5 text-slate-500 hover:bg-slate-50"
             aria-label="بروزرسانی قیمت"
           >
-            <RefreshCw className={cn('h-4 w-4', isRefreshing && 'animate-spin')} />
+            <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
           </button>
         </div>
       </div>
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        آخرین بروزرسانی: {price?.capturedAt ? formatTime(price.capturedAt) : '—'}
-      </p>
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <PriceQuote
-          label="قیمت خرید"
-          value={formatRial(hasLive ? price!.normalizedValue : DEMO_REFERENCE_PRICE_RIAL)}
-          tone="buy"
-        />
-        <PriceQuote
-          label="قیمت فروش"
-          value={formatRial(hasLive ? price!.normalizedValue : DEMO_REFERENCE_PRICE_RIAL)}
-          tone="sell"
-        />
+      <div className="mt-3 grid grid-cols-2 gap-2">
+        <PriceQuote label="خرید" value={quote} tone="buy" />
+        <PriceQuote label="فروش" value={quote} tone="sell" />
       </div>
-      {!hasLive ? (
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          قیمت زنده در دسترس نیست؛ ارقام نمایشی هستند.
-        </p>
-      ) : (
-        <p className="mt-2 text-[11px] text-muted-foreground">
-          اسپرد جداگانه خرید/فروش در API فعلی وجود ندارد؛ هر دو ستون قیمت مرجع لحظه‌ای را نشان می‌دهند.
-        </p>
-      )}
 
-      <GoldPriceChart series={series} period={period} />
-
-      <div className="mt-3 flex flex-wrap gap-2">
-        {(Object.keys(CHART_PERIOD_LABELS) as ChartPeriod[]).map((key) => (
-          <button
-            key={key}
-            type="button"
-            onClick={() => setPeriod(key)}
-            className={cn(
-              'rounded-full px-3 py-1 text-xs font-medium',
-              period === key
-                ? 'bg-gold-500 text-white'
-                : 'bg-slate-50 text-slate-600 hover:bg-slate-100',
-            )}
-          >
-            {CHART_PERIOD_LABELS[key]}
-          </button>
-        ))}
+      <div className="mt-auto">
+        <GoldPriceChart series={series} period="1d" compact />
       </div>
     </section>
   );
@@ -115,15 +73,17 @@ function PriceQuote({
   return (
     <div
       className={cn(
-        'rounded-xl border p-3',
-        buy ? 'border-emerald-100 bg-emerald-50/70' : 'border-red-100 bg-red-50/70',
+        'rounded-xl border px-2.5 py-2',
+        buy ? 'border-emerald-100 bg-emerald-50/80' : 'border-rose-100 bg-rose-50/80',
       )}
     >
-      <p className={cn('text-xs font-medium', buy ? 'text-emerald-700' : 'text-red-700')}>{label}</p>
+      <p className={cn('text-[11px] font-medium', buy ? 'text-emerald-700' : 'text-rose-700')}>
+        {label}
+      </p>
       <p
         className={cn(
-          'mt-1 text-lg font-bold tabular-nums md:text-xl',
-          buy ? 'text-emerald-800' : 'text-red-800',
+          'mt-0.5 truncate text-sm font-bold tabular-nums',
+          buy ? 'text-emerald-800' : 'text-rose-800',
         )}
       >
         {value}

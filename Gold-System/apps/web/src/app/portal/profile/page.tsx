@@ -1,23 +1,32 @@
 'use client';
 
 import useSWR from 'swr';
-import { ApiClientError, customerApi } from '@/lib/api';
+import { ApiClientError, customerApi, kycApi } from '@/lib/api';
 import { Alert } from '@/components/ui/alert';
 import { PageSpinner } from '@/components/ui/spinner';
 import { BankAccountsCard } from '@/components/portal/profile/bank-accounts-card';
 import { PersonalInformationCard } from '@/components/portal/profile/personal-information-card';
 import { ProfileHero } from '@/components/portal/profile/profile-hero';
-import { ProfileKycCard } from '@/components/portal/profile/profile-kyc-card';
+import { ProfileKycPanel } from '@/components/portal/profile/profile-kyc-panel';
 import { ProfilePreferences } from '@/components/portal/profile/profile-preferences';
+import { ProfileTabs } from '@/components/portal/profile/profile-tabs';
 import { SecurityCard } from '@/components/portal/profile/security-card';
+import { KycLoadError, KycSkeleton } from '@/components/portal/kyc/kyc-experience';
 
 export default function ProfilePage() {
   const {
     data: customer,
     error: customerError,
     isLoading: customerLoading,
-    mutate,
+    mutate: mutateCustomer,
   } = useSWR('customer/me', () => customerApi.getMe());
+
+  const {
+    data: kyc,
+    error: kycError,
+    isLoading: kycLoading,
+    mutate: mutateKyc,
+  } = useSWR('kyc/me', () => kycApi.getMine());
 
   if (customerLoading) return <PageSpinner />;
   if (customerError instanceof ApiClientError && customerError.isNotFound) {
@@ -29,24 +38,46 @@ export default function ProfilePage() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-4">
-      <ProfileHero customer={customer} onUpdated={() => mutate()} />
+      <header>
+        <h1 className="text-xl font-bold text-slate-900 md:text-2xl">پروفایل من و مدارک هویتی</h1>
+        <p className="mt-1 text-sm leading-6 text-muted-foreground">
+          مدیریت اطلاعات شخصی، مدارک احراز هویت، حساب‌های بانکی و تنظیمات امنیتی
+        </p>
+      </header>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-12">
-        <div className="order-2 flex flex-col gap-4 xl:order-1 xl:col-span-3">
-          <ProfileKycCard customerStatus={customer.status} />
-        </div>
+      <ProfileHero
+        customer={customer}
+        kycPhase={kyc?.phase}
+        onUpdated={() => mutateCustomer()}
+      />
 
-        <div className="order-1 xl:order-2 xl:col-span-6">
-          <PersonalInformationCard customer={customer} onSaved={() => mutate()} />
-        </div>
-
-        <div className="order-3 flex flex-col gap-4 xl:order-3 xl:col-span-3">
-          <SecurityCard />
-          <BankAccountsCard />
-        </div>
-      </div>
-
-      <ProfilePreferences />
+      <ProfileTabs
+        panels={{
+          personal: (
+            <PersonalInformationCard customer={customer} onSaved={() => mutateCustomer()} />
+          ),
+          kyc:
+            kycLoading && !kyc ? (
+              <KycSkeleton />
+            ) : kycError || !kyc ? (
+              <KycLoadError onRetry={() => void mutateKyc()} />
+            ) : (
+              <ProfileKycPanel overview={kyc} onChanged={() => mutateKyc()} />
+            ),
+          banks: (
+            <BankAccountsCard
+              customerId={customer.id}
+              holderName={`${customer.firstName} ${customer.lastName}`.trim()}
+            />
+          ),
+          security: (
+            <div className="space-y-4">
+              <SecurityCard />
+              <ProfilePreferences />
+            </div>
+          ),
+        }}
+      />
     </div>
   );
 }

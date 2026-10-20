@@ -15,6 +15,7 @@ export function ConfirmDialog({
   requireReason = false,
   reasonLabel = 'دلیل',
   minReason = 5,
+  initialReason = '',
   isLoading = false,
   onClose,
   onConfirm,
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   requireReason?: boolean;
   reasonLabel?: string;
   minReason?: number;
+  initialReason?: string;
   isLoading?: boolean;
   onClose: () => void;
   onConfirm: (reason?: string) => void;
@@ -35,8 +37,8 @@ export function ConfirmDialog({
   const tooShort = requireReason && reason.trim().length < minReason;
 
   useEffect(() => {
-    if (open) setReason('');
-  }, [open]);
+    if (open) setReason(initialReason);
+  }, [open, initialReason]);
 
   return (
     <Modal

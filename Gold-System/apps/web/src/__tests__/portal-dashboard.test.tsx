@@ -10,6 +10,7 @@ import { RecentTransactions } from '../components/portal/recent-transactions';
 import { PortfolioCard } from '../components/portal/portfolio-card';
 import { PendingPickupCard } from '../components/portal/pending-pickup-card';
 import { GoldPriceChart } from '../components/portal/gold-price-chart';
+import { DashboardHero } from '../components/portal/dashboard-hero';
 import { demoPriceSeries, DEMO_ACTIVE_ORDERS, DEMO_RECENT_TRADES } from '../lib/portal-demo';
 import { toPersianDigits } from '../lib/utils';
 
@@ -49,7 +50,7 @@ describe('UserStatusBadge', () => {
   it('shows household customer type', () => {
     render(<UserStatusBadge type="HOUSEHOLD" status="ACTIVE" />);
     expect(screen.getByText('مشتری خانگی')).toBeInTheDocument();
-    expect(screen.getByText('فعال')).toBeInTheDocument();
+    expect(screen.getByText('کاربر فعال')).toBeInTheDocument();
   });
 
   it('shows partner and VIP labels', () => {
@@ -72,10 +73,57 @@ describe('QuickActions', () => {
   it('links to existing portal routes', () => {
     render(<QuickActions />);
     expect(screen.getByText('واریز و برداشت').closest('a')).toHaveAttribute('href', '/portal/payments');
-    expect(screen.getByText('سفارش جدید').closest('a')).toHaveAttribute(
+    expect(screen.getByText('خرید سریع طلا').closest('a')).toHaveAttribute(
       'href',
-      '/portal/orders/new',
+      '/portal/orders/new?side=buy',
     );
+    expect(screen.getByText('فروش سریع طلا').closest('a')).toHaveAttribute(
+      'href',
+      '/portal/orders/new?side=sell',
+    );
+    expect(screen.getByText('درخواست تحویل حضوری').closest('a')).toHaveAttribute(
+      'href',
+      '/portal/pickups/new',
+    );
+  });
+});
+
+describe('DashboardHero', () => {
+  it('sums rial purchasing power and gold market value as whole toman', () => {
+    render(
+      <DashboardHero
+        account={{
+          id: 'acc-1',
+          customerId: 'c-1',
+          status: 'ACTIVE',
+          creditLimitRial: '0',
+          reservedCreditRial: '0',
+          consumedCreditRial: '0',
+          creditLimitGoldRial: '0',
+          reservedCreditGoldRial: '0',
+          consumedCreditGoldRial: '0',
+          availableCreditRial: '1.00',
+          availableRial: '1000000000.00',
+        }}
+        position={{
+          weightGrams: '10.000000',
+          reservedPickupGrams: '0',
+          purityLabel: '750',
+          averageBuyPriceRial: null,
+          marketValueRial: '500000000',
+          changeRial: '12000000',
+          changePercent: '1.2',
+          realizedPnlRial: null,
+          unrealizedPnlRial: null,
+          totalBuyValueRial: null,
+          totalSellValueRial: null,
+          assets: [],
+        }}
+      />,
+    );
+    expect(screen.getByText('کل دارایی‌ها (ریالی + ارزش طلا)')).toBeInTheDocument();
+    expect(screen.getByText('۱۵۰,۰۰۰,۰۰۰ تومان')).toBeInTheDocument();
+    expect(screen.getByText(/سود امروز/)).toHaveTextContent('+۱.۲٪');
   });
 });
 
@@ -83,8 +131,7 @@ describe('PortfolioCard', () => {
   it('shows the empty holding state until a booked position exists', () => {
     render(<PortfolioCard />);
     expect(screen.getByText('هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است.')).toBeInTheDocument();
-    expect(screen.getByText('خرید طلا')).toBeInTheDocument();
-    expect(screen.getByText('فروش طلا')).toBeInTheDocument();
+    expect(screen.getByText('دارایی طلای من')).toBeInTheDocument();
   });
 
   it('shows average buy price as whole toman', () => {
@@ -106,7 +153,7 @@ describe('PortfolioCard', () => {
         }}
       />,
     );
-    const row = screen.getByText('میانگین قیمت خرید').closest('div');
+    const row = screen.getByText('میانگین خرید').closest('div');
     expect(row).toHaveTextContent('۵,۶۱۲,۵۰۰ تومان');
     expect(row?.textContent).not.toMatch(/[٫.]/);
   });
@@ -147,6 +194,11 @@ describe('ActiveOrders', () => {
     expect(screen.getByRole('button', { name: 'امروز' })).toHaveAttribute('aria-pressed', 'true');
   });
 
+  it('shows a compact empty state when there are no orders', () => {
+    render(<ActiveOrders orders={[]} now={now} />);
+    expect(screen.getByText('در حال حاضر سفارش باز و معلقی ندارید')).toBeInTheDocument();
+  });
+
   it('lets the customer switch to week month and year', async () => {
     const user = userEvent.setup();
     render(<ActiveOrders orders={DEMO_ACTIVE_ORDERS} now={now} />);
@@ -156,7 +208,7 @@ describe('ActiveOrders', () => {
     expect(screen.queryByText(toPersianDigits('ORD-1405-0030'))).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'سال' }));
-    expect(screen.getAllByText(toPersianDigits('ORD-1405-0030')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(toPersianDigits('ORD-1405-0032')).length).toBeGreaterThan(0);
   });
 
   it('labels buy and sell from order.side', () => {
@@ -240,7 +292,7 @@ describe('RecentTransactions', () => {
     expect(screen.queryByText(toPersianDigits('TRX-1405-00121'))).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'سال' }));
-    expect(screen.getAllByText(toPersianDigits('TRX-1405-00121')).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(toPersianDigits('TRX-1405-00123')).length).toBeGreaterThan(0);
   });
 
   it('shows trade prices as whole toman', () => {

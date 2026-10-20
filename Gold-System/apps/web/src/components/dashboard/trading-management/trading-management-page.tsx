@@ -190,6 +190,9 @@ export function TradingManagementPage() {
         <LimitsPanel
           data={data}
           canEdit={canLimits || canSchedule}
+          busy={busy}
+          onBusy={run}
+          onNotice={setNotice}
           onEdit={(session) => setDraft({ mode: canLimits && !canSchedule ? 'limits' : 'edit', session })}
         />
       ) : null}

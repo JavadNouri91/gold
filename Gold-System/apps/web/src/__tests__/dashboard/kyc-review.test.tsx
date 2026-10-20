@@ -56,9 +56,10 @@ describe('KYC review', () => {
   it('submits a rejection reason through the backend decision endpoint', async () => {
     signIn(['kyc.review']);
     const user = userEvent.setup();
-    render(<KycDecisionPanel customerId="cust-1" />);
-    await user.click(screen.getByRole('button', { name: 'رد' }));
-    await user.type(screen.getByRole('textbox', { name: /دلیل/ }), 'مدارک ناخوانا و ناقص است');
+    render(<KycDecisionPanel customerId="cust-1" reviewStatus="UNDER_REVIEW" />);
+    await user.click(screen.getByRole('button', { name: 'رد درخواست' }));
+    const reasonFields = screen.getAllByRole('textbox', { name: /دلیل/ });
+    await user.type(reasonFields[reasonFields.length - 1]!, 'مدارک ناخوانا و ناقص است');
     const confirmButtons = screen.getAllByRole('button', { name: 'تأیید' });
     await user.click(confirmButtons[confirmButtons.length - 1]!);
     expect(internalKycApi.decide).toHaveBeenCalledWith(
@@ -71,7 +72,16 @@ describe('KYC review', () => {
   it('does not offer a decision to a user without kyc.review', () => {
     signIn(['customer.read']);
     render(<KycDecisionPanel customerId="cust-1" />);
-    expect(screen.queryByRole('button', { name: 'رد' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'رد درخواست' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'تأیید احراز هویت' })).not.toBeInTheDocument();
+  });
+
+  it('disables final approval when required documents are not approved', async () => {
+    signIn(['kyc.review']);
+    internalKycApi.getDocuments.mockResolvedValue([uploadedDoc()]);
+    render(<KycDecisionPanel customerId="cust-incomplete" reviewStatus="UNDER_REVIEW" />);
+    expect(await screen.findByRole('button', { name: 'تأیید احراز هویت' })).toBeDisabled();
+    expect(screen.getByText(/همه مدارک الزامی هنوز بررسی و تأیید نشده‌اند|مدرک الزامی هنوز ارسال نشده/)).toBeInTheDocument();
   });
 
   it('disables approve after a document is already approved', async () => {
@@ -80,8 +90,7 @@ describe('KYC review', () => {
       uploadedDoc({ verificationStatus: 'APPROVED' }),
     ]);
     render(<KycDocumentList customerId="cust-approved" />);
-    expect(await screen.findByText('این مدرک قبلاً تأیید شده است.')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'تأیید شده' })).toBeDisabled();
+    expect(await screen.findByRole('button', { name: 'تأیید شده' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'رد مدرک' })).toBeEnabled();
   });
 
@@ -110,7 +119,8 @@ describe('KYC review', () => {
     render(<KycDocumentList customerId="cust-grid" />);
     await screen.findByText('روی کارت ملی');
     expect(document.querySelector('.xl\\:grid-cols-4')).not.toBeNull();
-    expect(document.querySelector('.md\\:grid-cols-2')).not.toBeNull();
+    expect(document.querySelector('.lg\\:grid-cols-3')).not.toBeNull();
+    expect(document.querySelector('.sm\\:grid-cols-2')).not.toBeNull();
   });
 
   it('offers background removal inside the personal photo editor', async () => {

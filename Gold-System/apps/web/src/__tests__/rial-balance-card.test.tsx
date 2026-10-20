@@ -225,7 +225,7 @@ describe('DashboardHeader', () => {
 
     const warning = await screen.findAllByRole('link', { name: 'هشدار احراز هویت نشده' });
     expect(warning.length).toBeGreaterThanOrEqual(1);
-    expect(warning[0]).toHaveAttribute('href', '/portal/kyc');
+    expect(warning[0]).toHaveAttribute('href', '/portal/profile#kyc');
     expect(warning[0]).not.toHaveAttribute('title');
     await userEvent.hover(warning[0]!);
     expect(

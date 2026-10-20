@@ -14,9 +14,11 @@ function tomanAxisLabel(rial: number): string {
 export function GoldPriceChart({
   series,
   period,
+  compact = false,
 }: {
   series: number[];
   period: ChartPeriod;
+  compact?: boolean;
 }) {
   const gradId = useId().replace(/:/g, '');
   const { path, area, min, max } = useMemo(() => buildPath(series), [series]);
@@ -25,9 +27,19 @@ export function GoldPriceChart({
   const maxLabel = tomanAxisLabel(max);
 
   return (
-    <div className="mt-4">
-      <p className="mb-1 text-[11px] text-muted-foreground">نمودار نمایشی حول قیمت مرجع — {CHART_PERIOD_LABELS[period]}</p>
-      <div className="relative h-36 w-full overflow-hidden rounded-xl bg-gold-50/40">
+    <div className={compact ? 'mt-3' : 'mt-4'}>
+      {compact ? null : (
+        <p className="mb-1 text-[11px] text-muted-foreground">
+          نمودار نمایشی حول قیمت مرجع — {CHART_PERIOD_LABELS[period]}
+        </p>
+      )}
+      <div
+        className={
+          compact
+            ? 'relative h-14 w-full overflow-hidden rounded-xl bg-gold-50/40'
+            : 'relative h-36 w-full overflow-hidden rounded-xl bg-gold-50/40'
+        }
+      >
         <svg viewBox="0 0 400 140" className="h-full w-full" role="img" aria-label="نمودار قیمت طلای آبشده">
           <defs>
             <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
@@ -38,12 +50,16 @@ export function GoldPriceChart({
           <path d={area} fill={`url(#${gradId})`} />
           <path d={path} fill="none" stroke="#d97706" strokeWidth="2.2" strokeLinejoin="round" />
         </svg>
-        <span className="pointer-events-none absolute left-2 top-2 text-[10px] text-slate-400 tabular-nums">
-          {maxLabel}
-        </span>
-        <span className="pointer-events-none absolute bottom-2 left-2 text-[10px] text-slate-400 tabular-nums">
-          {minLabel}
-        </span>
+        {compact ? null : (
+          <>
+            <span className="pointer-events-none absolute left-2 top-2 text-[10px] tabular-nums text-slate-400">
+              {maxLabel}
+            </span>
+            <span className="pointer-events-none absolute bottom-2 left-2 text-[10px] tabular-nums text-slate-400">
+              {minLabel}
+            </span>
+          </>
+        )}
       </div>
     </div>
   );

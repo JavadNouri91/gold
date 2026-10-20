@@ -115,13 +115,15 @@ export default function PortalPickupDetailPage() {
             <p className="rounded-lg bg-slate-50 p-3 text-sm leading-7">{data.customerNote}</p>
           ) : null}
           {data.status === 'CANCELLED' ? (
-            <Alert variant="error">
+            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm leading-7 text-red-700">
               <p className="font-medium">
-                لغوکننده: {pickupCancelActorName(data.cancelledByKind, 'portal')}
-                {data.cancelledAt ? ` — ${formatDateTime(data.cancelledAt)}` : ''}
+                لغو کننده: {pickupCancelActorName(data.cancelledByKind, 'portal')}
+                {data.cancelledAt ? (
+                  <span className="font-normal"> - تاریخ لغو: {formatDate(data.cancelledAt)}</span>
+                ) : null}
               </p>
-              {data.cancelReason ? <p className="mt-1">دلیل: {data.cancelReason}</p> : null}
-            </Alert>
+              {data.cancelReason ? <p className="mt-1">دلیل لغو: {data.cancelReason}</p> : null}
+            </div>
           ) : null}
           {data.status === 'READY' ? (
             <Alert variant="success">

@@ -53,7 +53,7 @@ export function ProfileKycCard({ customerStatus }: { customerStatus?: string }) 
         </div>
       </div>
       <Link
-        href="/portal/kyc"
+        href="/portal/profile#kyc"
         className="mt-4 inline-flex h-10 w-full items-center justify-center rounded-xl border border-gold-200 bg-gold-50 text-sm font-semibold text-gold-800 hover:bg-gold-100"
       >
         مشاهده جزئیات

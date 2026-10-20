@@ -52,7 +52,7 @@ export interface OverrideBody {
 }
 
 export interface LimitBody {
-  sessionId: string;
+  sessionId?: string | null;
   scope: TradingLimitScope;
   scopeKey?: string | null;
   enabled?: boolean;
@@ -70,8 +70,19 @@ const LIMIT_SCOPES: TradingLimitScope[] = [
   'ROLE',
   'USER',
   'CUSTOMER',
+  'CUSTOMER_TYPE',
   'TRANSACTION_TYPE',
 ];
+
+const CUSTOMER_TYPE_KEYS = ['HOUSEHOLD', 'PARTNER', 'VIP'] as const;
+
+const CUSTOMER_TYPE_LABELS: Record<string, string> = {
+  HOUSEHOLD: 'خانگی',
+  PARTNER: 'همکار',
+  VIP: 'VIP',
+  WHOLESALE: 'عمده',
+  CORPORATE: 'حقوقی',
+};
 
 @Injectable()
 export class TradingAdminService {
@@ -136,6 +147,27 @@ export class TradingAdminService {
         enabled: override.enabled,
         sessions: override.sessions.map((session) => this.sessionPayload(session)),
       })),
+    };
+  }
+
+  async setMarketOpen(actorId: string, enabled: boolean) {
+    const before = await this.repo.ensureSchedule();
+    const after = await this.repo.setScheduleEnabled(enabled);
+    await this.audit.log({
+      actorId,
+      actorType: 'USER',
+      action: enabled ? 'TRADING_MARKET_OPENED' : 'TRADING_MARKET_CLOSED',
+      entityType: 'TradingSchedule',
+      entityId: after.id,
+      before: { enabled: before.enabled },
+      after: { enabled: after.enabled },
+    });
+    const assessment = await this.policy.assess(this.clock());
+    return {
+      enabled: after.enabled,
+      open: assessment.open,
+      status: assessment.status,
+      scheduleEnabled: assessment.scheduleEnabled,
     };
   }
 
@@ -319,6 +351,60 @@ export class TradingAdminService {
     return { id };
   }
 
+  async listScopedLimits() {
+    const limits = await this.repo.listScopedLimits(['CUSTOMER', 'CUSTOMER_TYPE']);
+    const customerIds = limits
+      .filter((limit) => limit.scope === 'CUSTOMER' && limit.scopeKey)
+      .map((limit) => limit.scopeKey as string);
+    const customers = await this.repo.customerSummaries(customerIds);
+    const byId = new Map(customers.map((customer) => [customer.id, customer]));
+
+    const groupLimits = CUSTOMER_TYPE_KEYS.map((type) => {
+      const match = limits.find(
+        (limit) => limit.scope === 'CUSTOMER_TYPE' && limit.scopeKey === type && limit.enabled,
+      );
+      return {
+        scope: 'CUSTOMER_TYPE' as const,
+        scopeKey: type,
+        label: CUSTOMER_TYPE_LABELS[type],
+        id: match?.id ?? null,
+        enabled: match?.enabled ?? false,
+        maxAmountRial: match?.maxAmountRial?.toFixed(2) ?? null,
+        maxWeightGrams: match?.maxWeightGrams?.toFixed(6) ?? null,
+        maxCount: match?.maxCount ?? null,
+      };
+    });
+
+    const customerLimits = limits
+      .filter((limit) => limit.scope === 'CUSTOMER' && limit.scopeKey)
+      .map((limit) => {
+        const customer = byId.get(limit.scopeKey!);
+        return {
+          id: limit.id,
+          scope: 'CUSTOMER' as const,
+          scopeKey: limit.scopeKey!,
+          enabled: limit.enabled,
+          maxAmountRial: limit.maxAmountRial?.toFixed(2) ?? null,
+          maxWeightGrams: limit.maxWeightGrams?.toFixed(6) ?? null,
+          maxCount: limit.maxCount ?? null,
+          customer: customer
+            ? {
+                id: customer.id,
+                customerNumber: customer.customerNumber,
+                name: `${customer.firstName} ${customer.lastName}`.trim(),
+                mobile: customer.mobile,
+                type: customer.type,
+                typeLabel: customer.type
+                  ? (CUSTOMER_TYPE_LABELS[customer.type] ?? customer.type)
+                  : null,
+              }
+            : null,
+        };
+      });
+
+    return { groupLimits, customerLimits };
+  }
+
   async upsertLimit(actorId: string, input: LimitBody) {
     if (!LIMIT_SCOPES.includes(input.scope)) {
       throw new BusinessRuleException('TRADING_LIMIT_SCOPE', 'نوع محدوده نامعتبر است.');
@@ -327,18 +413,22 @@ export class TradingAdminService {
     if (input.scope !== 'GLOBAL' && !scopeKey) {
       throw new BusinessRuleException('TRADING_LIMIT_SCOPE', 'کلید محدوده الزامی است.');
     }
-    const session = await this.requireSession(input.sessionId);
-    const caps = this.capsFromBody(input, session);
-    assertSessionShape({
-      startMinute: session.startMinute,
-      endMinute: session.endMinute,
-      caps,
-      siblings: [],
-      selfId: session.id,
-      requireLimit: true,
-    });
+    await this.assertScopeKey(input.scope, scopeKey);
 
     if (input.scope === 'GLOBAL') {
+      if (!input.sessionId) {
+        throw new BusinessRuleException('TRADING_LIMIT_SCOPE', 'شناسه بازه برای سقف بازار الزامی است.');
+      }
+      const session = await this.requireSession(input.sessionId);
+      const caps = this.capsFromBody(input, session);
+      assertSessionShape({
+        startMinute: session.startMinute,
+        endMinute: session.endMinute,
+        caps,
+        siblings: [],
+        selfId: session.id,
+        requireLimit: true,
+      });
       const updated = await this.repo.updateSession(session.id, {
         ...session,
         weekday: session.weekday,
@@ -359,8 +449,30 @@ export class TradingAdminService {
       return { limit: snapshotLimit(limit), session: this.sessionPayload(updated) };
     }
 
+    const sessionId =
+      input.scope === 'CUSTOMER' || input.scope === 'CUSTOMER_TYPE'
+        ? null
+        : (input.sessionId ?? null);
+    if (sessionId) {
+      await this.requireSession(sessionId);
+    }
+
+    const existing = await this.repo.findScopedLimit({
+      sessionId,
+      scope: input.scope,
+      scopeKey,
+    });
+    const caps = this.capsFromBody(input, existing);
+    assertSessionShape({
+      startMinute: 0,
+      endMinute: 1,
+      caps,
+      siblings: [],
+      requireLimit: true,
+    });
+
     const saved = await this.repo.upsertScopedLimit({
-      sessionId: session.id,
+      sessionId,
       scope: input.scope,
       scopeKey,
       enabled: input.enabled ?? true,
@@ -375,7 +487,45 @@ export class TradingAdminService {
       before: saved.previous ? snapshotLimit(saved.previous) : null,
       after: snapshotLimit(saved.limit),
     });
-    return { limit: snapshotLimit(saved.limit), session: this.sessionPayload(session) };
+    return { limit: snapshotLimit(saved.limit), session: null };
+  }
+
+  async deleteLimit(actorId: string, id: string) {
+    const current = await this.repo.findLimit(id);
+    if (!current) throw new NotFoundException('سقف معاملاتی پیدا نشد.');
+    if (current.scope === 'GLOBAL') {
+      throw new BusinessRuleException(
+        'TRADING_LIMIT_SCOPE',
+        'سقف بازار را از طریق ویرایش بازه تغییر دهید.',
+      );
+    }
+    await this.repo.deleteLimit(id);
+    await this.audit.log({
+      actorId,
+      actorType: 'USER',
+      action: 'TRADING_LIMIT_DELETED',
+      entityType: 'TradingLimit',
+      entityId: id,
+      before: snapshotLimit(current),
+      after: null,
+    });
+    return { id };
+  }
+
+  private async assertScopeKey(scope: TradingLimitScope, scopeKey: string | null) {
+    if (scope === 'GLOBAL' || !scopeKey) return;
+    if (scope === 'CUSTOMER_TYPE') {
+      if (!CUSTOMER_TYPE_KEYS.includes(scopeKey as (typeof CUSTOMER_TYPE_KEYS)[number])) {
+        throw new BusinessRuleException('TRADING_LIMIT_SCOPE', 'نوع گروه مشتری نامعتبر است.');
+      }
+      return;
+    }
+    if (scope === 'CUSTOMER') {
+      const exists = await this.repo.customerExists(scopeKey);
+      if (!exists) {
+        throw new NotFoundException('مشتری پیدا نشد.');
+      }
+    }
   }
 
   async auditLog(limit = 20, offset = 0) {

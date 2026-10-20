@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Pencil, UserRound } from 'lucide-react';
 import { customerApi, type CustomerProfile } from '@/lib/api';
 import { Alert } from '@/components/ui/alert';
@@ -11,6 +11,7 @@ import { Modal } from '@/components/ui/modal';
 import { PostalCodeInput } from '@/components/ui/postal-code-input';
 import {
   CUSTOMER_STATUS_LABELS,
+  cn,
   customerTypeBadgeLabel,
   formatDate,
   formatNationalId,
@@ -22,6 +23,13 @@ import { friendlyApiMessage } from './friendly-message';
 
 const IDENTITY_NOTICE = 'برای تغییر اطلاعات هویتی، لطفاً با پشتیبانی تماس بگیرید.';
 
+type FieldView = {
+  label: string;
+  value: ReactNode;
+  ltr?: boolean;
+  valueClassName?: string;
+};
+
 export function PersonalInformationCard({
   customer,
   onSaved,
@@ -32,28 +40,37 @@ export function PersonalInformationCard({
   const [open, setOpen] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const fields = [
+  const accountStatus = customer.accountStatus ?? customer.status;
+  const accountActive = accountStatus === 'ACTIVE' || accountStatus === 'APPROVED';
+  const accountLabel = CUSTOMER_STATUS_LABELS[accountStatus] ?? accountStatus;
+  const postal = formatPostalCode(customer.postalCode);
+
+  const fields: FieldView[] = [
     { label: 'نام', value: customer.firstName },
     { label: 'نام خانوادگی', value: customer.lastName },
     {
       label: 'شماره موبایل',
       value: <MobileNumber value={customer.mobile} />,
     },
-    { label: 'ایمیل', value: customer.email || '—', ltr: true },
-    { label: 'کد ملی', value: formatNationalId(customer.nationalId), ltr: true },
-    { label: 'تاریخ تولد', value: formatDate(customer.dateOfBirth) },
-    { label: 'آدرس', value: customer.address || '—' },
-    { label: 'کد پستی', value: formatPostalCode(customer.postalCode), ltr: true },
-    { label: 'تاریخ عضویت', value: formatDate(customer.createdAt) },
+    { label: 'ایمیل', value: customer.email?.trim() || '—', ltr: true },
+    { label: 'کد ملی', value: formatNationalId(customer.nationalId) || '—', ltr: true },
+    { label: 'تاریخ تولد', value: formatDate(customer.dateOfBirth) || '—' },
+    { label: 'آدرس', value: customer.address?.trim() || '—' },
+    { label: 'کد پستی', value: postal && postal !== '—' ? postal : '—', ltr: true },
     { label: 'نوع کاربر', value: customerTypeBadgeLabel(customer.type) ?? '—' },
-    { label: 'وضعیت حساب', value: CUSTOMER_STATUS_LABELS[customer.status] ?? customer.status },
+    { label: 'تاریخ عضویت', value: formatDate(customer.createdAt) || '—' },
+    {
+      label: 'وضعیت حساب',
+      value: accountLabel,
+      valueClassName: accountActive ? 'text-emerald-600' : undefined,
+    },
   ];
 
   return (
-    <section className="rounded-2xl border border-slate-100 bg-white p-5 shadow-sm md:p-6">
+    <section className="rounded-2xl border border-gray-100 bg-white p-6 shadow-sm">
       <div className="flex items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-base font-bold text-slate-800">
-          <UserRound className="h-4 w-4 text-gold-700" aria-hidden />
+        <h2 className="flex items-center gap-2 text-base font-bold text-slate-900">
+          <UserRound className="h-5 w-5 text-amber-600" aria-hidden />
           اطلاعات شخصی
         </h2>
         <button
@@ -62,12 +79,14 @@ export function PersonalInformationCard({
             setSaved(false);
             setOpen(true);
           }}
-          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-gold-800 hover:bg-gold-50"
+          className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm font-medium text-amber-600 transition-colors hover:text-amber-700"
         >
           <Pencil className="h-4 w-4" aria-hidden />
-          ویرایش
+          ویرایش اطلاعات
         </button>
       </div>
+
+      <div className="mt-4 border-t border-gray-100" />
 
       {saved ? (
         <Alert variant="success" className="mt-4">
@@ -75,16 +94,31 @@ export function PersonalInformationCard({
         </Alert>
       ) : null}
 
-      <dl className="mt-5 grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-        {fields.map((field) => (
-          <div key={field.label} className="min-w-0 border-b border-slate-100 pb-3">
-            <dt className="text-xs text-muted-foreground">{field.label}</dt>
-            <dd
-              className="mt-1 break-words text-sm font-medium text-slate-800"
-              dir={field.ltr ? 'ltr' : undefined}
-            >
-              {field.value || '—'}
-            </dd>
+      <dl className="mt-4">
+        {Array.from({ length: Math.ceil(fields.length / 2) }, (_, index) =>
+          fields.slice(index * 2, index * 2 + 2),
+        ).map((row) => (
+          <div
+            key={row.map((field) => field.label).join('-')}
+            className="grid grid-cols-1 gap-x-12 border-slate-100 md:grid-cols-2 md:border-b md:py-4 md:last:border-b-0"
+          >
+            {row.map((field) => (
+              <div
+                key={field.label}
+                className="min-w-0 border-b border-slate-100 py-4 md:border-b-0 md:py-0"
+              >
+                <dt className="text-sm text-slate-500">{field.label}</dt>
+                <dd
+                  className={cn(
+                    'mt-1.5 break-words text-base font-bold text-slate-900',
+                    field.valueClassName,
+                  )}
+                  dir={field.ltr ? 'ltr' : undefined}
+                >
+                  {field.value || '—'}
+                </dd>
+              </div>
+            ))}
           </div>
         ))}
       </dl>

@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { MyTradesPage } from '../components/portal/trades/my-trades-page';
 import { activityBounds } from '../lib/activity-range';
 import { activityBucketLabel } from '../lib/activity-bucket-label';
-import { toPersianDigits } from '../lib/utils';
+import { formatCompactToman, toPersianDigits } from '../lib/utils';
 import type { ActivitySummary } from '../lib/api';
 
 jest.mock('next/link', () => ({
@@ -121,12 +121,13 @@ describe('activity range', () => {
 });
 
 describe('MyTradesPage', () => {
-  it('shows server totals and does not invent profit', () => {
+  it('shows compact server totals and a details action', () => {
     renderPage();
-    expect(screen.getByText('سود و زیان مشتری ثبت نشده')).toBeInTheDocument();
-    expect(screen.queryByText(/\+۷\.۸/)).not.toBeInTheDocument();
+    expect(screen.getByText('حجم کل معاملات')).toBeInTheDocument();
     expect(screen.getByText('مجموع خرید')).toBeInTheDocument();
     expect(screen.getByText('مجموع فروش')).toBeInTheDocument();
+    expect(screen.getByText('سود و زیان کل')).toBeInTheDocument();
+    expect(screen.getByText(/۱۷۵ میلیون تومان/)).toBeInTheDocument();
     expect(screen.getAllByText(toPersianDigits('ORD-000125')).length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: 'جزئیات' })).toHaveAttribute('href', '/portal/orders/order-1');
   });
@@ -145,7 +146,7 @@ describe('MyTradesPage', () => {
     });
     expect(screen.getByText('هنوز معامله‌ای ثبت نکرده‌اید.')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'خرید طلا' })).toHaveAttribute('href', '/portal/orders/new?side=buy');
-    expect(screen.queryByText('نمودار حجم معاملات')).not.toBeInTheDocument();
+    expect(screen.queryByText('روند حجم معاملات')).not.toBeInTheDocument();
   });
 
   it('keeps summary and list errors separate', async () => {
@@ -167,5 +168,12 @@ describe('MyTradesPage', () => {
     await user.click(retries[1]!);
     expect(onRetrySummary).toHaveBeenCalledTimes(1);
     expect(onRetryList).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('formatCompactToman', () => {
+  it('shortens large Rial amounts into Toman scales', () => {
+    expect(formatCompactToman('14200000000')).toBe('۱.۴۲ میلیارد تومان');
+    expect(formatCompactToman('1750000000.00')).toBe('۱۷۵ میلیون تومان');
   });
 });

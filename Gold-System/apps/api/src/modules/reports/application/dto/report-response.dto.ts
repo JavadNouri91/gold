@@ -72,6 +72,10 @@ export class DashboardSummaryDto {
 export class RecentTradeDto {
   id: string;
   tradeNumber: string;
+  customerId: string | null;
+  customerName: string | null;
+  /** BUY = مشتری خریده، SELL = مشتری فروخته. Null when the order was never classified. */
+  side: 'BUY' | 'SELL' | null;
   status: string;
   totalAmountRial: string;
   weightGrams: string;
@@ -82,9 +86,12 @@ export class RecentTradeDto {
 export class RecentPaymentDto {
   id: string;
   tradeId: string | null;
+  customerId: string | null;
+  customerName: string | null;
   method: string;
   amount: string;
   status: string;
+  hasReceipt: boolean;
   createdAt: string;
 }
 

@@ -58,6 +58,7 @@ describe('TradingPolicyService', () => {
     lockSession: jest.fn(),
     roleIdsForUser: jest.fn(),
     userIdForCustomer: jest.fn(),
+    customerTypeForCustomer: jest.fn(),
   };
 
   beforeEach(async () => {
@@ -73,6 +74,7 @@ describe('TradingPolicyService', () => {
     repo.limitsForSessions.mockResolvedValue([]);
     repo.roleIdsForUser.mockResolvedValue([]);
     repo.userIdForCustomer.mockResolvedValue(null);
+    repo.customerTypeForCustomer.mockResolvedValue('VIP');
 
     const module = await Test.createTestingModule({
       providers: [
@@ -214,28 +216,94 @@ describe('TradingPolicyService', () => {
     ).rejects.toThrow(TRADING_MESSAGES.count);
   });
 
-  it('applies a role limit instead of the wider session cap', async () => {
-    repo.limitsForSessions.mockResolvedValue([limit({})]);
-    repo.usageBetween.mockResolvedValue({
-      count: 2,
-      amountRial: new Decimal('0'),
-      weightGrams: new Decimal('0'),
-    });
+  it('enforces a customer-type personal cap against that customer usage only', async () => {
+    repo.limitsForSessions.mockResolvedValue([
+      limit({
+        scope: 'CUSTOMER_TYPE',
+        scopeKey: 'VIP',
+        sessionId: null,
+        maxCount: 2,
+        maxAmountRial: null,
+        maxWeightGrams: null,
+      }),
+    ]);
+    repo.usageBetween.mockImplementation(
+      (_start: Date, _end: Date, _tx?: unknown, customerId?: string) => {
+        if (customerId) {
+          return Promise.resolve({
+            count: 2,
+            amountRial: new Decimal('0'),
+            weightGrams: new Decimal('0'),
+          });
+        }
+        return Promise.resolve({
+          count: 0,
+          amountRial: new Decimal('0'),
+          weightGrams: new Decimal('0'),
+        });
+      },
+    );
 
     await expect(
       service.validateTransaction({
         amountRial: '1',
         weightGrams: '1',
-        roleIds: ['role-seller'],
+        customerId: 'cust-1',
       }),
-    ).rejects.toThrow(TRADING_MESSAGES.count);
+    ).rejects.toThrow(TRADING_MESSAGES.personalCount);
+
+    expect(repo.usageBetween).toHaveBeenCalledWith(
+      expect.any(Date),
+      expect.any(Date),
+      undefined,
+      'cust-1',
+    );
+  });
+
+  it('prefers a customer override over the customer-type cap', async () => {
+    repo.limitsForSessions.mockResolvedValue([
+      limit({
+        id: 'type',
+        scope: 'CUSTOMER_TYPE',
+        scopeKey: 'VIP',
+        sessionId: null,
+        maxAmountRial: new Decimal('50'),
+        maxCount: null,
+        maxWeightGrams: null,
+      }),
+      limit({
+        id: 'cust',
+        scope: 'CUSTOMER',
+        scopeKey: 'cust-1',
+        sessionId: null,
+        maxAmountRial: new Decimal('10'),
+        maxCount: null,
+        maxWeightGrams: null,
+      }),
+    ]);
+    repo.usageBetween.mockImplementation(
+      (_start: Date, _end: Date, _tx?: unknown, customerId?: string) => {
+        if (customerId) {
+          return Promise.resolve({
+            count: 0,
+            amountRial: new Decimal('10'),
+            weightGrams: new Decimal('0'),
+          });
+        }
+        return Promise.resolve({
+          count: 0,
+          amountRial: new Decimal('0'),
+          weightGrams: new Decimal('0'),
+        });
+      },
+    );
 
     await expect(
       service.validateTransaction({
-        amountRial: '1',
+        amountRial: '0.01',
         weightGrams: '1',
-        roleIds: ['role-other'],
+        customerId: 'cust-1',
       }),
-    ).resolves.toBeUndefined();
+    ).rejects.toThrow(TRADING_MESSAGES.personalAmount);
   });
 });

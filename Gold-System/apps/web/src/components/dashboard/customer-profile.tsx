@@ -240,9 +240,14 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
               <CardHeader><CardTitle>مدارک احراز هویت</CardTitle></CardHeader>
               <CardContent className="space-y-4">
                 <PermissionGate anyOf="kyc.documents.read" fallback={<p className="text-sm">مشاهده مدرک مجاز نیست.</p>}>
-                  <KycDocumentList customerId={customerId} />
+                  <KycDocumentList customerId={customerId} customerType={profile.type} />
                 </PermissionGate>
-                <KycDecisionPanel customerId={customerId} onDone={() => { void history.mutate(); void customer.mutate(); }} />
+                <KycDecisionPanel
+                  customerId={customerId}
+                  customerType={profile.type}
+                  reviewStatus={history.data?.[0]?.status}
+                  onDone={() => { void history.mutate(); void customer.mutate(); }}
+                />
                 {history.data?.length ? (
                   <ul className="divide-y text-sm">
                     {history.data.map((item) => (

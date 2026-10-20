@@ -151,6 +151,37 @@ async function openConfirm(side: 'buy' | 'sell' = 'buy') {
   return confirmButtons[confirmButtons.length - 1]!;
 }
 
+function calculationFromBody(body: { weightGrams?: string; side?: string }): PricingCalculationResult {
+  const base = calculation();
+  const raw = String(body.weightGrams ?? '5');
+  const [intPart = '0', frac = ''] = raw.split('.');
+  const milli = Number(intPart) * 1000 + Number((frac + '000').slice(0, 3));
+  const final = String(milli * 12_350);
+  const amount = `${final}.00`;
+  const side = body.side === 'SELL' ? 'SELL' : 'BUY';
+  return {
+    ...base,
+    pipeline: {
+      ...base.pipeline,
+      step4_afterWeight: amount,
+      step5_afterGroupRule: amount,
+      priceBeforeRounding: amount,
+      finalPrice: amount,
+    },
+    charges: [],
+    goldCommercialRial: amount,
+    feeTotalRial: '0.00',
+    customerTotalRial: amount,
+    payableRial: side === 'BUY' ? amount : null,
+    receivableRial: side === 'SELL' ? amount : null,
+    side,
+    meta: {
+      ...base.meta,
+      weightGrams: frac ? raw : `${raw}.000000`,
+    },
+  };
+}
+
 beforeEach(() => {
   mockPush.mockReset();
   mockGetMe.mockReset();
@@ -163,36 +194,9 @@ beforeEach(() => {
   mockGetMe.mockResolvedValue(customer);
   mockGetAccount.mockResolvedValue(account());
   mockGetPrice.mockResolvedValue(price());
-  mockCalculate.mockImplementation(async (body: { weightGrams?: string; side?: string }) => {
-    const base = calculation();
-    const raw = String(body.weightGrams ?? '5');
-    const [intPart = '0', frac = ''] = raw.split('.');
-    const milli = Number(intPart) * 1000 + Number((frac + '000').slice(0, 3));
-    const final = String(milli * 12_350);
-    const amount = `${final}.00`;
-    const side = body.side === 'SELL' ? 'SELL' : 'BUY';
-    return {
-      ...base,
-      pipeline: {
-        ...base.pipeline,
-        step4_afterWeight: amount,
-        step5_afterGroupRule: amount,
-        priceBeforeRounding: amount,
-        finalPrice: amount,
-      },
-      charges: [],
-      goldCommercialRial: amount,
-      feeTotalRial: '0.00',
-      customerTotalRial: amount,
-      payableRial: side === 'BUY' ? amount : null,
-      receivableRial: side === 'SELL' ? amount : null,
-      side,
-      meta: {
-        ...base.meta,
-        weightGrams: frac ? raw : `${raw}.000000`,
-      },
-    };
-  });
+  mockCalculate.mockImplementation(async (body: { weightGrams?: string; side?: string }) =>
+    calculationFromBody(body),
+  );
   mockCreate.mockResolvedValue({ ...submitted, status: 'DRAFT' });
   mockSubmit.mockResolvedValue(submitted);
   mockPortfolio.mockResolvedValue({
@@ -239,6 +243,37 @@ describe('BuyGoldPage', () => {
     });
     expect(mockSubmit).toHaveBeenCalledWith('order-1');
     expect(JSON.stringify(mockCreate.mock.calls[0]?.[0])).not.toContain('61750000');
+  });
+
+  it('shows the transaction fee once on the invoice', async () => {
+    mockCalculate.mockImplementation(async (body: { weightGrams?: string; side?: string }) => {
+      const result = calculationFromBody(body);
+      return {
+        ...result,
+        charges: [
+          {
+            code: 'BUY_FEE',
+            labelFa: 'کارمزد خرید',
+            side: 'BUY',
+            mode: 'FIXED',
+            rateValue: '21555.00',
+            calculationBase: null,
+            baseAmount: result.goldCommercialRial,
+            amount: '21555.00',
+          },
+        ],
+        feeTotalRial: '21555.00',
+      };
+    });
+    renderPage();
+    await screen.findByText('قیمت لحظه‌ای طلای آبشده');
+    await calculateFiveGrams();
+
+    const label = screen.getByText('کارمزد معامله');
+    const value = label.parentElement?.querySelector('dd')?.textContent ?? '';
+    expect(value).toBe(`${toPersianDigits('2,155')} تومان`);
+    expect(value).not.toContain('.');
+    expect(value.match(/کارمزد/g) ?? []).toHaveLength(0);
   });
 
   it('blocks submission when identity is not active', async () => {

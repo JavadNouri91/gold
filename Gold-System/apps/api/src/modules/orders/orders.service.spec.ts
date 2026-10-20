@@ -355,6 +355,12 @@ describe('OrdersService', () => {
       // Pricing engine called with customer context
       expect(pricingEngine.calculate).toHaveBeenCalledTimes(1);
       expect(tradingPolicy.assertTradingOpen).toHaveBeenCalledTimes(1);
+      expect(tradingPolicy.validateTransaction).toHaveBeenCalledWith(
+        expect.objectContaining({
+          customerId: CUSTOMER_ID,
+          transactionType: 'TRADE',
+        }),
+      );
       expect(pricingEngine.calculate).toHaveBeenCalledWith(
         expect.objectContaining({
           weightGrams: new Decimal('10'),

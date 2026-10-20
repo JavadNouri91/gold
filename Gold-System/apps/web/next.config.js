@@ -1,7 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  transpilePackages: ['@gold/shared-types', 'recharts'],
+  transpilePackages: ['@gold/shared-types', 'recharts', 'react-iranian-bank-logo'],
   async headers() {
     return [
       {

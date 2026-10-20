@@ -21,7 +21,7 @@ function sideMeta(side?: DemoSide | null) {
 }
 
 const PERIODS: OrderPeriod[] = ['day', 'week', 'month', 'year'];
-const MAX_ROWS = 10;
+const MAX_ROWS = 3;
 
 export function RecentTransactions({
   trades,
@@ -37,15 +37,15 @@ export function RecentTransactions({
   );
 
   return (
-    <section className="portal-dense-copy rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-800">آخرین معاملات</h2>
+    <section className="portal-dense-copy rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-slate-800">آخرین معاملات</h2>
         <Link href="/portal/trades" className="text-xs text-gold-700 hover:underline">
           مشاهده همه
         </Link>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="بازه معاملات">
+      <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="بازه معاملات">
         {PERIODS.map((key) => (
           <button
             key={key}

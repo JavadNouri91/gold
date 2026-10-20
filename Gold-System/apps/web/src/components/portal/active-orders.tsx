@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
+import { ClipboardList } from 'lucide-react';
 import type { Order } from '@/lib/api';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { cn, formatDate, formatWholeMoney, formatWeight, orderStatusPresentation, toPersianDigits } from '@/lib/utils';
@@ -26,7 +27,7 @@ function sideMeta(side?: DemoSide | null) {
 }
 
 const PERIODS: OrderPeriod[] = ['day', 'week', 'month', 'year'];
-const MAX_ROWS = 10;
+const MAX_ROWS = 3;
 
 export function ActiveOrders({
   orders,
@@ -42,15 +43,15 @@ export function ActiveOrders({
   );
 
   return (
-    <section className="portal-dense-copy rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-bold text-slate-800">سفارش‌های فعال من</h2>
+    <section className="portal-dense-copy rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-slate-800">سفارش‌های فعال</h2>
         <Link href="/portal/orders" className="text-xs text-gold-700 hover:underline">
           مشاهده همه
         </Link>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2" role="group" aria-label="بازه سفارش‌ها">
+      <div className="mb-3 flex flex-wrap gap-1.5" role="group" aria-label="بازه سفارش‌ها">
         {PERIODS.map((key) => (
           <button
             key={key}
@@ -70,9 +71,10 @@ export function ActiveOrders({
       </div>
 
       {!visible.length ? (
-        <p className="py-6 text-center text-sm text-muted-foreground">
-          {period === 'day' ? 'سفارشی برای امروز ندارید' : 'سفارشی در این بازه ندارید'}
-        </p>
+        <div className="flex flex-col items-center justify-center gap-2 py-10 text-center">
+          <ClipboardList className="h-8 w-8 text-slate-300" aria-hidden />
+          <p className="text-sm text-slate-500">در حال حاضر سفارش باز و معلقی ندارید</p>
+        </div>
       ) : (
         <>
           <div className="hidden overflow-x-auto md:block">

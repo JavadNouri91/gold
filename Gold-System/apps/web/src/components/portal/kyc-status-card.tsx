@@ -61,7 +61,7 @@ export function KycStatusCard({
 
   return (
     <Link
-      href="/portal/kyc"
+      href="/portal/profile#kyc"
       className={cn('block rounded-2xl border p-4 shadow-sm transition-shadow hover:shadow-md', copy.className)}
     >
       <div className="flex items-start gap-3">

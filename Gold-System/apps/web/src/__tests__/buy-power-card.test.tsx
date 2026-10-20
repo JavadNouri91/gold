@@ -55,11 +55,9 @@ beforeEach(() => {
 describe('BuyPowerCard', () => {
   it('shows grams from purchasing power and the live gram price', async () => {
     renderCard(price);
-    expect(await screen.findByText(formatWeight('2'))).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'خرید طلا' })).toHaveAttribute(
-      'href',
-      '/portal/orders/new?side=buy',
-    );
+    expect(await screen.findByText(/معادل/)).toBeInTheDocument();
+    expect(screen.getByText(formatWeight('2'), { exact: false })).toBeInTheDocument();
+    expect(screen.getByText('توان خرید')).toBeInTheDocument();
   });
 
   it('does not invent grams when the live price is missing', async () => {

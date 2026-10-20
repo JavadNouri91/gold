@@ -32,11 +32,11 @@ export function UserStatusBadge({
           <span
             className={cn(
               'inline-block h-1.5 w-1.5 rounded-full',
-              active ? 'bg-green-600' : 'bg-gray-400',
+              active ? 'animate-pulse bg-green-600' : 'bg-gray-400',
             )}
             aria-hidden
           />
-          {statusLabel}
+          {active ? 'کاربر فعال' : statusLabel}
         </Badge>
       ) : null}
     </div>

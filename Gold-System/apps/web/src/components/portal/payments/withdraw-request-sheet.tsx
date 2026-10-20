@@ -41,13 +41,19 @@ export function WithdrawRequestButton({
   className,
   label = 'درخواست برداشت وجه',
   onRequested,
+  open: openProp,
+  onOpenChange,
 }: {
   availableRial?: string | null;
   className?: string;
   label?: string;
   onRequested?: () => void;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
+  const [uncontrolledOpen, setUncontrolledOpen] = useState(false);
+  const open = openProp ?? uncontrolledOpen;
+  const setOpen = onOpenChange ?? setUncontrolledOpen;
 
   return (
     <>

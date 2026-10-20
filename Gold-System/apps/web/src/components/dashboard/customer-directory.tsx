@@ -616,7 +616,7 @@ export function CustomerDirectory() {
           : '۳۰ روز اخیر',
       icon: Users,
       className: 'bg-amber-50 border-amber-100 dark:bg-amber-950/30 dark:border-amber-900/40',
-      href: undefined as string | undefined,
+      href: writeFilters(EMPTY_FILTERS),
     },
     {
       key: 'active',

@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
+import { CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -11,16 +12,91 @@ import { KycImageEditor } from '@/components/portal/kyc/kyc-image-editor';
 import { ConfirmDialog } from './confirm-dialog';
 import { ApiErrorState } from './states';
 import { PermissionGate } from './permission-gate';
-import { internalKycApi, type KycDocumentRecord } from '@/lib/internal-api';
+import {
+  internalKycApi,
+  type KycDocumentRecord,
+  type KycHistoryRecord,
+} from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
 import { kycDocumentLabel, requiredKycDocumentTypes } from '@/lib/kyc-documents';
 import { PERSONAL_PHOTO_TYPE } from '@/lib/kyc-portrait-matte';
-import { KYC_STATUS_LABELS, formatDateTime, formatFaNumber, statusLabel } from '@/lib/utils';
+import {
+  KYC_STATUS_LABELS,
+  cn,
+  formatDateTime,
+  formatFaNumber,
+  statusLabel,
+} from '@/lib/utils';
 
 const CHECKERBOARD =
   'bg-[length:16px_16px] bg-[linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] bg-[position:0_0,0_8px,8px_-8px,-8px_0]';
 
 const MAX_KYC_IMAGE_BYTES = 10 * 1024 * 1024;
+
+export type KycDocumentStats = {
+  approved: number;
+  rejected: number;
+  pending: number;
+  requiredTotal: number;
+  submittedCount: number;
+  allRequiredPresent: boolean;
+  allRequiredApproved: boolean;
+  anyRequiredRejected: boolean;
+};
+
+export function computeKycDocumentStats(
+  documents: KycDocumentRecord[] | undefined,
+  customerType?: string | null,
+): KycDocumentStats {
+  const required = requiredKycDocumentTypes(customerType);
+  const latestByType = new Map<string, KycDocumentRecord>();
+  for (const doc of [...(documents ?? [])].reverse()) {
+    latestByType.set(doc.documentType, doc);
+  }
+
+  let approved = 0;
+  let rejected = 0;
+  let pending = 0;
+
+  for (const item of required) {
+    const doc = latestByType.get(item.value);
+    if (!doc) {
+      pending += 1;
+      continue;
+    }
+    if (doc.verificationStatus === 'APPROVED') approved += 1;
+    else if (doc.verificationStatus === 'REJECTED') rejected += 1;
+    else pending += 1;
+  }
+
+  for (const doc of documents ?? []) {
+    if (required.some((item) => item.value === doc.documentType)) continue;
+    if (doc.documentType === 'selfie_with_id' || doc.documentType === 'proof_of_address') continue;
+    const latest = latestByType.get(doc.documentType);
+    if (latest?.id !== doc.id) continue;
+    if (doc.verificationStatus === 'APPROVED') approved += 1;
+    else if (doc.verificationStatus === 'REJECTED') rejected += 1;
+    else pending += 1;
+  }
+
+  const requiredStatuses = required.map((item) => latestByType.get(item.value)?.verificationStatus);
+  const allRequiredPresent = required.length > 0 && requiredStatuses.every((s) => s != null);
+  const allRequiredApproved =
+    required.length > 0 && requiredStatuses.every((s) => s === 'APPROVED');
+  const anyRequiredRejected = requiredStatuses.some((s) => s === 'REJECTED');
+  const submittedCount = required.filter((item) => latestByType.has(item.value)).length;
+
+  return {
+    approved,
+    rejected,
+    pending,
+    requiredTotal: required.length,
+    submittedCount,
+    allRequiredPresent,
+    allRequiredApproved,
+    anyRequiredRejected,
+  };
+}
 
 export function KycDocumentList({
   customerId,
@@ -72,18 +148,8 @@ export function KycDocumentList({
         action.decision,
         action.decision === 'REJECT' ? reason?.trim() : undefined,
       );
-      const remainingUnapproved = required.filter((item) => {
-        const current = latestByType.get(item.value);
-        if (!current) return true;
-        if (action.decision === 'APPROVE' && current.id === action.documentId) return false;
-        return current.verificationStatus !== 'APPROVED';
-      });
       setMessage(
-        action.decision === 'APPROVE' && remainingUnapproved.length === 0
-          ? 'همه مدارک تأیید شد و مشتری احراز هویت‌شده است.'
-          : action.decision === 'APPROVE'
-            ? `${action.label} تأیید شد.`
-            : `${action.label} رد شد.`,
+        action.decision === 'APPROVE' ? `${action.label} تأیید شد.` : `${action.label} رد شد.`,
       );
       setAction(null);
       await mutate();
@@ -101,12 +167,13 @@ export function KycDocumentList({
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        {formatFaNumber(submittedCount)} از {formatFaNumber(required.length)} مدرک الزامی ارسال شده است.
+        {formatFaNumber(submittedCount)} از {formatFaNumber(required.length)} مدرک الزامی ارسال شده
+        است.
         {customerType === 'PARTNER' ? ' برای مشتری همکار، جواز کسب هم الزامی است.' : ''}
       </p>
       {message ? <Alert variant="success">{message}</Alert> : null}
       {actionError ? <Alert variant="error">{actionError}</Alert> : null}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid min-w-0 auto-rows-fr grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {required.map((item) => (
           <DocumentCard
             key={item.value}
@@ -116,7 +183,11 @@ export function KycDocumentList({
             document={latestByType.get(item.value)}
             onChanged={() => void mutate()}
             onDecide={(decision) =>
-              setAction({ documentId: latestByType.get(item.value)!.id, decision, label: item.label })
+              setAction({
+                documentId: latestByType.get(item.value)!.id,
+                decision,
+                label: item.label,
+              })
             }
           />
         ))}
@@ -128,7 +199,11 @@ export function KycDocumentList({
             document={doc}
             onChanged={() => void mutate()}
             onDecide={(decision) =>
-              setAction({ documentId: doc.id, decision, label: kycDocumentLabel(doc.documentType) })
+              setAction({
+                documentId: doc.id,
+                decision,
+                label: kycDocumentLabel(doc.documentType),
+              })
             }
           />
         ))}
@@ -153,6 +228,13 @@ export function KycDocumentList({
   );
 }
 
+function documentCardChrome(status?: string) {
+  if (status === 'APPROVED') return 'border-emerald-200 bg-emerald-50/40';
+  if (status === 'REJECTED') return 'border-rose-200 bg-rose-50/40';
+  if (!status) return 'border-dashed border-slate-200 bg-slate-50/60';
+  return 'border-slate-200 bg-white';
+}
+
 function DocumentCard({
   customerId,
   label,
@@ -169,15 +251,19 @@ function DocumentCard({
   onChanged: () => void;
 }) {
   const approved = document?.verificationStatus === 'APPROVED';
+  const rejected = document?.verificationStatus === 'REJECTED';
+
   return (
-    <article className="space-y-3 rounded-lg border p-4">
+    <article
+      className={cn(
+        'flex h-full min-w-0 flex-col gap-3 rounded-xl border p-4 shadow-sm',
+        documentCardChrome(document?.verificationStatus),
+      )}
+    >
       <div className="flex flex-wrap items-start justify-between gap-2">
-        <div>
-          <h4 className="font-medium">{label}</h4>
-          <p className="text-xs text-muted-foreground">
-            {required ? 'الزامی' : 'اضافی'}
-            {document ? ` — ${formatDateTime(document.createdAt)}` : ''}
-          </p>
+        <div className="min-w-0 space-y-1">
+          <h4 className="font-semibold text-slate-900">{label}</h4>
+          <p className="text-xs text-muted-foreground">{required ? 'الزامی' : 'اضافی'}</p>
         </div>
         {document ? (
           <StatusBadge
@@ -188,34 +274,56 @@ function DocumentCard({
           <StatusBadge status="PENDING" label="ارسال نشده" />
         )}
       </div>
+
       {document ? (
         <>
-          <DocumentPreview customerId={customerId} document={document} label={label} onChanged={onChanged} />
-          {document.fileName ? <p className="text-xs text-muted-foreground">{document.fileName}</p> : null}
-          {approved ? (
-            <p className="text-xs font-medium text-emerald-700">این مدرک قبلاً تأیید شده است.</p>
-          ) : null}
-          {document.verificationStatus === 'REJECTED' && document.rejectionReason ? (
-            <p className="text-xs text-red-600">دلیل رد: {document.rejectionReason}</p>
-          ) : null}
-          <PermissionGate anyOf="kyc.review">
-            <div className="flex flex-wrap gap-2">
-              <Button
-                size="sm"
-                disabled={approved}
-                title={approved ? 'این مدرک قبلاً تأیید شده است.' : undefined}
-                onClick={() => onDecide('APPROVE')}
-              >
-                {approved ? 'تأیید شده' : 'تأیید مدرک'}
-              </Button>
-              <Button size="sm" variant="destructive" onClick={() => onDecide('REJECT')}>
-                رد مدرک
-              </Button>
+          <DocumentPreview
+            customerId={customerId}
+            document={document}
+            label={label}
+            onChanged={onChanged}
+          />
+          <div className="space-y-1 text-xs text-muted-foreground">
+            {document.fileName ? (
+              <p className="truncate" title={document.fileName} dir="ltr">
+                {document.fileName}
+              </p>
+            ) : null}
+            <p>تاریخ ارسال: {formatDateTime(document.createdAt)}</p>
+          </div>
+          {rejected && document.rejectionReason ? (
+            <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+              دلیل رد: {document.rejectionReason}
             </div>
-          </PermissionGate>
+          ) : null}
+          <div className="mt-auto space-y-2 pt-1">
+            <PermissionGate anyOf="kyc.review">
+              <div className="flex flex-wrap gap-2">
+                {approved ? (
+                  <Button
+                    size="sm"
+                    className="bg-emerald-600 hover:bg-emerald-700"
+                    disabled
+                    title="این مدرک قبلاً تأیید شده است."
+                  >
+                    تأیید شده
+                  </Button>
+                ) : (
+                  <Button size="sm" onClick={() => onDecide('APPROVE')}>
+                    تأیید مدرک
+                  </Button>
+                )}
+                <Button size="sm" variant="destructive" onClick={() => onDecide('REJECT')}>
+                  رد مدرک
+                </Button>
+              </div>
+            </PermissionGate>
+          </div>
         </>
       ) : (
-        <p className="text-sm text-muted-foreground">این مدرک هنوز ارسال نشده است.</p>
+        <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white/70 px-3 py-10 text-center">
+          <p className="text-sm text-muted-foreground">این مدرک هنوز ارسال نشده است.</p>
+        </div>
       )}
     </article>
   );
@@ -239,7 +347,8 @@ function DocumentPreview({
   const [showProcessed, setShowProcessed] = useState(Boolean(document.hasProcessedFile));
   const mime = document.fileMimeType ?? '';
   const isImage = mime.startsWith('image/');
-  const previewProcessed = isPersonalPhoto && showProcessed && Boolean(document.hasProcessedFile) && !showOriginal;
+  const previewProcessed =
+    isPersonalPhoto && showProcessed && Boolean(document.hasProcessedFile) && !showOriginal;
 
   useEffect(() => {
     setShowProcessed(Boolean(document.hasProcessedFile));
@@ -277,39 +386,61 @@ function DocumentPreview({
     previewProcessed,
   ]);
 
+  const previewFrame = 'flex h-60 w-full items-center justify-center overflow-hidden rounded-lg border bg-muted';
+
   const preview = failed ? (
     document.signedUrl ? (
-      <a href={document.signedUrl} target="_blank" rel="noreferrer" className="text-sm text-gold-700 underline">
-        مشاهده مدرک
-      </a>
+      <div className={previewFrame}>
+        <a
+          href={document.signedUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="text-sm text-gold-700 underline"
+        >
+          مشاهده مدرک
+        </a>
+      </div>
     ) : (
-      <p className="text-sm text-muted-foreground">پیش‌نمایش مدرک در دسترس نیست.</p>
+      <div className={previewFrame}>
+        <p className="text-sm text-muted-foreground">پیش‌نمایش مدرک در دسترس نیست.</p>
+      </div>
     )
   ) : !url ? (
-    <p className="text-sm text-muted-foreground">در حال بارگذاری مدرک…</p>
+    <div className={previewFrame}>
+      <p className="text-sm text-muted-foreground">در حال بارگذاری مدرک…</p>
+    </div>
   ) : mime === 'application/pdf' ? (
-    <iframe title={label} src={url} className="h-48 w-full rounded-md border bg-muted" />
+    <iframe title={label} src={url} className="h-60 w-full rounded-lg border bg-muted" />
   ) : (
-    <img
-      src={url}
-      alt={label}
-      className={`max-h-48 w-full rounded-md border object-contain ${previewProcessed ? CHECKERBOARD : 'bg-muted'}`}
-    />
+    <div className={cn(previewFrame, previewProcessed ? CHECKERBOARD : 'bg-slate-100')}>
+      <img src={url} alt={label} className="max-h-full max-w-full object-contain" />
+    </div>
   );
 
   return (
     <div className="space-y-2">
       {preview}
+      <div className="space-y-2">
+        <div className="flex flex-wrap gap-2">
+          {url || document.signedUrl ? (
+            <Button size="sm" variant="outline" asChild>
+              <a href={url ?? document.signedUrl} target="_blank" rel="noreferrer">
+                مشاهده تصویر کامل
+              </a>
+            </Button>
+          ) : null}
+          {isImage ? (
+            <PermissionGate anyOf="kyc.review">
+              <StaffImageEditor customerId={customerId} document={document} onSaved={onChanged} />
+            </PermissionGate>
+          ) : null}
+        </div>
+      </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        {url ? (
-          <a href={url} target="_blank" rel="noreferrer" className="text-sm text-gold-700 underline">
-            مشاهده در اندازه کامل
-          </a>
-        ) : null}
         {document.hasOriginalFile ? (
           <button
             type="button"
-            className="text-sm text-gold-700 underline"
+            className="text-xs text-gold-700 underline"
             onClick={() => {
               setShowOriginal((current) => !current);
               setShowProcessed(false);
@@ -321,7 +452,7 @@ function DocumentPreview({
         {document.hasProcessedFile ? (
           <button
             type="button"
-            className="text-sm text-gold-700 underline"
+            className="text-xs text-gold-700 underline"
             onClick={() => {
               setShowOriginal(false);
               setShowProcessed((current) => !current);
@@ -331,11 +462,6 @@ function DocumentPreview({
           </button>
         ) : null}
       </div>
-      {isImage ? (
-        <PermissionGate anyOf="kyc.review">
-          <StaffImageEditor customerId={customerId} document={document} onSaved={onChanged} />
-        </PermissionGate>
-      ) : null}
     </div>
   );
 }
@@ -395,12 +521,20 @@ function StaffImageEditor({
   };
 
   return (
-    <div className="space-y-2">
+    <div className="contents">
       <Button size="sm" variant="outline" isLoading={loading} disabled={saving} onClick={() => void start()}>
         ویرایش تصویر
       </Button>
-      {message ? <Alert variant="success">{message}</Alert> : null}
-      {error ? <Alert variant="error">{error}</Alert> : null}
+      {message ? (
+        <div className="basis-full">
+          <Alert variant="success">{message}</Alert>
+        </div>
+      ) : null}
+      {error ? (
+        <div className="basis-full">
+          <Alert variant="error">{error}</Alert>
+        </div>
+      ) : null}
       <Modal
         open={open && source !== null}
         onClose={() => {
@@ -431,33 +565,86 @@ function StaffImageEditor({
   );
 }
 
+function ChecklistItem({ done, label }: { done: boolean; label: string }) {
+  return (
+    <li className="flex items-start gap-2 text-sm">
+      {done ? (
+        <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+      ) : (
+        <Clock className="mt-0.5 h-4 w-4 shrink-0 text-amber-500" aria-hidden />
+      )}
+      <span className={done ? 'text-slate-700' : 'text-muted-foreground'}>{label}</span>
+    </li>
+  );
+}
+
 export function KycDecisionPanel({
   customerId,
+  customerType,
   reviewStatus,
   onDone,
 }: {
   customerId: string;
+  customerType?: string | null;
   reviewStatus?: string | null;
   onDone?: () => void;
 }) {
+  const { data: documents } = useSWR(['kyc-docs', customerId], () =>
+    internalKycApi.getDocuments(customerId, true),
+  );
+  const stats = useMemo(
+    () => computeKycDocumentStats(documents, customerType),
+    [documents, customerType],
+  );
+
   const [action, setAction] = useState<'APPROVE' | 'REJECT' | 'REVIEW' | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
   const [pending, setPending] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
   const known = reviewStatus != null && reviewStatus !== '';
   const open = reviewStatus === 'UNDER_REVIEW' || reviewStatus === 'PENDING';
   const showStart = !known || !open;
   const showDecide = !known || open;
+  const canFinalApprove = stats.allRequiredApproved;
+  const caseApproved = reviewStatus === 'APPROVED';
+  const caseRejected = reviewStatus === 'REJECTED';
+
+  const incompleteHints: string[] = [];
+  if (!stats.allRequiredPresent) {
+    incompleteHints.push(
+      `${formatFaNumber(stats.requiredTotal - stats.submittedCount)} مدرک الزامی هنوز ارسال نشده است.`,
+    );
+  }
+  if (stats.anyRequiredRejected) {
+    incompleteHints.push('حداقل یک مدرک الزامی رد شده است.');
+  }
+  if (stats.allRequiredPresent && !stats.allRequiredApproved && !stats.anyRequiredRejected) {
+    incompleteHints.push('همه مدارک الزامی هنوز بررسی و تأیید نشده‌اند.');
+  }
 
   const run = async (reason?: string) => {
     if (!action) return;
+    if (action === 'APPROVE' && !canFinalApprove) {
+      setError('تأیید نهایی فقط پس از تأیید همه مدارک الزامی ممکن است.');
+      setAction(null);
+      return;
+    }
     setPending(true);
     setError(null);
     try {
       if (action === 'REVIEW') await internalKycApi.startReview(customerId);
       else await internalKycApi.decide(customerId, action, reason);
-      setMessage(action === 'APPROVE' ? 'احراز هویت تأیید شد.' : action === 'REJECT' ? 'احراز هویت رد شد.' : 'بررسی آغاز شد.');
+      setMessage(
+        action === 'APPROVE'
+          ? 'احراز هویت تأیید شد.'
+          : action === 'REJECT'
+            ? 'احراز هویت رد شد.'
+            : 'بررسی آغاز شد.',
+      );
       setAction(null);
+      setRejectReason('');
       onDone?.();
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'عملیات انجام نشد.');
@@ -466,36 +653,199 @@ export function KycDecisionPanel({
     }
   };
 
+  const caseStatusLabel = known
+    ? statusLabel(KYC_STATUS_LABELS, reviewStatus!)
+    : 'هنوز بررسی شروع نشده';
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>تصمیم احراز هویت</CardTitle>
+      <CardHeader className="pb-3">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <CardTitle>تصمیم احراز هویت</CardTitle>
+            <p className="mt-1 text-sm text-muted-foreground">
+              تأیید یا رد، نتیجه کل پرونده است و با تأیید تک‌تک مدارک متفاوت است.
+            </p>
+          </div>
+          {known ? (
+            <StatusBadge status={reviewStatus!} label={caseStatusLabel} />
+          ) : (
+            <StatusBadge status="PENDING" label={caseStatusLabel} />
+          )}
+        </div>
       </CardHeader>
-      <CardContent className="space-y-3">
+      <CardContent className="space-y-4">
         {message ? <Alert variant="success">{message}</Alert> : null}
         {error ? <Alert variant="error">{error}</Alert> : null}
-        <p className="text-xs text-muted-foreground">
-          تأیید یا رد، نتیجه کل پرونده است. رد کردن پرونده نیاز به دلیل دارد.
-        </p>
-        <PermissionGate anyOf="kyc.review">
-          <div className="flex flex-wrap gap-2">
-            {showStart ? <Button variant="outline" onClick={() => setAction('REVIEW')}>شروع بررسی</Button> : null}
-            {showDecide ? <Button onClick={() => setAction('APPROVE')}>تأیید</Button> : null}
-            {showDecide ? <Button variant="destructive" onClick={() => setAction('REJECT')}>رد</Button> : null}
+
+        <div className="grid gap-4 lg:grid-cols-2">
+          <div className="rounded-xl border border-sky-100 bg-sky-50/70 p-4">
+            <p className="mb-3 text-sm font-semibold text-sky-900">قبل از تصمیم نهایی</p>
+            <ul className="space-y-2">
+              <ChecklistItem
+                done={stats.allRequiredPresent}
+                label="همه مدارک الزامی ارسال شده‌اند"
+              />
+              <ChecklistItem
+                done={!stats.anyRequiredRejected && stats.allRequiredPresent}
+                label="هیچ مدرک الزامی رد‌شده‌ای باقی نمانده"
+              />
+              <ChecklistItem
+                done={stats.allRequiredApproved}
+                label="همه مدارک الزامی تأیید شده‌اند"
+              />
+            </ul>
+            {!canFinalApprove && incompleteHints.length > 0 ? (
+              <p className="mt-3 text-xs text-amber-800">{incompleteHints.join(' ')}</p>
+            ) : (
+              <p className="mt-3 text-xs text-emerald-700">
+                شرایط لازم برای تأیید نهایی پرونده فراهم است.
+              </p>
+            )}
           </div>
-        </PermissionGate>
+
+          <PermissionGate anyOf="kyc.review">
+            <div className="flex flex-col gap-3">
+              {showStart ? (
+                <Button variant="outline" className="w-full sm:w-auto" onClick={() => setAction('REVIEW')}>
+                  شروع بررسی
+                </Button>
+              ) : null}
+              {showDecide ? (
+                <>
+                  <Button
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 sm:w-auto"
+                    disabled={!canFinalApprove || caseApproved}
+                    title={
+                      !canFinalApprove
+                        ? 'تأیید نهایی فقط پس از تأیید همه مدارک الزامی ممکن است.'
+                        : caseApproved
+                          ? 'این پرونده قبلاً تأیید شده است.'
+                          : undefined
+                    }
+                    onClick={() => setAction('APPROVE')}
+                  >
+                    تأیید احراز هویت
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="w-full border-rose-300 text-rose-700 hover:bg-rose-50 sm:w-auto"
+                    disabled={caseRejected}
+                    onClick={() => setAction('REJECT')}
+                  >
+                    رد درخواست
+                  </Button>
+                  <div>
+                    <label htmlFor={`kyc-reject-reason-${customerId}`} className="mb-1 block text-sm font-medium">
+                      دلیل رد درخواست
+                    </label>
+                    <textarea
+                      id={`kyc-reject-reason-${customerId}`}
+                      value={rejectReason}
+                      onChange={(event) => setRejectReason(event.target.value)}
+                      maxLength={500}
+                      rows={3}
+                      placeholder="در صورت رد، دلیل را وارد کنید…"
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-gold-500"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {formatFaNumber(rejectReason.length)}/{formatFaNumber(500)}
+                    </p>
+                  </div>
+                </>
+              ) : null}
+            </div>
+          </PermissionGate>
+        </div>
+
         <ConfirmDialog
           open={action !== null}
-          title={action === 'REJECT' ? 'رد احراز هویت' : action === 'APPROVE' ? 'تأیید احراز هویت' : 'شروع بررسی'}
+          title={
+            action === 'REJECT'
+              ? 'رد احراز هویت'
+              : action === 'APPROVE'
+                ? 'تأیید احراز هویت'
+                : 'شروع بررسی'
+          }
           message="این عمل ثبت می‌شود و فقط از مسیر مجاز سرور انجام می‌گیرد."
           destructive={action === 'REJECT'}
           requireReason={action === 'REJECT'}
           minReason={10}
+          initialReason={action === 'REJECT' ? rejectReason : ''}
           isLoading={pending}
           onClose={() => setAction(null)}
           onConfirm={(reason) => void run(reason)}
         />
       </CardContent>
     </Card>
+  );
+}
+
+export function KycHistoryTable({
+  items,
+}: {
+  items: KycHistoryRecord[];
+}) {
+  const showReviewer = items.some((item) => item.reviewerId);
+
+  if (items.length === 0) {
+    return <p className="text-sm text-muted-foreground">سابقه‌ای ثبت نشده است.</p>;
+  }
+
+  return (
+    <div className="overflow-x-auto rounded-lg border">
+      <table className="w-full min-w-[32rem] table-auto text-sm">
+        <thead className="bg-slate-50 text-muted-foreground">
+          <tr className="border-b text-right">
+            <th className="px-3 py-2 font-medium">تاریخ و زمان</th>
+            {showReviewer ? <th className="px-3 py-2 font-medium">بررسی‌کننده</th> : null}
+            <th className="px-3 py-2 font-medium">نتیجه</th>
+            <th className="px-3 py-2 font-medium">دلیل</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y">
+          {items.map((item) => (
+            <tr key={item.id} className="bg-white">
+              <td className="whitespace-nowrap px-3 py-2.5">
+                {formatDateTime(item.reviewedAt ?? item.createdAt)}
+              </td>
+              {showReviewer ? (
+                <td className="px-3 py-2.5 font-mono text-xs" dir="ltr">
+                  {item.reviewerId ?? '—'}
+                </td>
+              ) : null}
+              <td className="px-3 py-2.5">
+                <StatusBadge
+                  status={item.status}
+                  label={statusLabel(KYC_STATUS_LABELS, item.status)}
+                />
+              </td>
+              <td className="px-3 py-2.5 text-muted-foreground">
+                {item.decisionReason?.trim() ? item.decisionReason : '—'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+export function KycReviewHeaderStats({ stats }: { stats: KycDocumentStats }) {
+  return (
+    <div className="flex flex-wrap items-center gap-4 text-sm">
+      <span className="inline-flex items-center gap-1.5 text-emerald-700">
+        <CheckCircle2 className="h-4 w-4" aria-hidden />
+        تأیید شده: {formatFaNumber(stats.approved)}
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-rose-700">
+        <XCircle className="h-4 w-4" aria-hidden />
+        رد شده: {formatFaNumber(stats.rejected)}
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-sky-700">
+        <Clock className="h-4 w-4" aria-hidden />
+        در حال بررسی: {formatFaNumber(stats.pending)}
+      </span>
+    </div>
   );
 }

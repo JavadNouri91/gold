@@ -20,7 +20,9 @@ import { memoryStorage } from 'multer';
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
 import { Request } from 'express';
 import { CustomersService } from '../../application/customers.service';
+import { CustomerBankAccountsService } from '../../application/customer-bank-accounts.service';
 import { CustomerDirectoryService } from '../../application/customer-directory.service';
+import { CreateOwnBankAccountDto } from '../../application/dto/create-own-bank-account.dto';
 import { RegisterCustomerDto } from '../../application/dto/register-customer.dto';
 import { AssignCustomerTypeDto } from '../../application/dto/assign-customer-type.dto';
 import { ListCustomersDto } from '../../application/dto/list-customers.dto';
@@ -41,6 +43,7 @@ import { CurrentUserData } from '../../../../common/decorators/current-user.deco
 export class CustomersController {
   constructor(
     private readonly service: CustomersService,
+    private readonly bankAccounts: CustomerBankAccountsService,
     private readonly directory: CustomerDirectoryService,
   ) {}
 
@@ -173,6 +176,37 @@ export class CustomersController {
   @ApiOperation({ summary: 'Request account deletion. Does not delete the account.' })
   requestDeletion(@CurrentUser() user: CurrentUserData, @Req() req: Request) {
     return this.service.requestAccountDeletion(user.userId, req.ip ?? undefined);
+  }
+
+  @Get('me/bank-accounts')
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'List signed-in customer bank accounts' })
+  listMyBankAccounts(@CurrentUser() user: CurrentUserData) {
+    return this.bankAccounts.listMine(user.userId);
+  }
+
+  @Post('me/bank-accounts')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Add a bank IBAN for the signed-in customer' })
+  createMyBankAccount(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: CreateOwnBankAccountDto,
+    @Req() req: Request,
+  ) {
+    return this.bankAccounts.createMine(user.userId, dto.iban, req.ip ?? undefined);
+  }
+
+  @Delete('me/bank-accounts/:id')
+  @ApiBearerAuth()
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Remove a bank IBAN belonging to the signed-in customer' })
+  deleteMyBankAccount(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id') id: string,
+    @Req() req: Request,
+  ) {
+    return this.bankAccounts.deleteMine(user.userId, id, req.ip ?? undefined);
   }
 
   // ----------------------------------------------------------------

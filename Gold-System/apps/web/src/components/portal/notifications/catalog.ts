@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react';
-import { BadgeCheck, ShoppingCart, UserRound, Wallet } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, ShoppingCart, UserCheck, UserRound, Wallet } from 'lucide-react';
 import type { Notification, NotificationCategory, NotificationRelation } from '@/lib/api';
 import { tehranCivilDate } from '@/lib/activity-range';
 import {
@@ -84,6 +84,48 @@ export function notificationTitle(item: Pick<Notification, 'type' | 'subject'>):
 
 export function categoryLabel(type: string): string {
   return CATEGORY_META[categoryOf(type)].label;
+}
+
+export function itemVisual(type: string): { icon: LucideIcon; tile: string; iconColor: string } {
+  if (type === 'TRADE_REVERSED' || type === 'KYC_REJECTED') {
+    return { icon: AlertTriangle, tile: 'bg-red-50', iconColor: 'text-red-500' };
+  }
+  if (type === 'KYC_APPROVED' || type === 'CUSTOMER_REGISTERED') {
+    return { icon: UserCheck, tile: 'bg-violet-50', iconColor: 'text-violet-600' };
+  }
+  if (categoryOf(type) === 'financial') {
+    return { icon: Wallet, tile: 'bg-emerald-50', iconColor: 'text-emerald-600' };
+  }
+  if (categoryOf(type) === 'kyc') {
+    return { icon: BadgeCheck, tile: 'bg-violet-50', iconColor: 'text-violet-600' };
+  }
+  if (categoryOf(type) === 'account') {
+    return { icon: UserRound, tile: 'bg-slate-100', iconColor: 'text-slate-500' };
+  }
+  return { icon: ShoppingCart, tile: 'bg-emerald-50', iconColor: 'text-emerald-600' };
+}
+
+export function notificationListHref(item: Pick<Notification, 'relatedEntityType' | 'relatedEntityId'>): string | null {
+  const id = item.relatedEntityId;
+  switch (item.relatedEntityType) {
+    case 'Order':
+      return id ? `/portal/orders/${id}` : '/portal/orders';
+    case 'Trade':
+    case 'Settlement':
+      return id ? `/portal/trades/${id}` : '/portal/trades';
+    case 'Payment':
+      return id ? `/portal/payments/${id}` : '/portal/payments';
+    case 'Quotation':
+      return id ? `/portal/quotations/${id}` : '/portal/orders';
+    case 'KYCVerification':
+      return '/portal/profile#kyc';
+    default:
+      return null;
+  }
+}
+
+export function listTimestamp(iso: string): string {
+  return `${formatDate(iso)} - ${formatTime(iso)}`;
 }
 
 export function entityActionLabel(entityType: string | null): string {

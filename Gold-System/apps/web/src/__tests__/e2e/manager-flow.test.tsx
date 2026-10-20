@@ -143,12 +143,12 @@ describe('manager flow', () => {
   it('moves from the management home through customer, order, trade and reports', async () => {
     expect(firstStaffRoute(MANAGER)).toBe('/dashboard/overview');
     const { unmount } = render(<OverviewPage />);
-    expect(await screen.findByText('نمای مدیریت')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /مشتریان/ })).toHaveAttribute('href', '/dashboard/customers');
-    expect(screen.getByRole('link', { name: /احراز هویت در انتظار/ })).toHaveAttribute('href', '/dashboard/kyc');
-    expect(screen.getByRole('link', { name: /سفارش‌های منتظر بررسی/ })).toHaveAttribute('href', '/dashboard/assignments');
-    expect(screen.getByRole('link', { name: /موقعیت طلا/ })).toHaveAttribute('href', '/dashboard/ledger/gold');
-    expect(screen.getByRole('link', { name: /ارزش پرداخت‌ها/ })).toHaveAttribute('href', '/dashboard/payments');
+    expect(await screen.findByText('داشبورد مدیریت سامانه')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /بررسی سفارش‌ها/ })).toHaveAttribute('href', '/dashboard/assignments');
+    expect(screen.getByRole('link', { name: /بررسی مدارک/ })).toHaveAttribute('href', '/dashboard/kyc');
+    expect(screen.getByRole('link', { name: /معاملات تسویه‌نشده/ })).toHaveAttribute('href', '/dashboard/settlements');
+    expect(screen.getByRole('link', { name: 'همه معاملات' })).toHaveAttribute('href', '/dashboard/trades');
+    expect(screen.queryByText(/گزارش تجمیعی سرور/)).not.toBeInTheDocument();
     unmount();
 
     const customers = render(<CustomersPage />);

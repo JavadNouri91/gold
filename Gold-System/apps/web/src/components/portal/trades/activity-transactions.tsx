@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import type { ReactNode } from 'react';
-import { CheckCircle2, ChevronLeft, Clock3, XCircle } from 'lucide-react';
+import { CheckCircle2, ChevronLeft, Clock3, Eye, XCircle } from 'lucide-react';
 import type { ActivityTransaction } from '@/lib/api';
+import { Button } from '@/components/ui/button';
 import {
   ORDER_STATUS_LABELS,
   TRADE_STATUS_LABELS,
@@ -17,19 +18,19 @@ export function transactionStatusLabel(status: string): string {
 }
 
 function statusTone(status: string): { className: string; Icon: typeof CheckCircle2 } {
-  if (['COMPLETED'].includes(status)) {
-    return { className: 'bg-green-50 text-[#16A34A]', Icon: CheckCircle2 };
+  if (['COMPLETED', 'SETTLED', 'SUCCEEDED'].includes(status)) {
+    return { className: 'bg-green-100 text-green-800', Icon: CheckCircle2 };
   }
   if (['APPROVED', 'CONFIRMED', 'TRADE_CREATED'].includes(status)) {
-    return { className: 'bg-blue-50 text-[#2563EB]', Icon: CheckCircle2 };
+    return { className: 'bg-emerald-100 text-emerald-800', Icon: CheckCircle2 };
   }
   if (['CANCELLED', 'REJECTED', 'REVERSED', 'FAILED'].includes(status)) {
-    return { className: 'bg-red-50 text-[#DC2626]', Icon: XCircle };
+    return { className: 'bg-red-100 text-red-800', Icon: XCircle };
   }
   if (['EXPIRED'].includes(status)) {
-    return { className: 'bg-slate-100 text-[#6B7280]', Icon: XCircle };
+    return { className: 'bg-slate-100 text-slate-600', Icon: XCircle };
   }
-  return { className: 'bg-amber-50 text-[#D97706]', Icon: Clock3 };
+  return { className: 'bg-amber-100 text-amber-800', Icon: Clock3 };
 }
 
 export function TransactionStatus({ status }: { status: string }) {
@@ -45,12 +46,24 @@ export function TransactionStatus({ status }: { status: string }) {
 
 export function SideBadge({ side }: { side: ActivityTransaction['side'] }) {
   if (side === 'BUY') {
-    return <span className="text-sm font-bold text-[#16A34A]">خرید</span>;
+    return (
+      <span className="inline-flex rounded-lg bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+        خرید
+      </span>
+    );
   }
   if (side === 'SELL') {
-    return <span className="text-sm font-bold text-[#DC2626]">فروش</span>;
+    return (
+      <span className="inline-flex rounded-lg bg-rose-50 px-2.5 py-1 text-xs font-semibold text-rose-700">
+        فروش
+      </span>
+    );
   }
-  return <span className="text-sm font-bold text-[#2563EB]">معامله</span>;
+  return (
+    <span className="inline-flex rounded-lg bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-700">
+      معامله
+    </span>
+  );
 }
 
 function stamp(iso: string | null): string {
@@ -101,9 +114,9 @@ export function TransactionCards({ rows }: { rows: ActivityTransaction[] }) {
 
 export function TransactionTable({ rows }: { rows: ActivityTransaction[] }) {
   return (
-    <div className="hidden overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white shadow-sm lg:block">
+    <div className="hidden overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm lg:block">
       <table className="w-full text-sm">
-        <thead className="bg-[#F8F9FA] text-[#6B7280]">
+        <thead className="bg-slate-50 text-slate-500">
           <tr>
             {['شماره سفارش', 'تاریخ و ساعت', 'نوع', 'مقدار', 'عیار', 'قیمت واحد', 'مبلغ کل', 'وضعیت', 'عملیات'].map(
               (heading) => (
@@ -132,12 +145,11 @@ export function TransactionTable({ rows }: { rows: ActivityTransaction[] }) {
                 <TransactionStatus status={row.status} />
               </td>
               <td className="px-3 py-4">
-                <Link
-                  href={`/portal/orders/${row.id}`}
-                  className="inline-flex min-h-11 items-center rounded-xl px-3 text-sm font-semibold text-[#C8922E]"
-                >
-                  جزئیات
-                </Link>
+                <Button asChild variant="outline" size="icon" className="h-10 w-10 rounded-xl border-slate-200">
+                  <Link href={`/portal/orders/${row.id}`} aria-label="جزئیات">
+                    <Eye className="h-4 w-4 text-slate-600" />
+                  </Link>
+                </Button>
               </td>
             </tr>
           ))}

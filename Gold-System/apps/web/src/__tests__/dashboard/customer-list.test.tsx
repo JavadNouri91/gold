@@ -95,7 +95,10 @@ describe('customer list', () => {
   it('shows KPI cards and KYC / gold columns', async () => {
     signIn(['customer.read', 'customer.account.read']);
     render(<CustomersPage />);
-    expect(await screen.findByText('کل مشتریان')).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: /کل مشتریان/ })).toHaveAttribute(
+      'href',
+      '/dashboard/customers',
+    );
     expect(screen.getByText('در انتظار احراز هویت')).toBeInTheDocument();
     expect(await screen.findByText(toPersianDigits('42.73') + ' گرم')).toBeInTheDocument();
     expect(screen.getAllByText('تأیید شده').length).toBeGreaterThan(0);

@@ -145,6 +145,7 @@ export function MyPaymentsPage({
   onReceiptSubmitted: () => void;
   availableRial?: string | null;
 }) {
+  const [withdrawOpen, setWithdrawOpen] = useState(false);
   const filtersActive = Boolean(statusGroup || type || search.trim());
   const rows = payments;
   const showOnboarding = Boolean(summary && !summary.hasAny && !filtersActive && (meta?.total ?? 0) === 0);
@@ -161,6 +162,8 @@ export function MyPaymentsPage({
         <div className="flex flex-wrap items-center gap-2 lg:justify-end">
           <WithdrawRequestButton
             availableRial={availableRial}
+            open={withdrawOpen}
+            onOpenChange={setWithdrawOpen}
             onRequested={onReceiptSubmitted}
             label="درخواست برداشت وجه"
             className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-700 hover:bg-gray-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
@@ -183,6 +186,8 @@ export function MyPaymentsPage({
           availableRial={availableRial}
           statusGroup={statusGroup}
           onStatusGroup={onStatusGroup}
+          withdrawSelected={withdrawOpen}
+          onSelectWithdraw={() => setWithdrawOpen(true)}
         />
       ) : null}
 
@@ -240,11 +245,15 @@ function SummaryCards({
   availableRial,
   statusGroup,
   onStatusGroup,
+  withdrawSelected,
+  onSelectWithdraw,
 }: {
   summary: PaymentSummary;
   availableRial?: string | null;
   statusGroup: '' | PaymentStatusGroup;
   onStatusGroup: (status: '' | PaymentStatusGroup) => void;
+  withdrawSelected: boolean;
+  onSelectWithdraw: () => void;
 }) {
   const submitted = readSubmitted(summary);
   const unsuccessfulAmount = addAmounts(summary.failed.amountRial, summary.reversed.amountRial);
@@ -253,13 +262,22 @@ function SummaryCards({
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-      <article className="rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 shadow-sm">
+      <button
+        type="button"
+        aria-pressed={withdrawSelected}
+        aria-label="برداشت از موجودی ریالی کیف پول"
+        onClick={onSelectWithdraw}
+        className={cn(
+          'rounded-2xl border border-emerald-200 bg-emerald-50/80 p-4 text-right shadow-sm transition-shadow focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600',
+          withdrawSelected ? 'ring-2 ring-emerald-600 ring-offset-1' : '',
+        )}
+      >
         <p className="text-sm font-semibold text-emerald-800">موجودی ریالی کیف پول (قابل برداشت)</p>
         <p className="mt-3 text-lg font-bold text-emerald-950 lg:text-xl">
           {availableRial != null ? formatMoney(availableRial) : '—'}
         </p>
         <p className="mt-1 text-xs text-emerald-700/80">موجودی آزاد حساب شما</p>
-      </article>
+      </button>
 
       <SummaryFilterCard
         title="در انتظار تأیید حسابداری"

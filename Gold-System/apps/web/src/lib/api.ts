@@ -393,7 +393,32 @@ export const customerApi = {
   listMyCreditTransactions(limit = 20): Promise<CreditLedgerEntry[]> {
     return request(`/customers/me/account/transactions?limit=${limit}`);
   },
+
+  listMyBankAccounts(): Promise<CustomerBankAccount[]> {
+    return request('/customers/me/bank-accounts');
+  },
+
+  createMyBankAccount(iban: string): Promise<CustomerBankAccount> {
+    return request('/customers/me/bank-accounts', {
+      method: 'POST',
+      body: JSON.stringify({ iban }),
+    });
+  },
+
+  deleteMyBankAccount(id: string): Promise<void> {
+    return request(`/customers/me/bank-accounts/${id}`, { method: 'DELETE' });
+  },
 };
+
+export interface CustomerBankAccount {
+  id: string;
+  iban: string;
+  bankCode: string | null;
+  bankName: string | null;
+  accountHolder: string;
+  status: string;
+  createdAt: string;
+}
 
 // ─── Customer Account ─────────────────────────────────────────────────────────
 

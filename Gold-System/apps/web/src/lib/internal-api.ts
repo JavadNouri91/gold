@@ -171,7 +171,9 @@ export interface KycHistoryRecord {
   id: string;
   customerId: string;
   status: string;
+  reviewerId?: string | null;
   decisionReason?: string | null;
+  reviewedAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -604,6 +606,9 @@ export interface DashboardSummary {
   recentTrades: Array<{
     id: string;
     tradeNumber: string;
+    customerId: string | null;
+    customerName: string | null;
+    side: 'BUY' | 'SELL' | null;
     status: string;
     totalAmountRial: string;
     weightGrams: string;
@@ -613,9 +618,12 @@ export interface DashboardSummary {
   recentPayments: Array<{
     id: string;
     tradeId: string | null;
+    customerId: string | null;
+    customerName: string | null;
     method: string;
     amount: string;
     status: string;
+    hasReceipt: boolean;
     createdAt: string;
   }>;
 }
@@ -1645,6 +1653,40 @@ export interface TradingOverrideBody {
   endTime?: string | null;
 }
 
+export interface TradingGroupLimitRow {
+  scope: 'CUSTOMER_TYPE';
+  scopeKey: string;
+  label: string;
+  id: string | null;
+  enabled: boolean;
+  maxAmountRial: string | null;
+  maxWeightGrams: string | null;
+  maxCount: number | null;
+}
+
+export interface TradingCustomerLimitRow {
+  id: string;
+  scope: 'CUSTOMER';
+  scopeKey: string;
+  enabled: boolean;
+  maxAmountRial: string | null;
+  maxWeightGrams: string | null;
+  maxCount: number | null;
+  customer: {
+    id: string;
+    customerNumber: string;
+    name: string;
+    mobile: string;
+    type: string | null;
+    typeLabel: string | null;
+  } | null;
+}
+
+export interface TradingScopedLimits {
+  groupLimits: TradingGroupLimitRow[];
+  customerLimits: TradingCustomerLimitRow[];
+}
+
 export const tradingApi = {
   overview(params: { from?: string; to?: string } = {}): Promise<TradingOverview> {
     return request(`/trading/overview${toQuery(params)}`);
@@ -1673,10 +1715,29 @@ export const tradingApi = {
   deleteOverride(id: string): Promise<{ id: string }> {
     return request(`/trading/overrides/${id}`, { method: 'DELETE' });
   },
-  upsertLimit(body: TradingSessionBody & { sessionId: string; scope: string; scopeKey?: string | null; enabled?: boolean }) {
+  listLimits(): Promise<TradingScopedLimits> {
+    return request('/trading/limits');
+  },
+  upsertLimit(body: TradingSessionBody & {
+    sessionId?: string | null;
+    scope: string;
+    scopeKey?: string | null;
+    enabled?: boolean;
+  }) {
     return request('/trading/limits', { method: 'PUT', body: JSON.stringify(body) });
+  },
+  deleteLimit(id: string): Promise<{ id: string }> {
+    return request(`/trading/limits/${id}`, { method: 'DELETE' });
   },
   audit(params: { limit?: number; offset?: number } = {}): Promise<TradingAuditPage> {
     return request(`/trading/audit${toQuery(params)}`);
+  },
+  setMarket(enabled: boolean): Promise<{
+    enabled: boolean;
+    open: boolean;
+    status: string;
+    scheduleEnabled: boolean;
+  }> {
+    return request('/trading/market', { method: 'PATCH', body: JSON.stringify({ enabled }) });
   },
 };

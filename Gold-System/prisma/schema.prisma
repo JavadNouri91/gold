@@ -270,6 +270,7 @@ model Customer {
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
   account          CustomerAccount?
+  bankAccounts     CustomerBankAccount[]
   documents        CustomerDocument[]
   user             User?                 @relation(fields: [userId], references: [id])
   kycVerifications KYCVerification[]
@@ -289,6 +290,23 @@ model Customer {
   @@index([customerNumber])
   @@index([referrerId])
   @@map("customers")
+}
+
+model CustomerBankAccount {
+  id            String   @id @default(cuid())
+  customerId    String   @map("customer_id")
+  iban          String
+  bankCode      String?  @map("bank_code")
+  bankName      String?  @map("bank_name")
+  accountHolder String   @map("account_holder")
+  status        String   @default("VERIFIED")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([customerId, iban])
+  @@index([customerId])
+  @@map("customer_bank_accounts")
 }
 
 model CustomerNote {
@@ -1304,6 +1322,7 @@ enum TradingLimitScope {
   ROLE
   USER
   CUSTOMER
+  CUSTOMER_TYPE
   TRANSACTION_TYPE
 }
 

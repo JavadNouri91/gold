@@ -123,6 +123,13 @@ export class OrdersService {
     const feeAmountRial = fees.feeTotalRial;
     const totalAmountRial = fees.customerTotalRial;
 
+    await this.tradingPolicy.validateTransaction({
+      amountRial: totalAmountRial,
+      weightGrams,
+      customerId: customer.id,
+      transactionType: 'TRADE',
+    });
+
     // Derive unit price per gram from the pricing pipeline result.
     // step4AfterWeight = price per gram × weight; so unit price = step4AfterWeight / weight.
     const unitPriceRial = pricing.step4AfterWeight.dividedBy(weightGrams);
@@ -239,6 +246,13 @@ export class OrdersService {
     if (!order.canSubmit()) {
       throw new InvalidOrderStateTransitionException(order.status, 'submit');
     }
+
+    await this.tradingPolicy.validateTransaction({
+      amountRial: order.totalAmountRial,
+      weightGrams: order.weightGrams,
+      customerId: customer.id,
+      transactionType: 'TRADE',
+    });
 
     const side = await this.orderSide(orderId);
     const selling = side === 'SELL';

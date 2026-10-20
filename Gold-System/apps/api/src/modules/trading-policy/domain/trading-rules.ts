@@ -26,35 +26,112 @@ export function zeroUsage(): Usage {
   };
 }
 
-/** A more specific enabled limit replaces the session aggregate caps. */
+/** Null fields on an overlay keep the value from the lower layer. */
+export function mergeCapFields(base: CapFields, overlay: CapFields): CapFields {
+  return {
+    maxAmountRial: overlay.maxAmountRial ?? base.maxAmountRial,
+    minAmountRial: overlay.minAmountRial ?? base.minAmountRial,
+    maxWeightGrams: overlay.maxWeightGrams ?? base.maxWeightGrams,
+    minWeightGrams: overlay.minWeightGrams ?? base.minWeightGrams,
+    maxCount: overlay.maxCount ?? base.maxCount,
+    maxSingleAmountRial: overlay.maxSingleAmountRial ?? base.maxSingleAmountRial,
+    maxSingleWeightGrams: overlay.maxSingleWeightGrams ?? base.maxSingleWeightGrams,
+  };
+}
+
+function emptyCaps(): CapFields {
+  return {
+    maxAmountRial: null,
+    minAmountRial: null,
+    maxWeightGrams: null,
+    minWeightGrams: null,
+    maxCount: null,
+    maxSingleAmountRial: null,
+    maxSingleWeightGrams: null,
+  };
+}
+
+function matchLimit(
+  applicable: LimitView[],
+  scope: LimitView['scope'],
+  key: string | undefined,
+): LimitView | undefined {
+  if (!key) return undefined;
+  return applicable.find((limit) => limit.scope === scope && limit.scopeKey === key);
+}
+
+/**
+ * Aggregate caps for a customer in the current session.
+ * Precedence: CUSTOMER → CUSTOMER_TYPE → USER → ROLE → TRANSACTION_TYPE → session.
+ * Null fields on a more specific limit inherit from the layer below.
+ */
 export function resolveCaps(
   session: CapFields,
   limits: LimitView[],
   context: LimitContext,
 ): CapFields {
   const applicable = limits.filter((limit) => limit.enabled);
-  const match = (scope: LimitView['scope'], key: string | undefined) => {
-    if (!key) return undefined;
-    return applicable.find((limit) => limit.scope === scope && limit.scopeKey === key);
-  };
+  let caps = session;
 
-  const specific =
-    match('CUSTOMER', context.customerId) ??
-    match('USER', context.userId) ??
-    (context.roleIds ?? []).map((roleId) => match('ROLE', roleId)).find((limit) => limit != null) ??
-    match('TRANSACTION_TYPE', context.transactionType);
+  const transactionType = matchLimit(applicable, 'TRANSACTION_TYPE', context.transactionType);
+  if (transactionType) caps = mergeCapFields(caps, transactionType);
 
-  if (!specific) return session;
+  const role = (context.roleIds ?? [])
+    .map((roleId) => matchLimit(applicable, 'ROLE', roleId))
+    .find((limit) => limit != null);
+  if (role) caps = mergeCapFields(caps, role);
 
-  return {
-    maxAmountRial: specific.maxAmountRial,
-    minAmountRial: session.minAmountRial,
-    maxWeightGrams: specific.maxWeightGrams,
-    minWeightGrams: session.minWeightGrams,
-    maxCount: specific.maxCount,
-    maxSingleAmountRial: session.maxSingleAmountRial,
-    maxSingleWeightGrams: session.maxSingleWeightGrams,
-  };
+  const user = matchLimit(applicable, 'USER', context.userId);
+  if (user) caps = mergeCapFields(caps, user);
+
+  const customerType = matchLimit(applicable, 'CUSTOMER_TYPE', context.customerType);
+  if (customerType) caps = mergeCapFields(caps, customerType);
+
+  const customer = matchLimit(applicable, 'CUSTOMER', context.customerId);
+  if (customer) caps = mergeCapFields(caps, customer);
+
+  return caps;
+}
+
+/**
+ * Personal quota for one customer in the session window.
+ * Only CUSTOMER / CUSTOMER_TYPE scopes — market session caps are checked separately.
+ */
+export function resolvePersonalCaps(
+  limits: LimitView[],
+  context: LimitContext,
+): CapFields | null {
+  const applicable = limits.filter((limit) => limit.enabled);
+  let caps = emptyCaps();
+  let found = false;
+
+  const customerType = matchLimit(applicable, 'CUSTOMER_TYPE', context.customerType);
+  if (customerType) {
+    caps = mergeCapFields(caps, customerType);
+    found = true;
+  }
+
+  const customer = matchLimit(applicable, 'CUSTOMER', context.customerId);
+  if (customer) {
+    caps = mergeCapFields(caps, customer);
+    found = true;
+  }
+
+  if (!found) return null;
+  if (
+    caps.maxAmountRial == null &&
+    caps.maxWeightGrams == null &&
+    caps.maxCount == null
+  ) {
+    return null;
+  }
+  return caps;
+}
+
+export function hasAggregateCeiling(caps: CapFields): boolean {
+  return (
+    caps.maxAmountRial != null || caps.maxWeightGrams != null || caps.maxCount != null
+  );
 }
 
 export function limitReached(caps: CapFields, usage: Usage): boolean {
@@ -117,6 +194,15 @@ export function assertCandidateFits(
   usage: Usage,
   amount: Decimal,
   weight: Decimal,
+  messages: {
+    amount: string;
+    weight: string;
+    count: string;
+  } = {
+    amount: TRADING_MESSAGES.amount,
+    weight: TRADING_MESSAGES.weight,
+    count: TRADING_MESSAGES.count,
+  },
 ): void {
   if (caps.minAmountRial != null && amount.lt(caps.minAmountRial)) {
     throw new BusinessRuleException('TRADING_SINGLE_AMOUNT', TRADING_MESSAGES.amountMin);
@@ -136,13 +222,13 @@ export function assertCandidateFits(
   const nextCount = usage.count + 1;
 
   if (caps.maxAmountRial != null && nextAmount.gt(caps.maxAmountRial)) {
-    throw new BusinessRuleException('TRADING_AMOUNT_LIMIT', TRADING_MESSAGES.amount);
+    throw new BusinessRuleException('TRADING_AMOUNT_LIMIT', messages.amount);
   }
   if (caps.maxWeightGrams != null && nextWeight.gt(caps.maxWeightGrams)) {
-    throw new BusinessRuleException('TRADING_WEIGHT_LIMIT', TRADING_MESSAGES.weight);
+    throw new BusinessRuleException('TRADING_WEIGHT_LIMIT', messages.weight);
   }
   if (caps.maxCount != null && nextCount > caps.maxCount) {
-    throw new BusinessRuleException('TRADING_COUNT_LIMIT', TRADING_MESSAGES.count);
+    throw new BusinessRuleException('TRADING_COUNT_LIMIT', messages.count);
   }
 }
 

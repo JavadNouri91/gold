@@ -24,7 +24,17 @@ export const WEEKDAY_LABELS: Record<TradingWeekday, string> = {
 
 export type TradingOverrideKind = 'FULL_CLOSURE' | 'SPECIAL_SCHEDULE';
 
-export type TradingLimitScope = 'GLOBAL' | 'ROLE' | 'USER' | 'CUSTOMER' | 'TRANSACTION_TYPE';
+export type TradingLimitScope =
+  | 'GLOBAL'
+  | 'ROLE'
+  | 'USER'
+  | 'CUSTOMER'
+  | 'CUSTOMER_TYPE'
+  | 'TRANSACTION_TYPE';
+
+export const CUSTOMER_TYPES = ['HOUSEHOLD', 'PARTNER', 'VIP'] as const;
+
+export type CustomerTypeKey = (typeof CUSTOMER_TYPES)[number];
 
 export type TradingStatus = 'فعال' | 'شروع نشده' | 'پایان یافته' | 'تعطیل' | 'محدودیت تکمیل شده';
 
@@ -34,6 +44,9 @@ export const TRADING_MESSAGES = {
   amount: 'سقف ریالی معاملات این بازه تکمیل شده است.',
   weight: 'سقف وزن طلای این بازه تکمیل شده است.',
   count: 'سقف تعداد معاملات این بازه تکمیل شده است.',
+  personalAmount: 'سقف ریالی معاملات شما در این بازه تکمیل شده است.',
+  personalWeight: 'سقف وزن طلای شما در این بازه تکمیل شده است.',
+  personalCount: 'سقف تعداد معاملات شما در این بازه تکمیل شده است.',
   overlap: 'این بازه با بازه دیگری در همان روز هم‌پوشانی دارد.',
   timeRange: 'زمان پایان باید بعد از زمان شروع باشد.',
   negative: 'مقادیر محدودیت نمی‌توانند منفی باشند.',
@@ -96,6 +109,7 @@ export interface LimitContext {
   roleIds?: string[];
   userId?: string;
   customerId?: string;
+  customerType?: string;
   transactionType?: string;
 }
 

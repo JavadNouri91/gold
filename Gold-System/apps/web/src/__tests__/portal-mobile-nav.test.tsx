@@ -120,7 +120,7 @@ describe('DashboardHeader mobile chrome', () => {
 
     expect((await screen.findAllByText('سلام علی رضایی 👋')).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('مشتری خانگی').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('فعال').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('کاربر فعال').length).toBeGreaterThanOrEqual(1);
 
     const pickup = await screen.findAllByRole('link', { name: /طلای در انتظار تحویل/ });
     expect(pickup[0]).toHaveAttribute('href', '/portal/pickups/new');

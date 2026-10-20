@@ -13,7 +13,19 @@ import {
 import { TRADING_WEEKDAYS } from '../../domain/trading.types';
 
 const KINDS = ['FULL_CLOSURE', 'SPECIAL_SCHEDULE'] as const;
-const SCOPES = ['GLOBAL', 'ROLE', 'USER', 'CUSTOMER', 'TRANSACTION_TYPE'] as const;
+const SCOPES = [
+  'GLOBAL',
+  'ROLE',
+  'USER',
+  'CUSTOMER',
+  'CUSTOMER_TYPE',
+  'TRANSACTION_TYPE',
+] as const;
+
+export class MarketToggleDto {
+  @IsBoolean()
+  enabled!: boolean;
+}
 
 export class OverviewQueryDto {
   @IsOptional()
@@ -177,8 +189,10 @@ export class OverrideDto {
 }
 
 export class LimitDto {
+  @IsOptional()
+  @ValidateIf((_, value) => value !== null && value !== '')
   @IsString()
-  sessionId!: string;
+  sessionId?: string | null;
 
   @IsIn(SCOPES)
   scope!: (typeof SCOPES)[number];

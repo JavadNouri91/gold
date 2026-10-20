@@ -5,6 +5,7 @@ import {
   dayStatus,
   rangesOverlap,
   resolveCaps,
+  resolvePersonalCaps,
 } from './trading-rules';
 import { CapFields, LimitView, TRADING_MESSAGES, Usage } from './trading.types';
 
@@ -114,25 +115,69 @@ describe('trading rules', () => {
     ).toThrow(TRADING_MESSAGES.count);
   });
 
-  it('prefers a matching role limit over the session caps', () => {
-    const roleLimit: LimitView = {
-      id: 'limit-1',
-      scope: 'ROLE',
-      scopeKey: 'role-seller',
-      sessionId: 'session-1',
+  it('prefers customer over customer-type and inherits null fields from lower layers', () => {
+    const typeLimit: LimitView = {
+      id: 'type',
+      scope: 'CUSTOMER_TYPE',
+      scopeKey: 'VIP',
+      sessionId: null,
       enabled: true,
-      ...caps({ maxCount: 2, maxAmountRial: new Decimal('10'), maxWeightGrams: new Decimal('1') }),
+      ...caps({
+        maxCount: 5,
+        maxAmountRial: new Decimal('100'),
+        maxWeightGrams: new Decimal('20'),
+      }),
+    };
+    const customerLimit: LimitView = {
+      id: 'cust',
+      scope: 'CUSTOMER',
+      scopeKey: 'cust-1',
+      sessionId: null,
+      enabled: true,
+      ...caps({
+        maxCount: null,
+        maxAmountRial: new Decimal('40'),
+        maxWeightGrams: null,
+      }),
     };
 
-    const matched = resolveCaps(caps({ maxCount: 100 }), [roleLimit], { roleIds: ['role-seller'] });
-    expect(matched.maxCount).toBe(2);
+    const resolved = resolveCaps(caps({ maxCount: 100 }), [typeLimit, customerLimit], {
+      customerId: 'cust-1',
+      customerType: 'VIP',
+    });
+    expect(resolved.maxAmountRial?.toString()).toBe('40');
+    expect(resolved.maxWeightGrams?.toString()).toBe('20');
+    expect(resolved.maxCount).toBe(5);
 
-    const skipped = resolveCaps(caps({ maxCount: 100 }), [roleLimit], { roleIds: ['role-other'] });
+    const typeOnly = resolveCaps(caps({ maxCount: 100 }), [typeLimit], {
+      customerType: 'VIP',
+    });
+    expect(typeOnly.maxCount).toBe(5);
+
+    const skipped = resolveCaps(caps({ maxCount: 100 }), [typeLimit], {
+      customerType: 'HOUSEHOLD',
+    });
     expect(skipped.maxCount).toBe(100);
+  });
 
-    expect(() =>
-      assertCandidateFits(matched, usage({ count: 2 }), new Decimal('1'), new Decimal('0.1')),
-    ).toThrow(TRADING_MESSAGES.count);
+  it('resolves personal caps without pulling session market ceilings', () => {
+    const typeLimit: LimitView = {
+      id: 'type',
+      scope: 'CUSTOMER_TYPE',
+      scopeKey: 'VIP',
+      sessionId: null,
+      enabled: true,
+      ...caps({
+        maxCount: null,
+        maxAmountRial: new Decimal('100'),
+        maxWeightGrams: null,
+      }),
+    };
+    const personal = resolvePersonalCaps([typeLimit], { customerType: 'VIP' });
+    expect(personal?.maxAmountRial?.toString()).toBe('100');
+    expect(personal?.maxWeightGrams).toBeNull();
+    expect(personal?.maxCount).toBeNull();
+    expect(resolvePersonalCaps([typeLimit], { customerType: 'PARTNER' })).toBeNull();
   });
 
   it('derives the live status from the clock, the holiday, and remaining capacity', () => {

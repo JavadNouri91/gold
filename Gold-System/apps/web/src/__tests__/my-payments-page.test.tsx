@@ -20,8 +20,18 @@ jest.mock('@/components/portal/payments/submit-receipt-sheet', () => ({
 }));
 
 jest.mock('@/components/portal/payments/withdraw-request-sheet', () => ({
-  WithdrawRequestButton: ({ label }: { label?: string }) => (
-    <button type="button">{label ?? 'درخواست برداشت وجه'}</button>
+  WithdrawRequestButton: ({
+    label,
+    open,
+    onOpenChange,
+  }: {
+    label?: string;
+    open?: boolean;
+    onOpenChange?: (open: boolean) => void;
+  }) => (
+    <button type="button" aria-pressed={open} onClick={() => onOpenChange?.(true)}>
+      {label ?? 'درخواست برداشت وجه'}
+    </button>
   ),
 }));
 
@@ -100,5 +110,20 @@ describe('MyPaymentsPage cash management', () => {
 
     await user.click(screen.getByRole('button', { name: 'فیلتر مجموع واریزهای موفق' }));
     expect(onStatusGroup).toHaveBeenCalledWith('');
+  });
+
+  it('lets the user select the withdrawable rial wallet card', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    const card = screen.getByRole('button', { name: 'برداشت از موجودی ریالی کیف پول' });
+    expect(card).toHaveAttribute('aria-pressed', 'false');
+    expect(card).toHaveTextContent('موجودی ریالی کیف پول (قابل برداشت)');
+
+    await user.click(card);
+    expect(screen.getByRole('button', { name: 'برداشت از موجودی ریالی کیف پول' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
   });
 });

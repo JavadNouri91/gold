@@ -55,7 +55,7 @@ export const DASHBOARD_NAV: NavItem[] = [
   },
   {
     href: '/dashboard/orders',
-    label: 'سفارش‌ها',
+    label: 'سفارشات',
     icon: ShoppingCart,
     anyOf: ['order.read'],
     group: 'عملیات',

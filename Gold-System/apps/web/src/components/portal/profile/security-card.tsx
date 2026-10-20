@@ -9,7 +9,7 @@ import { Alert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { ActiveSessionsPanel } from '@/components/sessions/active-sessions-panel';
-import { toPersianDigits } from '@/lib/utils';
+import { cn, toPersianDigits } from '@/lib/utils';
 
 export function SecurityCard() {
   const { logout } = useAuth();
@@ -21,24 +21,25 @@ export function SecurityCard() {
   const sessionCount = sessions?.length;
 
   return (
-    <section id="security" className="scroll-mt-24 rounded-2xl border border-slate-100 bg-white p-5 shadow-sm">
+    <section id="security" className="scroll-mt-24 rounded-2xl border border-gray-100 bg-white p-5 shadow-sm">
       <h2 className="text-base font-bold text-slate-800">امنیت حساب</h2>
       <ul className="mt-4 space-y-3">
-        <SecurityRow
+        <SecurityToggleRow
           icon={Lock}
-          label="رمز عبور"
-          value="********"
-          ltr
-          action="تغییر رمز"
+          label="تغییر رمز عبور"
+          description="ورود با رمز عبور و کد یکبارمصرف پیامکی"
+          checked={false}
           onAction={() => setPanel('password')}
+          actionLabel="تغییر رمز"
         />
-        <SecurityRow
+        <SecurityToggleRow
           icon={Shield}
           label="تأیید دومرحله‌ای"
-          value="فعال"
-          valueClassName="text-emerald-700"
-          action="مشاهده"
+          description="هر ورود با کد یکبارمصرف پیامکی تکمیل می‌شود"
+          checked
+          readOnly
           onAction={() => setPanel('otp')}
+          actionLabel="جزئیات"
         />
         <SecurityRow
           icon={MonitorSmartphone}
@@ -121,6 +122,62 @@ export function SecurityCard() {
         <ModalClose onClose={() => setPanel(null)} />
       </Modal>
     </section>
+  );
+}
+
+function SecurityToggleRow({
+  icon: Icon,
+  label,
+  description,
+  checked,
+  readOnly,
+  actionLabel,
+  onAction,
+}: {
+  icon: typeof Lock;
+  label: string;
+  description: string;
+  checked: boolean;
+  readOnly?: boolean;
+  actionLabel: string;
+  onAction: () => void;
+}) {
+  return (
+    <li className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 px-3 py-3">
+      <div className="flex min-w-0 items-center gap-2">
+        <Icon className="h-4 w-4 shrink-0 text-slate-500" aria-hidden />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-slate-800">{label}</p>
+          <p className="mt-0.5 text-xs leading-5 text-muted-foreground">{description}</p>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        <button
+          type="button"
+          role="switch"
+          aria-checked={checked}
+          aria-readonly={readOnly || undefined}
+          disabled={readOnly}
+          onClick={readOnly ? onAction : onAction}
+          className={cn(
+            'relative h-6 w-11 rounded-full transition-colors',
+            checked ? 'bg-emerald-500' : 'bg-slate-200',
+            readOnly && 'cursor-default opacity-90',
+          )}
+        >
+          <span
+            className={cn(
+              'absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+              checked ? 'right-0.5' : 'right-[1.375rem]',
+            )}
+            aria-hidden
+          />
+        </button>
+        <Button type="button" variant="outline" size="sm" onClick={onAction}>
+          {actionLabel}
+        </Button>
+      </div>
+    </li>
   );
 }
 
