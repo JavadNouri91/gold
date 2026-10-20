@@ -15,22 +15,25 @@ import {
   type TradingGroupLimitRow,
 } from '@/lib/internal-api';
 import {
+  formatGroupedPersianDecimal,
+  formatGroupedPersianInteger,
   formatMobile,
+  formatMoney,
+  formatWeight,
   rialToToman,
   toLatinDigits,
-  toPersianDigits,
   tomanToRial,
 } from '@/lib/utils';
 
 function tomanField(value: string | null | undefined): string {
   if (value == null || value === '') return '';
   const toman = rialToToman(value);
-  return toman ? toPersianDigits(toman) : '';
+  return toman ? formatGroupedPersianInteger(toman) : '';
 }
 
 function weightField(value: string | null | undefined): string {
   if (value == null || value === '') return '';
-  return toPersianDigits(value);
+  return formatGroupedPersianDecimal(String(value));
 }
 
 function rialOrNull(value: string): string | null {
@@ -50,13 +53,12 @@ function weightOrNull(value: string): string | null {
 
 function moneyDisplay(rial: string | null): string {
   if (rial == null || rial === '') return '—';
-  const toman = rialToToman(rial);
-  return toman ? `${toPersianDigits(toman)} تومان` : '—';
+  return formatMoney(rial);
 }
 
 function gramsDisplay(value: string | null): string {
   if (value == null || value === '') return '—';
-  return `${toPersianDigits(value)} گرم`;
+  return formatWeight(value);
 }
 
 export function ScopedLimitsPanel({
@@ -212,7 +214,9 @@ export function ScopedLimitsPanel({
   if (limits.error) return <ApiErrorState error={limits.error} onRetry={() => void limits.mutate()} />;
 
   const customerLimits = limits.data?.customerLimits ?? [];
-  const groupLimits = limits.data?.groupLimits ?? [];
+  const groupLimits = (limits.data?.groupLimits ?? []).filter(
+    (row) => row.scopeKey === 'HOUSEHOLD' || row.scopeKey === 'PARTNER' || row.scopeKey === 'VIP',
+  );
 
   return (
     <div className="space-y-4">
@@ -250,7 +254,7 @@ export function ScopedLimitsPanel({
                         onChange={(event) =>
                           setDrafts((current) => ({
                             ...current,
-                            [row.scopeKey]: { ...draft, amount: event.target.value },
+                            [row.scopeKey]: { ...draft, amount: formatGroupedPersianInteger(event.target.value) },
                           }))
                         }
                       />
@@ -265,7 +269,7 @@ export function ScopedLimitsPanel({
                         onChange={(event) =>
                           setDrafts((current) => ({
                             ...current,
-                            [row.scopeKey]: { ...draft, weight: event.target.value },
+                            [row.scopeKey]: { ...draft, weight: formatGroupedPersianDecimal(event.target.value) },
                           }))
                         }
                       />
@@ -436,7 +440,9 @@ export function ScopedLimitsPanel({
                 placeholder="بدون سقف"
                 onChange={(event) =>
                   setCustomerDraft((current) =>
-                    current ? { ...current, amount: event.target.value } : current,
+                    current
+                      ? { ...current, amount: formatGroupedPersianInteger(event.target.value) }
+                      : current,
                   )
                 }
               />
@@ -450,7 +456,9 @@ export function ScopedLimitsPanel({
                 placeholder="بدون سقف"
                 onChange={(event) =>
                   setCustomerDraft((current) =>
-                    current ? { ...current, weight: event.target.value } : current,
+                    current
+                      ? { ...current, weight: formatGroupedPersianDecimal(event.target.value) }
+                      : current,
                   )
                 }
               />

@@ -4,7 +4,7 @@ import { ChevronDown, Pencil, Power } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { TradingMeter, TradingSessionView } from '@/lib/internal-api';
-import { cn, formatMoney, formatWeight, toPersianDigits } from '@/lib/utils';
+import { cn, formatFaNumber, formatMoney, formatWeight, toLatinDigits, toPersianDigits } from '@/lib/utils';
 
 export const WEEKDAYS = [
   { id: 'SATURDAY', label: 'شنبه' },
@@ -101,7 +101,9 @@ export function grams(value: string | number | null | undefined): string {
 
 export function countText(value: string | number | null | undefined, suffix = ''): string {
   if (value == null || value === '') return 'بدون سقف';
-  return `${toPersianDigits(String(value))}${suffix ? ` ${suffix}` : ''}`;
+  const numeric = Number(toLatinDigits(String(value)).replace(/,/g, ''));
+  const text = Number.isFinite(numeric) ? formatFaNumber(numeric) : toPersianDigits(String(value));
+  return `${text}${suffix ? ` ${suffix}` : ''}`;
 }
 
 export function meterLabel(meter: TradingMeter, kind: 'money' | 'weight' | 'count'): string {

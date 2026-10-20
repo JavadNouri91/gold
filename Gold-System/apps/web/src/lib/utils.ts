@@ -46,6 +46,20 @@ export function formatGroupedPersianInteger(value: string): string {
   return toPersianDigits(grouped);
 }
 
+/** Decimal for live inputs: Persian digits, thousands grouping on the integer part. */
+export function formatGroupedPersianDecimal(value: string): string {
+  const latin = toLatinDigits(value).replace(/[^\d.]/g, '');
+  if (!latin) return '';
+  const dot = latin.indexOf('.');
+  const intRaw = (dot === -1 ? latin : latin.slice(0, dot)).replace(/\D/g, '');
+  const frac = dot === -1 ? null : latin.slice(dot + 1).replace(/\D/g, '');
+  if (!intRaw && frac == null) return '';
+  const trimmed = intRaw.replace(/^0+(?=\d)/, '') || '0';
+  const grouped = trimmed.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  const body = frac != null ? `${grouped}.${frac}` : grouped;
+  return toPersianDigits(body);
+}
+
 /** User-visible mobile. Empty values render as `empty` (default em dash). */
 export function formatMobile(value: string | null | undefined, empty = '—'): string {
   if (value == null || String(value).trim() === '') return empty;

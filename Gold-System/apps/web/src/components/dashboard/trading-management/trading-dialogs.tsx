@@ -7,7 +7,13 @@ import { Input } from '@/components/ui/input';
 import { Modal } from '@/components/ui/modal';
 import { ApiClientError } from '@/lib/api';
 import type { TradingMarker, TradingSessionBody, TradingSessionView } from '@/lib/internal-api';
-import { rialToToman, toLatinDigits, toPersianDigits, tomanToRial } from '@/lib/utils';
+import {
+  formatGroupedPersianDecimal,
+  formatGroupedPersianInteger,
+  rialToToman,
+  toLatinDigits,
+  tomanToRial,
+} from '@/lib/utils';
 import { WEEKDAYS } from './trading-widgets';
 
 export interface SessionDraft {
@@ -18,14 +24,14 @@ export interface SessionDraft {
 
 function field(value: string | null | undefined): string {
   if (value == null || value === '') return '';
-  return toPersianDigits(value);
+  return formatGroupedPersianDecimal(String(value));
 }
 
 /** Prefill a money input from a stored Rial amount; UI shows Toman. */
 function tomanField(value: string | null | undefined): string {
   if (value == null || value === '') return '';
   const toman = rialToToman(value);
-  return toman ? toPersianDigits(toman) : '';
+  return toman ? formatGroupedPersianInteger(toman) : '';
 }
 
 function numberOrNull(value: string): string | null {
@@ -149,13 +155,13 @@ export function SessionDialog({
             </label>
           </>
         )}
-        <Input label="سقف مبلغ معاملات" dir="ltr" value={maxAmount} onChange={(event) => setMaxAmount(toPersianDigits(event.target.value))} hint="تومان" />
-        <Input label="سقف وزن طلا" dir="ltr" value={maxWeight} onChange={(event) => setMaxWeight(toPersianDigits(event.target.value))} hint="گرم" />
-        <Input label="سقف تعداد معاملات" dir="ltr" value={usedCountCap} onChange={(event) => setUsedCountCap(toPersianDigits(event.target.value))} />
-        <Input label="حداقل مبلغ معامله" dir="ltr" value={minAmount} onChange={(event) => setMinAmount(toPersianDigits(event.target.value))} hint="تومان" />
-        <Input label="حداکثر مبلغ معامله" dir="ltr" value={maxSingleAmount} onChange={(event) => setMaxSingleAmount(toPersianDigits(event.target.value))} hint="تومان" />
-        <Input label="حداقل وزن" dir="ltr" value={minWeight} onChange={(event) => setMinWeight(toPersianDigits(event.target.value))} hint="گرم" />
-        <Input label="حداکثر وزن" dir="ltr" value={maxSingleWeight} onChange={(event) => setMaxSingleWeight(toPersianDigits(event.target.value))} hint="گرم" />
+        <Input label="سقف مبلغ معاملات" dir="ltr" value={maxAmount} onChange={(event) => setMaxAmount(formatGroupedPersianInteger(event.target.value))} hint="تومان" />
+        <Input label="سقف وزن طلا" dir="ltr" value={maxWeight} onChange={(event) => setMaxWeight(formatGroupedPersianDecimal(event.target.value))} hint="گرم" />
+        <Input label="سقف تعداد معاملات" dir="ltr" value={usedCountCap} onChange={(event) => setUsedCountCap(formatGroupedPersianInteger(event.target.value))} />
+        <Input label="حداقل مبلغ معامله" dir="ltr" value={minAmount} onChange={(event) => setMinAmount(formatGroupedPersianInteger(event.target.value))} hint="تومان" />
+        <Input label="حداکثر مبلغ معامله" dir="ltr" value={maxSingleAmount} onChange={(event) => setMaxSingleAmount(formatGroupedPersianInteger(event.target.value))} hint="تومان" />
+        <Input label="حداقل وزن" dir="ltr" value={minWeight} onChange={(event) => setMinWeight(formatGroupedPersianDecimal(event.target.value))} hint="گرم" />
+        <Input label="حداکثر وزن" dir="ltr" value={maxSingleWeight} onChange={(event) => setMaxSingleWeight(formatGroupedPersianDecimal(event.target.value))} hint="گرم" />
         {error ? <p className="text-sm text-red-600 sm:col-span-2">{error}</p> : null}
         <div className="flex justify-end gap-2 sm:col-span-2">
           <Button type="button" variant="outline" onClick={onClose}>انصراف</Button>

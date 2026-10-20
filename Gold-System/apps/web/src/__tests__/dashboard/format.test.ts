@@ -1,5 +1,6 @@
 import { formatSignedWholeRial } from '@/lib/portfolio-display';
 import {
+  formatGroupedPersianDecimal,
   formatGroupedPersianInteger,
   formatMoney,
   formatWholeMoney,
@@ -13,6 +14,13 @@ describe('formatGroupedPersianInteger', () => {
     expect(formatGroupedPersianInteger('۱۲۵۰۰۰')).toBe('۱۲۵,۰۰۰');
     expect(formatGroupedPersianInteger('1,250,000')).toBe('۱,۲۵۰,۰۰۰');
     expect(formatGroupedPersianInteger('')).toBe('');
+  });
+});
+
+describe('formatGroupedPersianDecimal', () => {
+  it('groups the integer part and keeps the fraction', () => {
+    expect(formatGroupedPersianDecimal('125000.5')).toBe('۱۲۵,۰۰۰.۵');
+    expect(formatGroupedPersianDecimal('۱۰۰۰۰۰۰')).toBe('۱,۰۰۰,۰۰۰');
   });
 });
 
