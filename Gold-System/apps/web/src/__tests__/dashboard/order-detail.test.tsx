@@ -52,7 +52,7 @@ describe('dashboard order detail pricing', () => {
 
     render(<OrderDetailPage params={{ id: 'ord-1' }} />);
 
-    expect(await screen.findByText('قیمت لحظه‌ای ثبت سفارش')).toBeInTheDocument();
+    expect(await screen.findByText('قیمت هر گرم')).toBeInTheDocument();
     expect(screen.getByText('کارمزد خرید (مبلغ ثابت)')).toBeInTheDocument();
     expect(screen.getByText('اجرت')).toBeInTheDocument();
     expect(screen.getByText('جمع کل')).toBeInTheDocument();

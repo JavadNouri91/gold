@@ -13,6 +13,7 @@ import { ForbiddenNotice, PermissionGate } from '@/components/dashboard/permissi
 import { CreditSummary, GrantCreditForm } from '@/components/dashboard/credit-panel';
 import { KycDecisionPanel, KycDocumentList } from '@/components/dashboard/kyc-panel';
 import { ConfirmDialog } from '@/components/dashboard/confirm-dialog';
+import { QuotationModal } from '@/components/dashboard/quotation-modal';
 import { CustomerEditDialog, Toast, TypeBadge, balanceTone } from '@/components/dashboard/customer-widgets';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -72,6 +73,7 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
   const [editing, setEditing] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [noteToDelete, setNoteToDelete] = useState<string | null>(null);
+  const [quoteTarget, setQuoteTarget] = useState<{ orderId?: string; quotationId: string } | null>(null);
 
   const customer = useSWR(allowed ? ['customer', customerId] : null, () =>
     internalCustomersApi.getById(customerId),
@@ -289,12 +291,12 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
           empty="پیش‌فاکتوری صادر نشده است."
           rows={(workspace.data?.quotations ?? []).map((row) => ({
             id: row.id,
-            href: `/dashboard/quotations/${row.id}`,
             title: toPersianDigits(row.quotationNumber),
             amount: formatMoney(row.totalAmountRial),
             status: row.status,
             statusLabel: statusLabel(QUOTATION_STATUS_LABELS, row.status),
             date: formatDate(row.createdAt),
+            onOpen: () => setQuoteTarget({ orderId: row.orderId, quotationId: row.id }),
           }))}
         />
       ) : null}
@@ -419,6 +421,12 @@ export function CustomerProfile({ customerId }: { customerId: string }) {
         }}
       />
       <Toast message={toast} onClose={() => setToast(null)} />
+      <QuotationModal
+        open={Boolean(quoteTarget)}
+        orderId={quoteTarget?.orderId}
+        quotationId={quoteTarget?.orderId ? undefined : quoteTarget?.quotationId}
+        onClose={() => setQuoteTarget(null)}
+      />
     </div>
   );
 }
@@ -439,7 +447,8 @@ function RecordList({
   empty: string;
   rows: Array<{
     id: string;
-    href: string;
+    href?: string;
+    onOpen?: () => void;
     title: string;
     amount: string;
     extra?: string;
@@ -453,7 +462,15 @@ function RecordList({
     <ul className="divide-y rounded-xl border bg-white text-sm">
       {rows.map((row) => (
         <li key={row.id} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
-          <Link href={row.href} className="font-medium text-gold-800" dir="ltr">{row.title}</Link>
+          {row.onOpen ? (
+            <button type="button" className="font-medium text-gold-800" dir="ltr" onClick={row.onOpen}>
+              {row.title}
+            </button>
+          ) : (
+            <Link href={row.href ?? '#'} className="font-medium text-gold-800" dir="ltr">
+              {row.title}
+            </Link>
+          )}
           <span>{row.amount}</span>
           {row.extra ? <span>{row.extra}</span> : null}
           <StatusBadge status={row.status} label={row.statusLabel} />

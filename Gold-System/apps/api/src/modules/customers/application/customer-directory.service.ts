@@ -264,6 +264,7 @@ export class CustomerDirectoryService {
         take: 50,
         select: {
           id: true,
+          orderId: true,
           quotationNumber: true,
           status: true,
           totalAmountRial: true,

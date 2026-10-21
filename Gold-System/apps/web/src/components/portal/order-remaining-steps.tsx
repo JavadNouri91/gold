@@ -105,36 +105,5 @@ export function OrderRemainingSteps({
     );
   }
 
-  return (
-    <div className="space-y-3">
-      <ol className="grid gap-2 sm:grid-cols-2">
-        {ORDER_PROGRESS_STEPS.map((step, index) => {
-          const done =
-            progress.terminal === 'completed' ||
-            (progress.currentIndex > index && progress.currentIndex >= 0);
-          const current = progress.terminal === null && progress.currentIndex === index;
-          return (
-            <li
-              key={step.id}
-              className={cn(
-                'rounded-xl border px-3 py-2 text-sm',
-                done && 'border-[#BBF7D0] bg-[#F0FDF4] text-[#166534]',
-                current && 'border-[#F5D48A] bg-[#FFF8EB] text-[#92400E]',
-                !done && !current && 'border-[#E5E7EB] bg-white text-[#9CA3AF]',
-              )}
-            >
-              <span className="ml-2 tabular-nums">{formatFaNumber((index + 1))}</span>
-              {step.label}
-              {current ? <span className="mr-2 text-xs">مرحله جاری</span> : null}
-            </li>
-          );
-        })}
-      </ol>
-      {progress.remainingLabel ? (
-        <p className="text-sm leading-7 text-[#374151]">{progress.remainingLabel}</p>
-      ) : (
-        <p className="text-sm text-[#16A34A]">همه مراحل تا تسویه انجام شده است.</p>
-      )}
-    </div>
-  );
+  return <OrderTimeline status={status} />;
 }

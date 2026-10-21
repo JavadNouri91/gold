@@ -129,7 +129,7 @@ describe('ReportsService', () => {
       expect(result.reversedTrades).toBe(1);
     });
 
-    it('counts quoted and in-review orders as awaiting review', async () => {
+    it('counts only quoted orders as awaiting review', async () => {
       mockRepo.getDashboardStats.mockResolvedValueOnce({
         ...dashboardStats,
         ordersByStatus: [
@@ -137,10 +137,11 @@ describe('ReportsService', () => {
           { status: 'ASSIGNED', _count: { id: 1 } },
           { status: 'UNDER_REVIEW', _count: { id: 2 } },
           { status: 'SUBMITTED', _count: { id: 1 } },
+          { status: 'REVISION_REQUESTED', _count: { id: 3 } },
         ],
       });
       const result = await service.getDashboard();
-      expect(result.ordersAwaitingReview).toBe(8);
+      expect(result.ordersAwaitingReview).toBe(4);
     });
 
     it('uses Decimal for trade value totals — never Float', async () => {

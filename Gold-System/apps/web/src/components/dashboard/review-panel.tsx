@@ -1,28 +1,14 @@
 'use client';
 
-import Link from 'next/link';
 import { useState } from 'react';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ConfirmDialog } from './confirm-dialog';
 import { PermissionGate } from './permission-gate';
 import { internalOrdersApi, internalTradesApi, type ReviewContext } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
-import {
-  CUSTOMER_STATUS_LABELS,
-  CUSTOMER_TYPE_LABELS,
-  KYC_STATUS_LABELS,
-  QUOTATION_STATUS_LABELS,
-  formatDateTime,
-  formatFaNumber,
-  formatMoney,
-  formatWeight,
-  toPersianDigits,
-  orderStatusPresentation,
-  statusLabel,
-} from '@/lib/utils';
+import { orderStatusPresentation, toPersianDigits } from '@/lib/utils';
 
 export function ReviewContextPanel({
   context,
@@ -40,6 +26,7 @@ export function ReviewContextPanel({
   const canCreateTrade = status === 'APPROVED';
 
   const run = async (reason?: string) => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -57,6 +44,7 @@ export function ReviewContextPanel({
   };
 
   const confirmTrade = async () => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
@@ -71,91 +59,53 @@ export function ReviewContextPanel({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {feedback ? <Alert variant="success">{feedback}</Alert> : null}
       {error ? <Alert variant="error">{error}</Alert> : null}
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>سفارش</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <p dir="ltr">{toPersianDigits(context.order.orderNumber)}</p>
-            <StatusBadge {...orderStatusPresentation(context.order.status)} />
-            <p>مبلغ: {formatMoney(context.order.totalAmountRial)}</p>
-            <p>وزن: {formatWeight(context.order.weightGrams)}</p>
-            <p>اعتبار رزرو شده: {formatMoney(context.order.reservedAmountRial)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>مشتری</CardTitle></CardHeader>
-          <CardContent className="space-y-2 text-sm">
-            <Link className="font-medium text-gold-800" href={`/dashboard/customers/${context.customer.id}`}>
-              {context.customer.firstName} {context.customer.lastName}
-            </Link>
-            <p dir="ltr">{toPersianDigits(context.customer.customerNumber)}</p>
-            <StatusBadge status={context.customer.status} label={statusLabel(CUSTOMER_STATUS_LABELS, context.customer.status)} />
-            <p>نوع: {statusLabel(CUSTOMER_TYPE_LABELS, context.customer.type)}</p>
-            <p>احراز هویت: {statusLabel(KYC_STATUS_LABELS, context.customer.kycStatus)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>اعتبار</CardTitle></CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            {context.account ? (
-              <>
-                <p>سقف: {formatMoney(context.account.creditLimitRial)}</p>
-                <p>در دسترس: {formatMoney(context.account.availableCreditRial)}</p>
-                <p>رزرو: {formatMoney(context.account.reservedCreditRial)}</p>
-                <p>مصرف‌شده: {formatMoney(context.account.consumedCreditRial)}</p>
-              </>
-            ) : (
-              <p className="text-muted-foreground">حساب اعتباری برنگشته است.</p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>پیش‌فاکتور</CardTitle></CardHeader>
-          <CardContent className="space-y-1 text-sm">
-            {context.quotation ? (
-              <>
-                <Link className="text-gold-800" href={`/dashboard/quotations/${context.quotation.id}`}>
-                  <span dir="ltr">{toPersianDigits(context.quotation.quotationNumber)}</span>
-                </Link>
-                <p>نسخه: {formatFaNumber(context.quotation.version)}</p>
-                <StatusBadge status={context.quotation.status} label={statusLabel(QUOTATION_STATUS_LABELS, context.quotation.status)} />
-                <p>مبلغ قفل‌شده: {formatMoney(context.quotation.totalAmountRial)}</p>
-                <p className="text-xs text-muted-foreground">مقادیر تصویر قیمت در زمان صدور هستند و دوباره محاسبه نمی‌شوند.</p>
-                <p className="text-xs">{formatDateTime(context.quotation.generatedAt)}</p>
-              </>
-            ) : (
-              <p className="text-muted-foreground">پیش‌فاکتور فعالی وجود ندارد.</p>
-            )}
-          </CardContent>
-        </Card>
+      <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <p className="text-sm font-semibold">اقدام سفارش</p>
+            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+              <span dir="ltr" className="font-medium text-foreground tabular-nums">
+                {toPersianDigits(context.order.orderNumber)}
+              </span>
+              <StatusBadge {...orderStatusPresentation(context.order.status)} />
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <PermissionGate anyOf="trade.request_revision">
+              {canDecide ? (
+                <Button variant="outline" className="h-10 min-w-[8.5rem]" disabled={busy} onClick={() => setAction('revision')}>
+                  درخواست اصلاح
+                </Button>
+              ) : null}
+            </PermissionGate>
+            <PermissionGate anyOf="trade.reject">
+              {canDecide ? (
+                <Button variant="destructive" className="h-10 min-w-[8.5rem]" disabled={busy} onClick={() => setAction('reject')}>
+                  رد سفارش
+                </Button>
+              ) : null}
+            </PermissionGate>
+            <PermissionGate anyOf="trade.approve">
+              {canDecide ? (
+                <Button className="h-10 min-w-[8.5rem]" disabled={busy} onClick={() => setAction('approve')}>
+                  تأیید نهایی
+                </Button>
+              ) : null}
+              {canCreateTrade ? (
+                <Button className="h-10 min-w-[8.5rem]" disabled={busy} onClick={() => void confirmTrade()}>
+                  تکمیل ایجاد معامله
+                </Button>
+              ) : null}
+            </PermissionGate>
+          </div>
+        </div>
+        <p className="mt-2 text-xs text-muted-foreground">
+          فعلاً یک تأیید کافی است و معامله همان لحظه قطعی می‌شود. زیرساخت تأیید چندنفره در سرور مانده است.
+        </p>
       </div>
-      <Card>
-        <CardHeader><CardTitle>اقدام‌ها</CardTitle></CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          <PermissionGate anyOf="trade.approve">
-            {canDecide ? <Button onClick={() => setAction('approve')}>تأیید نهایی</Button> : null}
-            {canCreateTrade ? (
-              <Button onClick={() => void confirmTrade()}>تکمیل ایجاد معامله</Button>
-            ) : null}
-          </PermissionGate>
-          <PermissionGate anyOf="trade.reject">
-            {canDecide ? (
-              <Button variant="destructive" onClick={() => setAction('reject')}>رد سفارش</Button>
-            ) : null}
-          </PermissionGate>
-          <PermissionGate anyOf="trade.request_revision">
-            {canDecide ? (
-              <Button variant="outline" onClick={() => setAction('revision')}>درخواست اصلاح</Button>
-            ) : null}
-          </PermissionGate>
-        </CardContent>
-      </Card>
-      <p className="text-xs text-muted-foreground">
-        فعلاً یک تأیید کافی است و معامله همان لحظه قطعی می‌شود. زیرساخت تأیید چندنفره در سرور مانده است.
-      </p>
       <ConfirmDialog
         open={action !== null}
         title={

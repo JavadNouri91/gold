@@ -10,6 +10,7 @@ interface ModalProps {
   title?: string;
   children: React.ReactNode;
   className?: string;
+  rootClassName?: string;
 }
 
 const EXIT_MS = 150;
@@ -18,7 +19,7 @@ function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function Modal({ open, onClose, title, children, className }: ModalProps) {
+export function Modal({ open, onClose, title, children, className, rootClassName }: ModalProps) {
   const [ready, setReady] = React.useState(false);
   const [mounted, setMounted] = React.useState(open);
   const [closing, setClosing] = React.useState(false);
@@ -62,7 +63,7 @@ export function Modal({ open, onClose, title, children, className }: ModalProps)
 
   return createPortal(
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className={cn('fixed inset-0 z-50 flex items-center justify-center', rootClassName)}
       role="dialog"
       aria-modal="true"
       aria-labelledby={title ? 'modal-title' : undefined}

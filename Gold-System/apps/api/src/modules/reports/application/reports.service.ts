@@ -178,12 +178,8 @@ export class ReportsService {
       suspendedCustomers: stats.suspendedCustomers,
 
       pendingOrders: ordersByStatus['PENDING'] ?? 0,
-      ordersAwaitingReview:
-        (ordersByStatus['SUBMITTED'] ?? 0) +
-        (ordersByStatus['QUOTED'] ?? 0) +
-        (ordersByStatus['ASSIGNED'] ?? 0) +
-        (ordersByStatus['UNDER_REVIEW'] ?? 0) +
-        (ordersByStatus['REVISION_REQUESTED'] ?? 0),
+      /** Quoted orders waiting in the staff claim/review queue. */
+      ordersAwaitingReview: ordersByStatus['QUOTED'] ?? 0,
       ordersApproved: ordersByStatus['APPROVED'] ?? 0,
       ordersRejected: ordersByStatus['REJECTED'] ?? 0,
       ordersCancelled: ordersByStatus['CANCELLED'] ?? 0,

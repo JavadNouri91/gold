@@ -318,7 +318,7 @@ export class AssignmentsService {
   async listAssignments(
     actorUserId: string,
     isManager: boolean,
-    opts: { page: number; limit: number; status?: AssignmentStatus },
+    opts: { page: number; limit: number; status?: AssignmentStatus; from?: string; to?: string },
   ): Promise<{
     assignments: AssignmentResponseDto[];
     total: number;
@@ -334,6 +334,12 @@ export class AssignmentsService {
     const where: Record<string, unknown> = {};
     if (assignedToId) where.assignedToId = assignedToId;
     if (opts.status) where.status = opts.status;
+    if (opts.from || opts.to) {
+      where.createdAt = {
+        ...(opts.from ? { gte: new Date(opts.from) } : {}),
+        ...(opts.to ? { lte: new Date(opts.to) } : {}),
+      };
+    }
 
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.assignment.findMany({

@@ -136,12 +136,16 @@ export class AssignmentsController {
     @Query('page') page = '1',
     @Query('limit') limit = '20',
     @Query('status') status?: AssignmentStatus,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
   ) {
     const isManager = user.permissions.includes('order.assign');
     return this.assignmentsService.listAssignments(user.userId, isManager, {
       page: parseInt(page, 10),
       limit: parseInt(limit, 10),
       status,
+      from,
+      to,
     });
   }
 }

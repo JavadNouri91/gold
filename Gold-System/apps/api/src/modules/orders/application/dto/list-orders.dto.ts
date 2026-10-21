@@ -1,4 +1,4 @@
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsISO8601, IsOptional, IsString, Max, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ORDER_STATUS_QUERY_VALUES } from '@gold/shared-types';
 
@@ -25,4 +25,14 @@ export class ListOrdersDto {
   @IsOptional()
   @IsString()
   customerId?: string;
+
+  /** Inclusive createdAt start — staff only */
+  @IsOptional()
+  @IsISO8601()
+  from?: string;
+
+  /** Inclusive createdAt end — staff only */
+  @IsOptional()
+  @IsISO8601()
+  to?: string;
 }

@@ -101,6 +101,7 @@ export interface CustomerWorkspace {
   }>;
   quotations: Array<{
     id: string;
+    orderId?: string;
     quotationNumber: string;
     status: string;
     totalAmountRial: string;
@@ -1082,6 +1083,8 @@ export const internalOrdersApi = {
   list(params: {
     status?: string;
     customerId?: string;
+    from?: string;
+    to?: string;
     page?: number;
     limit?: number;
   }): Promise<StaffOrderList> {
@@ -1126,7 +1129,13 @@ export const internalQuotationsApi = {
 };
 
 export const assignmentsApi = {
-  list(params: { page?: number; limit?: number; status?: string }): Promise<AssignmentList> {
+  list(params: {
+    page?: number;
+    limit?: number;
+    status?: string;
+    from?: string;
+    to?: string;
+  }): Promise<AssignmentList> {
     return request(`/assignments${toQuery(params)}`);
   },
   assign(orderId: string, input: { assignedToUserId: string; notes?: string }): Promise<AssignmentRecord> {

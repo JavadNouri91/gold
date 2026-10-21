@@ -61,7 +61,7 @@ export function OverviewDashboard({ data }: { data: DashboardSummary }) {
       <section>
         <div className="grid gap-4 lg:grid-cols-3">
           <UrgentCard
-            href="/dashboard/assignments"
+            href="/dashboard/orders?view=review"
             tone="amber"
             icon={ClipboardList}
             value={count(data.ordersAwaitingReview)}

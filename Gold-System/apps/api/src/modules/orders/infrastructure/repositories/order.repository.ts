@@ -58,12 +58,20 @@ export class OrderRepository {
     status?: OrderStatus;
     statuses?: OrderStatus[];
     customerId?: string;
+    from?: Date;
+    to?: Date;
   }): Promise<{ orders: OrderEntity[]; total: number }> {
     const skip = (opts.page - 1) * opts.limit;
     const where: Prisma.OrderWhereInput = {};
     if (opts.statuses?.length) where.status = { in: opts.statuses };
     else if (opts.status) where.status = opts.status;
     if (opts.customerId) where.customerId = opts.customerId;
+    if (opts.from || opts.to) {
+      where.createdAt = {
+        ...(opts.from ? { gte: opts.from } : {}),
+        ...(opts.to ? { lte: opts.to } : {}),
+      };
+    }
 
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.order.findMany({

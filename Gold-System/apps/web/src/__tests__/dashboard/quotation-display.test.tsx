@@ -1,14 +1,10 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
-import QuotationDetailPage from '@/app/dashboard/quotations/[id]/page';
-import { signIn } from './auth-state';
+import { QuotationModal } from '@/components/dashboard/quotation-modal';
 import { toPersianDigits } from '@/lib/utils';
 
-jest.mock('@/lib/auth', () => ({
-  useAuth: () => require('./auth-state').authState,
-}));
-
 jest.mock('@/lib/internal-api', () => ({
+  internalOrdersApi: { quotations: jest.fn() },
   internalQuotationsApi: {
     getById: jest.fn(),
     download: jest.fn(),
@@ -20,8 +16,7 @@ const { internalQuotationsApi } = jest.requireMock('@/lib/internal-api') as {
 };
 
 describe('quotation display', () => {
-  it('shows the locked snapshot and does not offer a download when the document is absent', async () => {
-    signIn(['quotation.read']);
+  it('shows the locked snapshot in a modal and does not offer a download when the document is absent', async () => {
     internalQuotationsApi.getById.mockResolvedValue({
       id: 'q1',
       quotationNumber: 'QT-44',
@@ -44,9 +39,11 @@ describe('quotation display', () => {
       updatedAt: '2026-02-01T00:00:00.000Z',
       items: [],
     });
-    render(<QuotationDetailPage params={{ id: 'q1' }} />);
-    expect(await screen.findByText(toPersianDigits('QT-44'))).toBeInTheDocument();
+    render(<QuotationModal quotationId="q1" open onClose={() => undefined} />);
+    expect(await screen.findByRole('dialog', { name: 'پیش‌فاکتور' })).toBeInTheDocument();
+    expect(screen.getByText(toPersianDigits('QT-44'))).toBeInTheDocument();
     expect(screen.getByText(/مقادیر تاریخی دوباره محاسبه نمی‌شوند/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'چاپ' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'دریافت سند' })).not.toBeInTheDocument();
   });
 });

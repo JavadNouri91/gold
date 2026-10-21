@@ -26,7 +26,7 @@ describe('staff permissions', () => {
 describe('role-based navigation', () => {
   it('shows the reviewer queue only when review permission exists', () => {
     const hrefs = visibleNav(['trade.review']).map((item) => item.href);
-    expect(hrefs).toContain('/dashboard/assignments');
+    expect(hrefs).toContain('/dashboard/orders');
     expect(hrefs).not.toContain('/dashboard/ledger/financial');
     expect(hrefs).not.toContain('/dashboard/payments');
   });

@@ -794,6 +794,8 @@ export class OrdersService {
         limit,
         statuses: dto.status ? expandOrderStatusFilter(dto.status) : undefined,
         customerId: dto.customerId,
+        from: dto.from ? new Date(dto.from) : undefined,
+        to: dto.to ? new Date(dto.to) : undefined,
       });
       orders = result.orders;
       total = result.total;

@@ -196,3 +196,22 @@ html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
     animation: none;
   }
 }
+
+@media print {
+  body[data-print-quotation] > *:not(.quotation-print-host) {
+    display: none !important;
+  }
+  body[data-print-quotation] .quotation-print-host {
+    position: static !important;
+    display: block !important;
+    background: transparent !important;
+  }
+  body[data-print-quotation] .quotation-print-host > [aria-hidden='true'] {
+    display: none !important;
+  }
+  body[data-print-quotation] .quotation-print-root {
+    max-width: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+}

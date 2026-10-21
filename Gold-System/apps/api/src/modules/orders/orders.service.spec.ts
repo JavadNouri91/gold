@@ -1258,6 +1258,25 @@ describe('OrdersService', () => {
           OrderStatus.UNDER_REVIEW,
         ],
         customerId: undefined,
+        from: undefined,
+        to: undefined,
+      });
+    });
+
+    it('staff list passes createdAt bounds', async () => {
+      (orderRepo.findAll as jest.Mock).mockResolvedValue({ orders: [], total: 0 });
+      const from = '2026-10-01T00:00:00.000+03:30';
+      const to = '2026-10-21T23:59:59.999+03:30';
+
+      await service.listOrders('staff-user-id', { page: 1, limit: 20, from, to }, true);
+
+      expect(orderRepo.findAll).toHaveBeenCalledWith({
+        page: 1,
+        limit: 20,
+        statuses: undefined,
+        customerId: undefined,
+        from: new Date(from),
+        to: new Date(to),
       });
     });
 

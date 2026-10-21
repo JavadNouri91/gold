@@ -17,7 +17,8 @@ const LABELS: Record<string, string> = {
   kyc: 'احراز هویت',
   orders: 'سفارش‌ها',
   assignments: 'صف بررسی',
-  quotations: 'پیش‌فاکتورها',
+  quotation: 'پیش‌فاکتور',
+  quotations: 'پیش‌فاکتور',
   trades: 'معاملات',
   payments: 'پرداخت‌ها',
   settlements: 'تسویه',
@@ -50,7 +51,7 @@ export function DashboardTopbar({ onMenu }: { onMenu: () => void }) {
   };
 
   return (
-    <header className="sticky top-0 z-20 border-b bg-white/95 backdrop-blur">
+    <header className="sticky top-0 z-20 border-b bg-white/95 backdrop-blur print:hidden">
       <div className="flex items-center gap-3 px-4 py-3">
         <Button variant="ghost" size="icon" className="lg:hidden" onClick={onMenu} aria-label="منو">
           <Menu className="h-5 w-5" />

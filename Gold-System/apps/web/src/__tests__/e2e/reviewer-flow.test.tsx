@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import AssignmentsPage from '@/app/dashboard/assignments/page';
+import OrdersPage from '@/app/dashboard/orders/page';
 import { ReviewContextPanel } from '@/components/dashboard/review-panel';
 import type { ReviewContext } from '@/lib/internal-api';
 import { visibleNav } from '@/lib/nav';
@@ -9,6 +9,12 @@ import { signIn } from '../dashboard/auth-state';
 
 jest.mock('@/lib/auth', () => ({
   useAuth: () => require('../dashboard/auth-state').authState,
+}));
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  usePathname: () => '/dashboard/orders',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 jest.mock('@/lib/internal-api', () => ({
@@ -65,7 +71,8 @@ describe('reviewer flow', () => {
   it('opens the review queue and rejects an order with a reason', async () => {
     const permissions = ['trade.review', 'trade.reject', 'trade.approve'];
     signIn(permissions, ['reviewer']);
-    expect(visibleNav(permissions).map((item) => item.href)).toContain('/dashboard/assignments');
+    expect(visibleNav(permissions).map((item) => item.href)).toContain('/dashboard/orders');
+    expect(visibleNav(permissions).map((item) => item.href)).not.toContain('/dashboard/assignments');
     api.assignmentsApi.list.mockResolvedValue({
       assignments: [
         {
@@ -84,7 +91,7 @@ describe('reviewer flow', () => {
       total: 1,
       meta: { page: 1, limit: 20, total: 1, totalPages: 1 },
     });
-    const queue = render(<AssignmentsPage />);
+    const queue = render(<OrdersPage />);
     expect(await screen.findByRole('link', { name: 'مشاهده' })).toHaveAttribute(
       'href',
       '/dashboard/orders/ord-1',

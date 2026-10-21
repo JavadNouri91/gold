@@ -86,7 +86,7 @@ export function SidebarShell({
       {open ? (
         <button
           type="button"
-          className="fixed inset-0 z-30 bg-black/40 lg:hidden"
+          className="fixed inset-0 z-30 bg-black/40 print:hidden lg:hidden"
           aria-label="بستن منو"
           tabIndex={-1}
           onClick={onClose}
@@ -99,7 +99,7 @@ export function SidebarShell({
         aria-modal={open ? true : undefined}
         aria-labelledby={open ? titleId : undefined}
         className={cn(
-          'fixed inset-y-0 right-0 z-40 flex w-[min(20rem,100vw)] flex-col border-l border-slate-100 bg-white shadow-[-4px_0_24px_rgba(15,23,42,0.06)] outline-none transition-transform duration-200 ease-out lg:static lg:w-72 lg:translate-x-0',
+          'fixed inset-y-0 right-0 z-40 flex w-[min(20rem,100vw)] flex-col border-l border-slate-100 bg-white shadow-[-4px_0_24px_rgba(15,23,42,0.06)] outline-none transition-transform duration-200 ease-out print:hidden lg:static lg:w-72 lg:translate-x-0',
           open ? 'translate-x-0' : 'translate-x-full lg:translate-x-0',
         )}
       >

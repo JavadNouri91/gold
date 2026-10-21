@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
@@ -18,19 +19,23 @@ export function FilterBar({
   onChange,
   onSubmit,
   onReset,
+  extra,
+  live = false,
 }: {
   fields: FilterField[];
   values: Record<string, string>;
   onChange: (key: string, value: string) => void;
-  onSubmit: () => void;
+  onSubmit?: () => void;
   onReset?: () => void;
+  extra?: ReactNode;
+  live?: boolean;
 }) {
   return (
     <form
       className="grid grid-cols-1 gap-3 rounded-xl border bg-white p-4 md:grid-cols-2 xl:grid-cols-4"
       onSubmit={(event) => {
         event.preventDefault();
-        onSubmit();
+        if (!live) onSubmit?.();
       }}
     >
       {fields.map((field) =>
@@ -62,14 +67,19 @@ export function FilterBar({
           />
         ),
       )}
-      <div className="flex items-end gap-2">
-        <Button type="submit">اعمال فیلتر</Button>
-        {onReset ? (
-          <Button type="button" variant="outline" onClick={onReset}>
-            پاک کردن
-          </Button>
-        ) : null}
-      </div>
+      {extra}
+      {!live || onReset ? (
+        <div className="flex items-end gap-2">
+          {live ? null : (
+            <Button type="submit">اعمال فیلتر</Button>
+          )}
+          {onReset ? (
+            <Button type="button" variant="outline" onClick={onReset}>
+              پاک کردن
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </form>
   );
 }

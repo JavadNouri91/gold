@@ -144,7 +144,7 @@ describe('manager flow', () => {
     expect(firstStaffRoute(MANAGER)).toBe('/dashboard/overview');
     const { unmount } = render(<OverviewPage />);
     expect(await screen.findByText('داشبورد مدیریت سامانه')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /بررسی سفارش‌ها/ })).toHaveAttribute('href', '/dashboard/assignments');
+    expect(screen.getByRole('link', { name: /بررسی سفارش‌ها/ })).toHaveAttribute('href', '/dashboard/orders?view=review');
     expect(screen.getByRole('link', { name: /بررسی مدارک/ })).toHaveAttribute('href', '/dashboard/kyc');
     expect(screen.getByRole('link', { name: /معاملات تسویه‌نشده/ })).toHaveAttribute('href', '/dashboard/settlements');
     expect(screen.getByRole('link', { name: 'همه معاملات' })).toHaveAttribute('href', '/dashboard/trades');
