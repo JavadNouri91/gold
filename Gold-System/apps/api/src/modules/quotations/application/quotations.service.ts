@@ -431,6 +431,7 @@ export class QuotationsService {
     dto.purityRatio = quotation.purityRatio.toFixed(6);
     dto.step1BasePrice = quotation.step1BasePrice?.toFixed(6) ?? null;
     dto.wageAmount = quotation.wageAmount?.toFixed(2) ?? null;
+    dto.feeAmountRial = quotation.feeAmountRial.toFixed(2);
     dto.discountAmount = quotation.discountAmount?.toFixed(2) ?? null;
     dto.roundingAmount = quotation.roundingAmount?.toFixed(2) ?? null;
     dto.isComplete = quotation.isComplete;

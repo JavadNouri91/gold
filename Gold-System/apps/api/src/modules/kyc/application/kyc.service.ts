@@ -22,6 +22,7 @@ import {
   deleteBlockReason,
   kycStaffBucket,
   requiredKycTypes,
+  staffUploadBlockReason,
   uploadBlockReason,
   type KycStaffBucket,
   type OwnKycView,
@@ -193,6 +194,7 @@ export class KycService {
     file: Express.Multer.File;
     actorId: string;
     ipAddress?: string;
+    source?: 'customer' | 'staff';
   }): Promise<DocumentResponseDto> {
     const { customerId, documentType, file } = params;
 
@@ -248,6 +250,7 @@ export class KycService {
         fileName: file.originalname,
         fileSizeBytes: file.size,
         status: 'PENDING',
+        source: params.source ?? 'customer',
         // fileKey intentionally omitted from audit for security hygiene
       },
       ipAddress: params.ipAddress,
@@ -553,6 +556,13 @@ export class KycService {
       );
     }
 
+    if (dto.decision === KycDecision.REJECT && doc.status === VerificationStatus.APPROVED) {
+      throw new BusinessRuleException(
+        'KYC_DOCUMENT_APPROVED_LOCKED',
+        'برای رد این مدرک ابتدا از منوی ویرایش، بازنگری تصویر را بزنید.',
+      );
+    }
+
     const status =
       dto.decision === KycDecision.APPROVE
         ? VerificationStatus.APPROVED
@@ -584,6 +594,69 @@ export class KycService {
 
     if (dto.decision === KycDecision.APPROVE) {
       await this.verifyCustomerIfDocumentsComplete(customer, actorId, ipAddress);
+    }
+
+    return DocumentResponseDto.fromEntity(updated);
+  }
+
+  async reopenDocument(
+    customerId: string,
+    documentId: string,
+    actorId: string,
+    ipAddress?: string,
+  ): Promise<DocumentResponseDto> {
+    const customer = await this.customerRepo.findById(customerId);
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
+    }
+
+    const doc = await this.documentRepo.findById(documentId);
+    if (!doc || doc.customerId !== customerId) {
+      throw new NotFoundException(`Document ${documentId} not found`);
+    }
+    if (doc.status !== VerificationStatus.APPROVED) {
+      throw new BusinessRuleException(
+        'KYC_DOCUMENT_REOPEN_NOT_ALLOWED',
+        'فقط مدرک تأییدشده را می‌توان برای بازنگری باز کرد.',
+      );
+    }
+
+    const updated = await this.documentRepo.updateStatus(
+      doc.id,
+      VerificationStatus.UNDER_REVIEW,
+      actorId,
+    );
+
+    await this.audit.log({
+      actorId,
+      action: 'KYC_DOCUMENT_REOPENED',
+      entityType: 'CustomerDocument',
+      entityId: doc.id,
+      before: { status: doc.status },
+      after: {
+        status: VerificationStatus.UNDER_REVIEW,
+        documentType: doc.documentType,
+        customerId,
+      },
+      ipAddress,
+    });
+
+    const verification = await this.kycRepo.findLatestByCustomerId(customerId);
+    if (verification?.status === VerificationStatus.APPROVED) {
+      await this.kycRepo.updateStatus(
+        verification.id,
+        VerificationStatus.UNDER_REVIEW,
+        actorId,
+      );
+      await this.audit.log({
+        actorId,
+        action: 'KYC_REVIEW_REOPENED',
+        entityType: 'KYCVerification',
+        entityId: verification.id,
+        before: { status: verification.status },
+        after: { status: 'UNDER_REVIEW', source: 'document_reopened', documentId: doc.id },
+        ipAddress,
+      });
     }
 
     return DocumentResponseDto.fromEntity(updated);
@@ -1089,6 +1162,92 @@ export class KycService {
       documentType: params.documentType,
       file: params.file,
       actorId: params.userId,
+      ipAddress: params.ipAddress,
+      source: 'customer',
+    });
+  }
+
+  /**
+   * Staff upload on behalf of a customer, including replacement of an
+   * approved file.
+   */
+  async submitStaffDocument(params: {
+    customerId: string;
+    documentType: string;
+    file: Express.Multer.File;
+    actorId: string;
+    ipAddress?: string;
+  }): Promise<DocumentResponseDto> {
+    const customer = await this.customerRepo.findById(params.customerId);
+    if (!customer) {
+      throw new NotFoundException(`Customer ${params.customerId} not found`);
+    }
+
+    const documents = await this.documentRepo.findByCustomerId(customer.id);
+    const latestOfType = documents.find((document) => document.documentType === params.documentType);
+    const reason = staffUploadBlockReason({
+      documentType: params.documentType,
+      status: latestOfType?.status ?? null,
+      allowedTypes: requiredKycTypes(customer.type).map((item) => item.type),
+    });
+    if (reason) {
+      throw new BusinessRuleException('KYC_UPLOAD_NOT_ALLOWED', reason);
+    }
+
+    return this.submitDocument({
+      customerId: customer.id,
+      documentType: params.documentType,
+      file: params.file,
+      actorId: params.actorId,
+      ipAddress: params.ipAddress,
+      source: 'staff',
+    });
+  }
+
+  async deleteStaffDocument(params: {
+    customerId: string;
+    documentId: string;
+    actorId: string;
+    ipAddress?: string;
+  }): Promise<void> {
+    const customer = await this.customerRepo.findById(params.customerId);
+    if (!customer) {
+      throw new NotFoundException(`Customer ${params.customerId} not found`);
+    }
+
+    const document = await this.documentRepo.findById(params.documentId);
+    if (!document || document.customerId !== customer.id) {
+      throw new NotFoundException('مدرک پیدا نشد.');
+    }
+
+    const keys = [
+      ...new Set(
+        [document.fileKey, document.originalFileKey, document.processedFileKey].filter(
+          (key): key is string => Boolean(key),
+        ),
+      ),
+    ];
+    for (const key of keys) {
+      try {
+        await this.storage.delete(key, this.storage.kycBucket);
+      } catch (err) {
+        if (key === document.fileKey) throw err;
+        this.logger.warn(`Could not delete KYC file ${key}`, err);
+      }
+    }
+
+    await this.documentRepo.deleteById(document.id);
+
+    await this.audit.log({
+      actorId: params.actorId,
+      action: 'KYC_DOCUMENT_DELETED_BY_STAFF',
+      entityType: 'CustomerDocument',
+      entityId: document.id,
+      after: {
+        customerId: customer.id,
+        documentType: document.documentType,
+        previousStatus: document.status,
+      },
       ipAddress: params.ipAddress,
     });
   }

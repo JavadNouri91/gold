@@ -39,7 +39,7 @@ import { TradingPolicyModule } from '../trading-policy/trading-policy.module';
  * docs/04-actors-and-permissions.md
  * docs/05-use-cases.md UC-11, UC-12
  * docs/21-business-decisions.md �3.3, �4.2, �6
- * architecture/STATE-MACHINES.md: APPROVED ? TRADE_CREATED
+ * architecture/STATE-MACHINES.md: APPROVED → COMPLETED on confirm
  */
 @Module({
   imports: [

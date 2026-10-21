@@ -103,6 +103,7 @@ const mockDocRepo = {
   updateStatus: jest.fn(),
   replaceFile: jest.fn(),
   updateProcessedFile: jest.fn(),
+  deleteById: jest.fn(),
 };
 
 const mockCustomerRepo = {
@@ -233,6 +234,95 @@ describe('KycService', () => {
         expect.objectContaining({ action: 'KYC_DOCUMENT_SUBMITTED' }),
       );
       expect(result.documentType).toBe('national_id_front');
+    });
+  });
+
+  describe('submitStaffDocument', () => {
+    const validFile: Express.Multer.File = {
+      fieldname: 'file',
+      originalname: 'id_front.jpg',
+      encoding: '7bit',
+      mimetype: 'image/jpeg',
+      size: 500_000,
+      buffer: Buffer.from('fake-image-data'),
+      destination: '',
+      filename: '',
+      path: '',
+      stream: null as unknown as import('stream').Readable,
+    };
+
+    it('stores a missing document on behalf of the customer during review', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.UNDER_REVIEW));
+      mockDocRepo.findByCustomerId.mockResolvedValue([]);
+      mockStorage.upload.mockResolvedValue({
+        key: 'kyc-documents/cust-1/abc.jpg',
+        bucket: 'gold-kyc',
+        originalName: 'id_front.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 500_000,
+      });
+      mockDocRepo.create.mockResolvedValue(makeDocument());
+
+      await service.submitStaffDocument({
+        customerId: 'cust-1',
+        documentType: 'national_id_front',
+        file: validFile,
+        actorId: 'staff-1',
+      });
+
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'KYC_DOCUMENT_SUBMITTED',
+          after: expect.objectContaining({ source: 'staff' }),
+        }),
+      );
+    });
+
+    it('replaces an approved document on behalf of the customer', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findByCustomerId.mockResolvedValue([
+        makeDocument({ status: VerificationStatus.APPROVED }),
+      ]);
+      mockStorage.upload.mockResolvedValue({
+        key: 'kyc-documents/cust-1/replacement.jpg',
+        bucket: 'gold-kyc',
+        originalName: 'id_front.jpg',
+        mimeType: 'image/jpeg',
+        sizeBytes: 500_000,
+      });
+      mockDocRepo.create.mockResolvedValue(makeDocument());
+
+      await service.submitStaffDocument({
+        customerId: 'cust-1',
+        documentType: 'national_id_front',
+        file: validFile,
+        actorId: 'staff-1',
+      });
+
+      expect(mockStorage.upload).toHaveBeenCalled();
+    });
+  });
+
+  describe('deleteStaffDocument', () => {
+    it('deletes an approved document and audits the action', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ status: VerificationStatus.APPROVED, originalFileKey: 'orig.jpg' }),
+      );
+      mockStorage.delete.mockResolvedValue(undefined);
+      mockDocRepo.deleteById.mockResolvedValue(undefined);
+
+      await service.deleteStaffDocument({
+        customerId: 'cust-1',
+        documentId: 'doc-1',
+        actorId: 'staff-1',
+      });
+
+      expect(mockStorage.delete).toHaveBeenCalled();
+      expect(mockDocRepo.deleteById).toHaveBeenCalledWith('doc-1');
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_DOCUMENT_DELETED_BY_STAFF' }),
+      );
     });
   });
 
@@ -626,6 +716,70 @@ describe('KycService', () => {
         service.decideDocument('cust-1', 'doc-1', { decision: KycDecision.APPROVE }, 'reviewer-1'),
       ).rejects.toMatchObject({
         message: expect.stringContaining('already been approved'),
+      });
+      expect(mockDocRepo.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('does not reject an approved document until it is reopened', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ status: VerificationStatus.APPROVED }),
+      );
+
+      await expect(
+        service.decideDocument(
+          'cust-1',
+          'doc-1',
+          { decision: KycDecision.REJECT, reason: 'تصویر کارت ملی خوانا نیست' },
+          'reviewer-1',
+        ),
+      ).rejects.toMatchObject({
+        message: expect.stringContaining('بازنگری تصویر'),
+      });
+      expect(mockDocRepo.updateStatus).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('reopenDocument', () => {
+    it('moves an approved document back to under review', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ status: VerificationStatus.APPROVED }),
+      );
+      mockDocRepo.updateStatus.mockResolvedValue(
+        makeDocument({ status: VerificationStatus.UNDER_REVIEW, reviewedBy: 'reviewer-1' }),
+      );
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.APPROVED }),
+      );
+      mockKycRepo.updateStatus.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.UNDER_REVIEW }),
+      );
+
+      const result = await service.reopenDocument('cust-1', 'doc-1', 'reviewer-1');
+
+      expect(mockDocRepo.updateStatus).toHaveBeenCalledWith(
+        'doc-1',
+        VerificationStatus.UNDER_REVIEW,
+        'reviewer-1',
+      );
+      expect(mockKycRepo.updateStatus).toHaveBeenCalledWith(
+        'kyc-1',
+        VerificationStatus.UNDER_REVIEW,
+        'reviewer-1',
+      );
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_DOCUMENT_REOPENED' }),
+      );
+      expect(result.status).toBe(VerificationStatus.UNDER_REVIEW);
+    });
+
+    it('does not reopen a document that is not approved', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(makeDocument({ status: VerificationStatus.PENDING }));
+
+      await expect(service.reopenDocument('cust-1', 'doc-1', 'reviewer-1')).rejects.toMatchObject({
+        message: expect.stringContaining('تأییدشده'),
       });
       expect(mockDocRepo.updateStatus).not.toHaveBeenCalled();
     });

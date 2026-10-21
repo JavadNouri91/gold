@@ -397,7 +397,7 @@ export class OrdersService {
    *   - If SUBMITTED: credit is released atomically
    *
    * Staff path (order.cancel permission):
-   *   - Any state before TRADE_CREATED
+   *   - Any state before the trade is confirmed
    *   - If SUBMITTED (or later with credit reserved): credit released atomically
    *
    * Credit release (§3.5): immediate and automatic, no manual step.

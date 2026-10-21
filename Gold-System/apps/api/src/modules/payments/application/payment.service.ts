@@ -472,16 +472,15 @@ export class PaymentService {
         actorUserId,
       });
 
-      // If fully settled: update Trade status → COMPLETED + Order status → COMPLETED
+      // Full allocation settles the trade's cash record. The order itself
+      // is already executed at trade confirmation; this write only closes
+      // older rows that were left on TRADE_CREATED.
       if (settlement.isSettled()) {
-        // Trade: CONFIRMED → SETTLING → COMPLETED
-        // (We update directly to COMPLETED since full payment = immediate completion)
         await tx.trade.update({
           where: { id: input.tradeId },
           data: { status: 'COMPLETED' },
         });
 
-        // Update related Order to COMPLETED as well
         await tx.order.update({
           where: { id: trade.orderId },
           data: { status: 'COMPLETED' },

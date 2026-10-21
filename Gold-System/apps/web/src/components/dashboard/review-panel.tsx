@@ -1,14 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { ConfirmDialog } from './confirm-dialog';
 import { PermissionGate } from './permission-gate';
 import { internalOrdersApi, internalTradesApi, type ReviewContext } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
-import { orderStatusPresentation, toPersianDigits } from '@/lib/utils';
 
 export function ReviewContextPanel({
   context,
@@ -64,15 +62,7 @@ export function ReviewContextPanel({
       {error ? <Alert variant="error">{error}</Alert> : null}
       <div className="sticky bottom-0 z-10 -mx-4 border-t bg-background/95 px-4 py-3 backdrop-blur md:-mx-6 md:px-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <p className="text-sm font-semibold">اقدام سفارش</p>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
-              <span dir="ltr" className="font-medium text-foreground tabular-nums">
-                {toPersianDigits(context.order.orderNumber)}
-              </span>
-              <StatusBadge {...orderStatusPresentation(context.order.status)} />
-            </div>
-          </div>
+          <p className="text-sm font-semibold">اقدام سفارش</p>
           <div className="flex flex-wrap items-center justify-end gap-2">
             <PermissionGate anyOf="trade.request_revision">
               {canDecide ? (

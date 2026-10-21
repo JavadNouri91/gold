@@ -9,9 +9,11 @@ import { Button } from '@/components/ui/button';
 import { PageSpinner } from '@/components/ui/spinner';
 import { Alert } from '@/components/ui/alert';
 import { StatusBadge } from '@/components/portal/status-badge';
+import { PrintButton } from '@/components/portal/print-button';
 import { OrderRemainingSteps } from '@/components/portal/order-remaining-steps';
 import {
   formatRial,
+  formatWholeMoney,
   formatGrams,
   formatDate,
   formatDateTime,
@@ -81,14 +83,17 @@ export default function OrderDetailPage() {
   const canCancel = CANCELLABLE.includes(order.status);
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="portal-order-print max-w-2xl space-y-6">
+      <p className="hidden border-b border-gray-200 pb-3 text-sm font-bold print:block">
+        سامانه طلا — رسید سفارش
+      </p>
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-3">
         <div>
-          <div className="flex items-center gap-3 mb-1">
+          <div className="mb-1 flex items-center gap-3 print:hidden">
             <button
               onClick={() => router.back()}
-              className="text-muted-foreground hover:text-foreground text-sm"
+              className="text-sm text-muted-foreground hover:text-foreground"
             >
               ← بازگشت
             </button>
@@ -96,7 +101,10 @@ export default function OrderDetailPage() {
           <h1 className="text-2xl font-bold" dir="ltr">{toPersianDigits(order.orderNumber)}</h1>
           <p className="text-sm text-muted-foreground">{formatDate(order.createdAt)}</p>
         </div>
-        <StatusBadge {...orderStatusPresentation(order.status)} />
+        <div className="flex items-center gap-2">
+          <PrintButton />
+          <StatusBadge {...orderStatusPresentation(order.status)} />
+        </div>
       </div>
 
       <Card>
@@ -114,8 +122,8 @@ export default function OrderDetailPage() {
             <DetailRow label="وزن" value={formatGrams(order.weightGrams)} />
             <DetailRow label="عیار" value={formatPurity(order.purityRatio)} />
             <DetailRow
-              label="قیمت لحظه‌ای ثبت سفارش"
-              value={`${formatRial(order.step1BasePrice)} / گرم`}
+              label="قیمت لحظه سفارش"
+              value={`${formatWholeMoney(order.step1BasePrice)} / گرم`}
             />
             {(order.charges ?? []).length > 0 ? (
               (order.charges ?? []).map((charge) => (
@@ -185,7 +193,7 @@ export default function OrderDetailPage() {
               ) : null}
             </dl>
             {activity.tradeId ? (
-              <Link href={`/portal/trades/${activity.tradeId}`} className="mt-3 inline-flex min-h-11 items-center text-sm text-gold-600">
+              <Link href={`/portal/trades/${activity.tradeId}`} className="mt-3 inline-flex min-h-11 items-center text-sm text-gold-600 print:hidden">
                 مشاهده معامله تأییدشده
               </Link>
             ) : null}
@@ -207,7 +215,7 @@ export default function OrderDetailPage() {
                   </div>
                   <div className="flex items-center gap-3">
                     <StatusBadge status={q.status} label={q.status} />
-                    <Link href={`/portal/quotations/${q.id}`}>
+                    <Link href={`/portal/quotations/${q.id}`} className="print:hidden">
                       <Button variant="outline" size="sm">مشاهده</Button>
                     </Link>
                   </div>
@@ -220,7 +228,7 @@ export default function OrderDetailPage() {
 
       {/* Cancel */}
       {canCancel && (
-        <div className="pt-2">
+        <div className="pt-2 print:hidden">
           <Button
             variant="destructive"
             onClick={() => setCancelOpen(true)}
@@ -232,7 +240,7 @@ export default function OrderDetailPage() {
 
       {/* Cancel modal */}
       {cancelOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-center justify-center print:hidden">
           <div
             className="absolute inset-0 bg-black/50"
             onClick={() => setCancelOpen(false)}

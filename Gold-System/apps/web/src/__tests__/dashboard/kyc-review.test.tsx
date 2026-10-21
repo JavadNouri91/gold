@@ -12,8 +12,11 @@ jest.mock('@/lib/internal-api', () => ({
   internalKycApi: {
     getDocuments: jest.fn().mockResolvedValue([]),
     getDocumentFile: jest.fn(() => new Promise(() => undefined)),
+    uploadDocument: jest.fn().mockResolvedValue({}),
+    deleteDocument: jest.fn().mockResolvedValue(undefined),
     replaceDocumentImage: jest.fn(),
     saveProcessedPersonalPhoto: jest.fn(),
+    reopenDocument: jest.fn().mockResolvedValue({}),
     decideDocument: jest.fn().mockResolvedValue({}),
     startReview: jest.fn(),
     decide: jest.fn().mockResolvedValue({}),
@@ -26,6 +29,7 @@ const { internalKycApi } = jest.requireMock('@/lib/internal-api') as {
     getDocuments: jest.Mock;
     getDocumentFile: jest.Mock;
     decideDocument: jest.Mock;
+    reopenDocument: jest.Mock;
     decide: jest.Mock;
   };
 };
@@ -50,6 +54,7 @@ describe('KYC review', () => {
     internalKycApi.getDocuments.mockResolvedValue([]);
     internalKycApi.getDocumentFile.mockImplementation(() => new Promise(() => undefined));
     internalKycApi.decideDocument.mockResolvedValue({});
+    internalKycApi.reopenDocument.mockResolvedValue({});
     internalKycApi.decide.mockResolvedValue({});
   });
 
@@ -91,7 +96,7 @@ describe('KYC review', () => {
     ]);
     render(<KycDocumentList customerId="cust-approved" />);
     expect(await screen.findByRole('button', { name: 'تأیید شده' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'رد مدرک' })).toBeEnabled();
+    expect(screen.getByRole('button', { name: 'رد مدرک' })).toBeDisabled();
   });
 
   it('requires a rejection reason before rejecting one document', async () => {
@@ -112,6 +117,79 @@ describe('KYC review', () => {
         'تصویر کارت ملی خوانا نیست',
       ),
     );
+  });
+
+    it('lets a reviewer upload a missing document for the customer', async () => {
+    signIn(['kyc.review']);
+    const user = userEvent.setup();
+    render(<KycDocumentList customerId="cust-missing" />);
+    await user.click(await screen.findByRole('button', { name: 'عملیات روی کارت ملی' }));
+    await user.click(screen.getByRole('menuitem', { name: 'آپلود مدرک' }));
+    expect(await screen.findByRole('heading', { name: /ارسال روی کارت ملی/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'دوربین' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'گالری' })).toBeInTheDocument();
+    expect(screen.getByLabelText('ناحیه کشیدن و رها کردن فایل مدرک')).toBeInTheDocument();
+  });
+
+  it('does not offer staff upload without kyc.review', async () => {
+    signIn(['kyc.documents.read']);
+    render(<KycDocumentList customerId="cust-readonly" />);
+    await screen.findByText('روی کارت ملی');
+    expect(screen.queryByRole('button', { name: 'عملیات روی کارت ملی' })).not.toBeInTheDocument();
+  });
+
+  it('lets a reviewer edit or delete an approved document from the card menu', async () => {
+    signIn(['kyc.review']);
+    internalKycApi.getDocuments.mockResolvedValue([
+      uploadedDoc({ verificationStatus: 'APPROVED' }),
+    ]);
+    const user = userEvent.setup();
+    render(<KycDocumentList customerId="cust-approved-edit" />);
+    await user.click(await screen.findByRole('button', { name: 'عملیات روی کارت ملی' }));
+    expect(screen.getByRole('menuitem', { name: 'بازنگری تصویر' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'ویرایش تصویر' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'بارگذاری مجدد' })).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'حذف مدرک' })).toBeInTheDocument();
+  });
+
+  it('unlocks reject after staff reopens an approved document', async () => {
+    signIn(['kyc.review']);
+    internalKycApi.getDocuments.mockResolvedValue([
+      uploadedDoc({ verificationStatus: 'APPROVED' }),
+    ]);
+    internalKycApi.reopenDocument.mockImplementation(async () => {
+      internalKycApi.getDocuments.mockResolvedValue([
+        uploadedDoc({ verificationStatus: 'UNDER_REVIEW' }),
+      ]);
+      return uploadedDoc({ verificationStatus: 'UNDER_REVIEW' });
+    });
+    const user = userEvent.setup();
+    render(<KycDocumentList customerId="cust-reopen" />);
+    expect(await screen.findByRole('button', { name: 'رد مدرک' })).toBeDisabled();
+    await user.click(screen.getByRole('button', { name: 'عملیات روی کارت ملی' }));
+    await user.click(screen.getByRole('menuitem', { name: 'بازنگری تصویر' }));
+    await user.click(screen.getByRole('button', { name: 'بازنگری تصویر' }));
+    await waitFor(() =>
+      expect(internalKycApi.reopenDocument).toHaveBeenCalledWith('cust-reopen', 'doc-1'),
+    );
+    expect(await screen.findByRole('button', { name: 'رد مدرک' })).toBeEnabled();
+  });
+
+  it('offers upload again after a document is deleted', async () => {
+    signIn(['kyc.review']);
+    internalKycApi.getDocuments.mockResolvedValue([uploadedDoc()]);
+    internalKycApi.deleteDocument.mockImplementation(async () => {
+      internalKycApi.getDocuments.mockResolvedValue([]);
+    });
+    const user = userEvent.setup();
+    render(<KycDocumentList customerId="cust-deleted" />);
+    await user.click(await screen.findByRole('button', { name: 'عملیات روی کارت ملی' }));
+    await user.click(screen.getByRole('menuitem', { name: 'حذف مدرک' }));
+    await user.click(screen.getByRole('button', { name: 'حذف مدرک' }));
+    await waitFor(() => expect(internalKycApi.deleteDocument).toHaveBeenCalledWith('cust-deleted', 'doc-1'));
+    const uploads = await screen.findAllByRole('button', { name: 'آپلود مدرک' });
+    await user.click(uploads[0]!);
+    expect(await screen.findByRole('heading', { name: /ارسال روی کارت ملی/ })).toBeInTheDocument();
   });
 
   it('lays out documents in four desktop columns', async () => {
@@ -136,12 +214,13 @@ describe('KYC review', () => {
     ]);
     const user = userEvent.setup();
     render(<KycDocumentList customerId="cust-photo" />);
-    const editors = await screen.findAllByRole('button', { name: 'ویرایش تصویر' });
-    expect(editors).toHaveLength(2);
-    await user.click(editors[0]!);
+    await user.click(await screen.findByRole('button', { name: 'عملیات روی کارت ملی' }));
+    await user.click(screen.getByRole('menuitem', { name: 'ویرایش تصویر' }));
+    expect(await screen.findByRole('button', { name: 'چرخش چپ' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'حذف پس‌زمینه' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'انصراف' }));
-    await user.click(editors[1]!);
+    await user.keyboard('{Escape}');
+    await user.click(screen.getByRole('button', { name: 'عملیات عکس پرسنلی' }));
+    await user.click(screen.getByRole('menuitem', { name: 'ویرایش تصویر' }));
     expect(await screen.findByRole('button', { name: 'حذف پس‌زمینه' })).toBeInTheDocument();
   });
 });

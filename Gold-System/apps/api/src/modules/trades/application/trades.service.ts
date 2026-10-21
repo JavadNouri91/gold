@@ -57,7 +57,9 @@ export class TradesService {
    *      b. Generate TRD-XXXXXX trade number
    *      c. Create Trade (CONFIRMED) + TradeItems from Quotation snapshot
    *      d. Consume credit: reserved → consumed (§3.3, SELECT FOR UPDATE)
-   *      e. Transition Order: APPROVED → TRADE_CREATED
+   *      e. Transition Order: APPROVED → COMPLETED
+   *         Confirmation spends the reserved balance and posts the ledger,
+   *         so the order is executed here. Cash allocation does not hold it open.
    *      f. Transition Quotation: ACTIVE → CONVERTED
    *   5. Audit: TRADE_CREATED, ORDER_STATUS_CHANGED, QUOTATION_CONVERTED
    *
@@ -213,10 +215,12 @@ export class TradesService {
         });
       }
 
-      // Transition Order: APPROVED → TRADE_CREATED
+      // Confirmation is execution: reserved balance is consumed and the
+      // ledger is posted in this same transaction. The order does not wait
+      // for a later cash allocation.
       await tx.order.update({
         where: { id: orderId },
-        data: { status: 'TRADE_CREATED', updatedAt: new Date() },
+        data: { status: 'COMPLETED', updatedAt: new Date() },
       });
 
       // Transition Quotation: ACTIVE → CONVERTED
@@ -287,7 +291,7 @@ export class TradesService {
       entityType: 'Order',
       entityId: orderId,
       before: { status: 'APPROVED' },
-      after: { status: 'TRADE_CREATED', tradeId: trade.id },
+      after: { status: 'COMPLETED', tradeId: trade.id },
     });
 
     await this.audit.log({

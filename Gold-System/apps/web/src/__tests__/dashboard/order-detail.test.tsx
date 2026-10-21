@@ -9,12 +9,12 @@ jest.mock('@/lib/auth', () => ({
 
 jest.mock('@/lib/internal-api', () => ({
   assignmentsApi: { reviewContext: jest.fn() },
-  internalOrdersApi: { getById: jest.fn(), quotations: jest.fn() },
+  internalOrdersApi: { getById: jest.fn() },
 }));
 
 const api = jest.requireMock('@/lib/internal-api') as {
   assignmentsApi: { reviewContext: jest.Mock };
-  internalOrdersApi: { getById: jest.Mock; quotations: jest.Mock };
+  internalOrdersApi: { getById: jest.Mock };
 };
 
 describe('dashboard order detail pricing', () => {
@@ -48,8 +48,6 @@ describe('dashboard order detail pricing', () => {
         },
       ],
     });
-    api.internalOrdersApi.quotations.mockResolvedValue([]);
-
     render(<OrderDetailPage params={{ id: 'ord-1' }} />);
 
     expect(await screen.findByText('قیمت هر گرم')).toBeInTheDocument();
@@ -87,8 +85,6 @@ describe('dashboard order detail pricing', () => {
         },
       ],
     });
-    api.internalOrdersApi.quotations.mockResolvedValue([]);
-
     render(<OrderDetailPage params={{ id: 'ord-2' }} />);
 
     expect(await screen.findByText('کارمزد خرید (۲٪)')).toBeInTheDocument();

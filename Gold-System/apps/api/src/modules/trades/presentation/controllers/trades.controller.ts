@@ -55,7 +55,7 @@ export class TradesController {
    * Atomically:
    *   1. Creates Trade (CONFIRMED) from locked Quotation terms
    *   2. Moves credit: reserved → consumed (§3.3)
-   *   3. Transitions Order: APPROVED → TRADE_CREATED
+   *   3. Transitions Order: APPROVED → COMPLETED
    *   4. Transitions Quotation: ACTIVE → CONVERTED
    *
    * Concurrency: duplicate confirmations are prevented by:

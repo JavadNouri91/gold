@@ -8,6 +8,7 @@ interface ModalProps {
   open: boolean;
   onClose: () => void;
   title?: string;
+  titleClassName?: string;
   children: React.ReactNode;
   className?: string;
   rootClassName?: string;
@@ -19,7 +20,15 @@ function prefersReducedMotion() {
   return window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
 
-export function Modal({ open, onClose, title, children, className, rootClassName }: ModalProps) {
+export function Modal({
+  open,
+  onClose,
+  title,
+  titleClassName,
+  children,
+  className,
+  rootClassName,
+}: ModalProps) {
   const [ready, setReady] = React.useState(false);
   const [mounted, setMounted] = React.useState(open);
   const [closing, setClosing] = React.useState(false);
@@ -86,7 +95,7 @@ export function Modal({ open, onClose, title, children, className, rootClassName
         )}
       >
         {title && (
-          <h2 id="modal-title" className="text-lg font-semibold mb-4">
+          <h2 id="modal-title" className={cn('mb-4 text-lg font-semibold', titleClassName)}>
             {title}
           </h2>
         )}

@@ -13,6 +13,7 @@ interface KycUploadDialogProps {
   submitting: boolean;
   serverError: string | null;
   initialFile?: File | null;
+  allowBackgroundRemoval?: boolean;
   onClose: () => void;
   onSubmit: (file: File) => void;
 }
@@ -26,6 +27,7 @@ export function KycUploadDialog({
   submitting,
   serverError,
   initialFile = null,
+  allowBackgroundRemoval = false,
   onClose,
   onSubmit,
 }: KycUploadDialogProps) {
@@ -183,6 +185,7 @@ export function KycUploadDialog({
         <KycImageEditor
           file={sourceFile}
           maxBytes={policy.maxBytes}
+          allowBackgroundRemoval={allowBackgroundRemoval}
           onUseOriginal={() => showReady(sourceFile)}
           onApply={showReady}
           onError={setError}

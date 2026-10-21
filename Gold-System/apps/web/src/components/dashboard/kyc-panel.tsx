@@ -1,14 +1,12 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
-import { CheckCircle2, Clock, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Expand, Pencil, XCircle } from 'lucide-react';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Modal } from '@/components/ui/modal';
-import { KycImageEditor } from '@/components/portal/kyc/kyc-image-editor';
 import { ConfirmDialog } from './confirm-dialog';
 import { ApiErrorState } from './states';
 import { PermissionGate } from './permission-gate';
@@ -20,6 +18,8 @@ import {
 import { ApiClientError } from '@/lib/api';
 import { kycDocumentLabel, requiredKycDocumentTypes } from '@/lib/kyc-documents';
 import { PERSONAL_PHOTO_TYPE } from '@/lib/kyc-portrait-matte';
+import { KycUploadDialog } from '@/components/portal/kyc/kyc-upload-dialog';
+import { uploadErrorMessage } from '@/lib/kyc-present';
 import {
   KYC_STATUS_LABELS,
   cn,
@@ -32,6 +32,10 @@ const CHECKERBOARD =
   'bg-[length:16px_16px] bg-[linear-gradient(45deg,#e5e7eb_25%,transparent_25%),linear-gradient(-45deg,#e5e7eb_25%,transparent_25%),linear-gradient(45deg,transparent_75%,#e5e7eb_75%),linear-gradient(-45deg,transparent_75%,#e5e7eb_75%)] bg-[position:0_0,0_8px,8px_-8px,-8px_0]';
 
 const MAX_KYC_IMAGE_BYTES = 10 * 1024 * 1024;
+const STAFF_KYC_UPLOAD_POLICY = {
+  maxBytes: MAX_KYC_IMAGE_BYTES,
+  mimeTypes: ['image/jpeg', 'image/png', 'image/webp', 'application/pdf'],
+};
 
 export type KycDocumentStats = {
   approved: number;
@@ -178,6 +182,7 @@ export function KycDocumentList({
           <DocumentCard
             key={item.value}
             customerId={customerId}
+            documentType={item.value}
             label={item.label}
             required
             document={latestByType.get(item.value)}
@@ -195,6 +200,7 @@ export function KycDocumentList({
           <DocumentCard
             key={doc.id}
             customerId={customerId}
+            documentType={doc.documentType}
             label={kycDocumentLabel(doc.documentType)}
             document={doc}
             onChanged={() => void mutate()}
@@ -237,6 +243,7 @@ function documentCardChrome(status?: string) {
 
 function DocumentCard({
   customerId,
+  documentType,
   label,
   document,
   required = false,
@@ -244,6 +251,7 @@ function DocumentCard({
   onChanged,
 }: {
   customerId: string;
+  documentType: string;
   label: string;
   document?: KycDocumentRecord;
   required?: boolean;
@@ -252,6 +260,8 @@ function DocumentCard({
 }) {
   const approved = document?.verificationStatus === 'APPROVED';
   const rejected = document?.verificationStatus === 'REJECTED';
+  const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
+  const [launchUpload, setLaunchUpload] = useState(0);
 
   return (
     <article
@@ -260,20 +270,34 @@ function DocumentCard({
         documentCardChrome(document?.verificationStatus),
       )}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-2">
         <div className="min-w-0 space-y-1">
           <h4 className="font-semibold text-slate-900">{label}</h4>
           <p className="text-xs text-muted-foreground">{required ? 'الزامی' : 'اضافی'}</p>
         </div>
-        {document ? (
-          <StatusBadge
-            status={document.verificationStatus}
-            label={statusLabel(KYC_STATUS_LABELS, document.verificationStatus)}
-          />
-        ) : (
-          <StatusBadge status="PENDING" label="ارسال نشده" />
-        )}
+        <div className="flex shrink-0 items-start gap-1">
+          {document ? (
+            <StatusBadge
+              status={document.verificationStatus}
+              label={statusLabel(KYC_STATUS_LABELS, document.verificationStatus)}
+            />
+          ) : (
+            <StatusBadge status="PENDING" label="ارسال نشده" />
+          )}
+          <PermissionGate anyOf="kyc.review">
+            <StaffDocumentUpload
+              customerId={customerId}
+              documentType={documentType}
+              label={label}
+              kycDocument={document}
+              launchUpload={launchUpload}
+              onNotice={setNotice}
+              onUploaded={onChanged}
+            />
+          </PermissionGate>
+        </div>
       </div>
+      {notice ? <Alert variant={notice.tone}>{notice.text}</Alert> : null}
 
       {document ? (
         <>
@@ -281,16 +305,10 @@ function DocumentCard({
             customerId={customerId}
             document={document}
             label={label}
-            onChanged={onChanged}
           />
-          <div className="space-y-1 text-xs text-muted-foreground">
-            {document.fileName ? (
-              <p className="truncate" title={document.fileName} dir="ltr">
-                {document.fileName}
-              </p>
-            ) : null}
-            <p>تاریخ ارسال: {formatDateTime(document.createdAt)}</p>
-          </div>
+          <p className="text-xs text-muted-foreground">
+            تاریخ ارسال: {formatDateTime(document.createdAt)}
+          </p>
           {rejected && document.rejectionReason ? (
             <div className="rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
               دلیل رد: {document.rejectionReason}
@@ -313,7 +331,17 @@ function DocumentCard({
                     تأیید مدرک
                   </Button>
                 )}
-                <Button size="sm" variant="destructive" onClick={() => onDecide('REJECT')}>
+                <Button
+                  size="sm"
+                  variant="destructive"
+                  disabled={approved}
+                  title={
+                    approved
+                      ? 'برای رد مدرک تأییدشده، از منوی ویرایش «بازنگری تصویر» را بزنید.'
+                      : undefined
+                  }
+                  onClick={() => onDecide('REJECT')}
+                >
                   رد مدرک
                 </Button>
               </div>
@@ -321,11 +349,295 @@ function DocumentCard({
           </div>
         </>
       ) : (
-        <div className="flex flex-1 flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white/70 px-3 py-10 text-center">
+        <div className="flex flex-1 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-200 bg-white/70 px-3 py-10 text-center">
           <p className="text-sm text-muted-foreground">این مدرک هنوز ارسال نشده است.</p>
+          <PermissionGate anyOf="kyc.review">
+            <Button size="sm" onClick={() => setLaunchUpload((current) => current + 1)}>
+              آپلود مدرک
+            </Button>
+          </PermissionGate>
         </div>
       )}
     </article>
+  );
+}
+
+function StaffDocumentUpload({
+  customerId,
+  documentType,
+  label,
+  kycDocument,
+  launchUpload = 0,
+  onNotice,
+  onUploaded,
+}: {
+  customerId: string;
+  documentType: string;
+  label: string;
+  kycDocument?: KycDocumentRecord;
+  launchUpload?: number;
+  onNotice: (notice: { tone: 'success' | 'error'; text: string } | null) => void;
+  onUploaded: () => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [open, setOpen] = useState(false);
+  const [seedFile, setSeedFile] = useState<File | null>(null);
+  const [editExisting, setEditExisting] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmReopen, setConfirmReopen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [reopening, setReopening] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const isImage = Boolean(kycDocument?.fileMimeType?.startsWith('image/'));
+  const personalPhoto = documentType === PERSONAL_PHOTO_TYPE;
+
+  useEffect(() => {
+    setEditExisting(false);
+    setSeedFile(null);
+    setConfirmDelete(false);
+    setConfirmReopen(false);
+    setOpen(false);
+  }, [kycDocument?.id]);
+
+  useEffect(() => {
+    if (!launchUpload) return;
+    setMenuOpen(false);
+    setError(null);
+    onNotice(null);
+    setSeedFile(null);
+    setEditExisting(false);
+    setOpen(true);
+  }, [launchUpload]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onPointer = (event: MouseEvent) => {
+      if (!rootRef.current?.contains(event.target as Node)) setMenuOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onPointer);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onPointer);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  const close = () => {
+    if (submitting) return;
+    setOpen(false);
+    setSeedFile(null);
+    setEditExisting(false);
+    setError(null);
+  };
+
+  const openPicker = () => {
+    setMenuOpen(false);
+    setError(null);
+    onNotice(null);
+    setSeedFile(null);
+    setEditExisting(false);
+    setOpen(true);
+  };
+
+  const openEditor = async () => {
+    if (!kycDocument) return;
+    setMenuOpen(false);
+    setError(null);
+    onNotice(null);
+    setLoading(true);
+    try {
+      const blob = await internalKycApi.getDocumentFile(customerId, kycDocument.id);
+      const name = kycDocument.fileName?.replace(/\.[^.]+$/, '') || 'document';
+      const extension = blob.type === 'image/png' ? 'png' : 'jpg';
+      setSeedFile(new File([blob], `${name}.${extension}`, { type: blob.type || 'image/jpeg' }));
+      setEditExisting(true);
+      setOpen(true);
+    } catch {
+      const text = 'بارگذاری تصویر برای ویرایش انجام نشد.';
+      setError(text);
+      onNotice({ tone: 'error', text });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const send = async (file: File) => {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const personalCutout = personalPhoto && file.type === 'image/png' && Boolean(kycDocument) && editExisting;
+      if (personalCutout && kycDocument) {
+        await internalKycApi.saveProcessedPersonalPhoto(customerId, kycDocument.id, file);
+        onNotice({
+          tone: 'success',
+          text: 'عکس بدون پس‌زمینه ذخیره شد. نسخه اصلی برای بررسی باقی ماند.',
+        });
+      } else if (editExisting && kycDocument && file.type.startsWith('image/')) {
+        await internalKycApi.replaceDocumentImage(customerId, kycDocument.id, file);
+        onNotice({
+          tone: 'success',
+          text: 'تصویر ویرایش‌شده ذخیره شد. نسخه اصلی برای بازرسی نگه داشته شده است.',
+        });
+      } else {
+        await internalKycApi.uploadDocument(customerId, documentType, file);
+        onNotice({
+          tone: 'success',
+          text: kycDocument ? 'مدرک جایگزین ارسال شد.' : 'مدرک ارسال شد.',
+        });
+      }
+      setOpen(false);
+      setSeedFile(null);
+      setEditExisting(false);
+      onUploaded();
+    } catch (err) {
+      const text = uploadErrorMessage(err);
+      setError(text);
+      onNotice({ tone: 'error', text });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!kycDocument) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await internalKycApi.deleteDocument(customerId, kycDocument.id);
+      setConfirmDelete(false);
+      onNotice({ tone: 'success', text: 'مدرک حذف شد.' });
+      onUploaded();
+    } catch (err) {
+      const text = err instanceof ApiClientError ? err.message : 'حذف مدرک انجام نشد.';
+      setError(text);
+      onNotice({ tone: 'error', text });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const reopen = async () => {
+    if (!kycDocument) return;
+    setReopening(true);
+    setError(null);
+    try {
+      await internalKycApi.reopenDocument(customerId, kycDocument.id);
+      setConfirmReopen(false);
+      onNotice({ tone: 'success', text: 'مدرک برای بازنگری باز شد. اکنون می‌توانید آن را رد کنید.' });
+      onUploaded();
+    } catch (err) {
+      const text = err instanceof ApiClientError ? err.message : 'بازنگری مدرک انجام نشد.';
+      setError(text);
+      onNotice({ tone: 'error', text });
+    } finally {
+      setReopening(false);
+    }
+  };
+
+  return (
+    <div ref={rootRef} className="relative">
+      <Button
+        type="button"
+        size="icon"
+        variant="ghost"
+        className="h-8 w-8"
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label={`عملیات ${label}`}
+        isLoading={loading}
+        disabled={submitting || deleting || reopening}
+        onClick={() => setMenuOpen((current) => !current)}
+      >
+        <Pencil className="h-4 w-4" />
+      </Button>
+      {menuOpen ? (
+        <div
+          role="menu"
+          className="absolute left-0 top-full z-20 mt-1 w-44 rounded-lg border bg-background p-1 shadow-lg"
+        >
+          {kycDocument?.verificationStatus === 'APPROVED' ? (
+            <button
+              role="menuitem"
+              type="button"
+              className="block w-full rounded-md px-3 py-2 text-right text-sm hover:bg-muted"
+              onClick={() => {
+                setMenuOpen(false);
+                setConfirmReopen(true);
+              }}
+            >
+              بازنگری تصویر
+            </button>
+          ) : null}
+          {kycDocument && isImage ? (
+            <button
+              role="menuitem"
+              type="button"
+              className="block w-full rounded-md px-3 py-2 text-right text-sm hover:bg-muted"
+              onClick={() => void openEditor()}
+            >
+              ویرایش تصویر
+            </button>
+          ) : null}
+          <button
+            role="menuitem"
+            type="button"
+            className="block w-full rounded-md px-3 py-2 text-right text-sm hover:bg-muted"
+            onClick={openPicker}
+          >
+            {kycDocument ? 'بارگذاری مجدد' : 'آپلود مدرک'}
+          </button>
+          {kycDocument ? (
+            <button
+              role="menuitem"
+              type="button"
+              className="block w-full rounded-md px-3 py-2 text-right text-sm text-rose-700 hover:bg-rose-50"
+              onClick={() => {
+                setMenuOpen(false);
+                setConfirmDelete(true);
+              }}
+            >
+              حذف مدرک
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      <KycUploadDialog
+        open={open}
+        label={label}
+        policy={STAFF_KYC_UPLOAD_POLICY}
+        submitting={submitting}
+        serverError={error}
+        initialFile={seedFile}
+        allowBackgroundRemoval={personalPhoto}
+        onClose={close}
+        onSubmit={(file) => void send(file)}
+      />
+      <ConfirmDialog
+        open={confirmDelete}
+        title={`حذف ${label}`}
+        message="این مدرک از پرونده مشتری حذف می‌شود. در صورت نیاز می‌توانید دوباره آن را بارگذاری کنید."
+        confirmLabel="حذف مدرک"
+        destructive
+        isLoading={deleting}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => void remove()}
+      />
+      <ConfirmDialog
+        open={confirmReopen}
+        title={`بازنگری ${label}`}
+        message="این مدرک از حالت تأیید خارج می‌شود تا بتوانید دوباره بررسی یا رد کنید."
+        confirmLabel="بازنگری تصویر"
+        isLoading={reopening}
+        onClose={() => setConfirmReopen(false)}
+        onConfirm={() => void reopen()}
+      />
+    </div>
   );
 }
 
@@ -333,12 +645,10 @@ function DocumentPreview({
   customerId,
   document,
   label,
-  onChanged,
 }: {
   customerId: string;
   document: KycDocumentRecord;
   label: string;
-  onChanged: () => void;
 }) {
   const isPersonalPhoto = document.documentType === PERSONAL_PHOTO_TYPE;
   const [url, setUrl] = useState<string | null>(null);
@@ -419,22 +729,25 @@ function DocumentPreview({
 
   return (
     <div className="space-y-2">
-      {preview}
-      <div className="space-y-2">
-        <div className="flex flex-wrap gap-2">
-          {url || document.signedUrl ? (
-            <Button size="sm" variant="outline" asChild>
-              <a href={url ?? document.signedUrl} target="_blank" rel="noreferrer">
-                مشاهده تصویر کامل
-              </a>
-            </Button>
-          ) : null}
-          {isImage ? (
-            <PermissionGate anyOf="kyc.review">
-              <StaffImageEditor customerId={customerId} document={document} onSaved={onChanged} />
-            </PermissionGate>
-          ) : null}
-        </div>
+      <div className="relative">
+        {preview}
+        {url || document.signedUrl ? (
+          <Button
+            size="icon"
+            variant="outline"
+            className="absolute left-2 top-2 h-8 w-8 bg-white/95 shadow-sm"
+            asChild
+          >
+            <a
+              href={url ?? document.signedUrl}
+              target="_blank"
+              rel="noreferrer"
+              aria-label="مشاهده تصویر کامل"
+            >
+              <Expand className="h-4 w-4" aria-hidden />
+            </a>
+          </Button>
+        ) : null}
       </div>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         {document.hasOriginalFile ? (
@@ -462,105 +775,6 @@ function DocumentPreview({
           </button>
         ) : null}
       </div>
-    </div>
-  );
-}
-
-function StaffImageEditor({
-  customerId,
-  document,
-  onSaved,
-}: {
-  customerId: string;
-  document: KycDocumentRecord;
-  onSaved: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [source, setSource] = useState<File | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
-
-  const start = async () => {
-    setError(null);
-    setMessage(null);
-    setLoading(true);
-    try {
-      const blob = await internalKycApi.getDocumentFile(customerId, document.id);
-      const name = document.fileName?.replace(/\.[^.]+$/, '') || 'document';
-      setSource(new File([blob], `${name}.jpg`, { type: blob.type || 'image/jpeg' }));
-      setOpen(true);
-    } catch {
-      setError('بارگذاری تصویر برای ویرایش انجام نشد.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const save = async (file: File) => {
-    setSaving(true);
-    setError(null);
-    try {
-      const personalCutout = document.documentType === PERSONAL_PHOTO_TYPE && file.type === 'image/png';
-      if (personalCutout) {
-        await internalKycApi.saveProcessedPersonalPhoto(customerId, document.id, file);
-        setMessage('عکس بدون پس‌زمینه ذخیره شد. نسخه اصلی برای بررسی باقی ماند.');
-      } else {
-        await internalKycApi.replaceDocumentImage(customerId, document.id, file);
-        setMessage('تصویر ویرایش‌شده ذخیره شد. نسخه اصلی برای بازرسی نگه داشته شده است.');
-      }
-      setOpen(false);
-      setSource(null);
-      onSaved();
-    } catch (err) {
-      setError(err instanceof ApiClientError ? err.message : 'ذخیره تصویر ویرایش‌شده انجام نشد.');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="contents">
-      <Button size="sm" variant="outline" isLoading={loading} disabled={saving} onClick={() => void start()}>
-        ویرایش تصویر
-      </Button>
-      {message ? (
-        <div className="basis-full">
-          <Alert variant="success">{message}</Alert>
-        </div>
-      ) : null}
-      {error ? (
-        <div className="basis-full">
-          <Alert variant="error">{error}</Alert>
-        </div>
-      ) : null}
-      <Modal
-        open={open && source !== null}
-        onClose={() => {
-          if (saving) return;
-          setOpen(false);
-          setSource(null);
-        }}
-        title="ویرایش تصویر مدرک"
-        className="max-w-lg"
-      >
-        {source ? (
-          <KycImageEditor
-            file={source}
-            maxBytes={MAX_KYC_IMAGE_BYTES}
-            skipLabel="انصراف"
-            applyLabel={saving ? 'در حال ذخیره…' : 'ذخیره تصویر ویرایش‌شده'}
-            allowBackgroundRemoval={document.documentType === PERSONAL_PHOTO_TYPE}
-            onUseOriginal={() => {
-              setOpen(false);
-              setSource(null);
-            }}
-            onApply={(file) => void save(file)}
-            onError={setError}
-          />
-        ) : null}
-      </Modal>
     </div>
   );
 }

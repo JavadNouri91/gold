@@ -186,6 +186,36 @@ export class KycController {
     );
   }
 
+  @Post(':customerId/documents')
+  @RequirePermissions('kyc.review')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiConsumes('multipart/form-data')
+  @ApiOperation({ summary: 'Upload a KYC document on behalf of a customer (staff)' })
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: MAX_KYC_FILE_SIZE_BYTES },
+    }),
+  )
+  submitStaffDocument(
+    @CurrentUser() user: CurrentUserData,
+    @Param('customerId') customerId: string,
+    @Body() dto: SubmitDocumentDto,
+    @UploadedFile() file: Express.Multer.File | undefined,
+    @Req() req: Request,
+  ) {
+    if (!file || file.size <= 0) {
+      throw new BadRequestException('فایل انتخاب نشده است.');
+    }
+    normalizeUploadedMime(file);
+    return this.kyc.submitStaffDocument({
+      customerId,
+      documentType: dto.documentType,
+      file,
+      actorId: requireActorId(user),
+      ipAddress: req.ip ?? undefined,
+    });
+  }
+
   @Get(':customerId/documents')
   @RequirePermissions('kyc.documents.read')
   @ApiOperation({ summary: 'List a customer’s KYC documents (staff)' })
@@ -201,6 +231,24 @@ export class KycController {
       withUrls === 'true' || withUrls === '1',
       req.ip ?? undefined,
     );
+  }
+
+  @Delete(':customerId/documents/:documentId')
+  @RequirePermissions('kyc.review')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a customer KYC document (staff), including approved files' })
+  deleteStaffDocument(
+    @CurrentUser() user: CurrentUserData,
+    @Param('customerId') customerId: string,
+    @Param('documentId') documentId: string,
+    @Req() req: Request,
+  ) {
+    return this.kyc.deleteStaffDocument({
+      customerId,
+      documentId,
+      actorId: requireActorId(user),
+      ipAddress: req.ip ?? undefined,
+    });
   }
 
   @Get(':customerId/documents/:documentId/file')
@@ -284,6 +332,24 @@ export class KycController {
       customerId,
       documentId,
       file,
+      requireActorId(user),
+      req.ip ?? undefined,
+    );
+  }
+
+  @Post(':customerId/documents/:documentId/reopen')
+  @RequirePermissions('kyc.review')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reopen an approved KYC document for review (staff)' })
+  reopenDocument(
+    @CurrentUser() user: CurrentUserData,
+    @Param('customerId') customerId: string,
+    @Param('documentId') documentId: string,
+    @Req() req: Request,
+  ) {
+    return this.kyc.reopenDocument(
+      customerId,
+      documentId,
       requireActorId(user),
       req.ip ?? undefined,
     );

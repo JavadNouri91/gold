@@ -42,13 +42,13 @@ export default function PortalLayout({ children }: { children: React.ReactNode }
   if (!isAuthenticated) return null;
 
   return (
-    <div className="flex min-h-screen overflow-x-hidden bg-background">
+    <div className="flex min-h-screen overflow-x-hidden bg-background print:block print:bg-white">
       <Suspense fallback={null}>
         <DashboardSidebar open={menuOpen} onClose={() => setMenuOpen(false)} />
       </Suspense>
       <div className="flex min-w-0 flex-1 flex-col">
         <DashboardHeader onMenu={() => setMenuOpen(true)} />
-        <main className="min-w-0 flex-1 overflow-x-hidden p-4 pb-24 md:p-6 md:pb-24 lg:pb-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-hidden p-4 pb-24 md:p-6 md:pb-24 lg:pb-6 print:overflow-visible print:bg-white print:p-0">{children}</main>
         <MobileBottomNavigation />
       </div>
     </div>

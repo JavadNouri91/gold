@@ -211,7 +211,30 @@ html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
   }
   body[data-print-quotation] .quotation-print-root {
     max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
     box-shadow: none !important;
+    border: none !important;
+    background: white !important;
     padding: 0 !important;
+  }
+  body[data-print-quotation] .quotation-deco {
+    display: none !important;
+  }
+  body[data-print-quotation] .quotation-sheet {
+    break-inside: avoid;
+  }
+
+  .portal-order-print {
+    max-width: none !important;
+    padding-bottom: 0 !important;
+  }
+
+  .portal-order-print section,
+  .portal-order-print article,
+  .portal-order-print .rounded-xl,
+  .portal-order-print .rounded-2xl {
+    break-inside: avoid;
+    box-shadow: none !important;
   }
 }

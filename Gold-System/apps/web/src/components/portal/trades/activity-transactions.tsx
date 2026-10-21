@@ -18,10 +18,10 @@ export function transactionStatusLabel(status: string): string {
 }
 
 function statusTone(status: string): { className: string; Icon: typeof CheckCircle2 } {
-  if (['COMPLETED', 'SETTLED', 'SUCCEEDED'].includes(status)) {
+  if (['COMPLETED', 'SETTLED', 'SUCCEEDED', 'TRADE_CREATED', 'SETTLING'].includes(status)) {
     return { className: 'bg-green-100 text-green-800', Icon: CheckCircle2 };
   }
-  if (['APPROVED', 'CONFIRMED', 'TRADE_CREATED'].includes(status)) {
+  if (['APPROVED', 'CONFIRMED'].includes(status)) {
     return { className: 'bg-emerald-100 text-emerald-800', Icon: CheckCircle2 };
   }
   if (['CANCELLED', 'REJECTED', 'REVERSED', 'FAILED'].includes(status)) {

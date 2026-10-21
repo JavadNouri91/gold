@@ -29,6 +29,7 @@ import {
   formatCountdown,
   formatGroupedPersianInteger,
   formatMoney,
+  feeLineLabel,
   formatPurity,
   formatRelativeTime,
   formatWeight,
@@ -39,6 +40,7 @@ import {
 } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { OrderRemainingSteps } from '@/components/portal/order-remaining-steps';
+import { PrintButton } from '@/components/portal/print-button';
 import { readAvailableCredit } from '@/lib/credit-view';
 import { purchaseErrorMessage } from './purchase-errors';
 import {
@@ -481,7 +483,10 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   const pricePending = isPositiveWeight(grams) && !inputsMatch;
 
   return (
-    <div className="mx-auto w-full min-w-0 max-w-6xl pb-44 lg:pb-0">
+    <div className="portal-order-print mx-auto w-full min-w-0 max-w-6xl pb-44 lg:pb-0">
+      <p className="mb-4 hidden border-b border-gray-200 pb-3 text-sm font-bold text-gray-900 print:block">
+        سامانه طلا — {selling ? 'پیش‌فاکتور فروش' : 'پیش‌فاکتور خرید'}
+      </p>
       <TradeSideTabs side={side} />
       <LivePriceCard
         loading={price.isLoading && !price.data}
@@ -498,7 +503,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
       />
 
       {error ? (
-        <p role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#DC2626]">
+        <p role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#DC2626] print:hidden">
           {error}
         </p>
       ) : null}
@@ -506,8 +511,8 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
       {kycBlocked ? <KycBlock /> : null}
       {accountBlocked ? <AccountBlock /> : null}
 
-      <div className="mt-4 grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm md:p-6">
+      <div className="mt-4 grid grid-cols-1 items-start gap-4 print:mt-0 print:grid-cols-1 lg:grid-cols-2">
+        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm print:hidden md:p-6">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <h2 className="text-base font-bold text-gray-900">
@@ -819,7 +824,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
           ) : null}
 
           {activeQuote && !calculating && creditShort && shortfall ? (
-            <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm">
+            <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm print:hidden">
               <p className="font-medium">ارزش این وزن از دارایی ریالی شما بیشتر است.</p>
               <p className="mt-1">کمبود: {formatWholeToman(shortfall)}</p>
               <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-amber-700">
@@ -828,7 +833,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
             </div>
           ) : null}
           {activeQuote && !calculating && goldShort && goldShortfall ? (
-            <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm">
+            <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm print:hidden">
               <p className="font-medium">وزن انتخاب‌شده از موجودی طلای شما بیشتر است.</p>
               <p className="mt-1">کمبود: {formatWeight(goldShortfall)}</p>
               <Link href="/portal/assets" className="mt-2 inline-flex h-11 items-center font-medium text-amber-700">
@@ -853,6 +858,10 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
       />
     </div>
   );
+}
+
+function formatSpotPerGram(rial: string | null | undefined): string {
+  return `${formatWholeToman(rial)} / گرم`;
 }
 
 /** Whole toman digits (Latin) from a rial amount for the buy amount field. */
@@ -983,22 +992,26 @@ function BalanceSlider({
   );
 }
 
-function feeLabel(view: PricingView, selling?: boolean): string {
-  const feeParts: string[] = [];
-  if (view.charges.length === 1) {
-    feeParts.push(formatWholeToman(view.charges[0]!.amount));
-  } else if (view.charges.length > 1) {
-    for (const charge of view.charges) {
-      feeParts.push(
-        `${charge.labelFa || (selling ? 'کارمزد فروش' : 'کارمزد خرید')}: ${formatWholeToman(charge.amount)}`,
-      );
-    }
-  } else if (view.feeTotalRial && !isZeroDecimal(view.feeTotalRial)) {
-    feeParts.push(formatWholeToman(view.feeTotalRial));
+function feeLines(view: PricingView, selling?: boolean): { key: string; label: string; value: string }[] {
+  if (view.charges.length > 0) {
+    return view.charges.map((charge) => ({
+      key: `${charge.code}-${charge.side}`,
+      label: feeLineLabel(
+        charge.labelFa || (selling ? 'کارمزد فروش' : 'کارمزد خرید'),
+        charge.mode,
+        charge.rateValue,
+      ),
+      value: formatWholeToman(charge.amount),
+    }));
   }
-  if (view.taxAmount) feeParts.push(`مالیات: ${formatWholeToman(view.taxAmount)}`);
-  if (view.wageAmount) feeParts.push(`اجرت: ${formatWholeToman(view.wageAmount)}`);
-  return feeParts.length > 0 ? feeParts.join(' · ') : 'رایگان';
+  const hasFee = Boolean(view.feeTotalRial) && !isZeroDecimal(view.feeTotalRial);
+  return [
+    {
+      key: 'fee',
+      label: 'کارمزد',
+      value: hasFee ? formatWholeToman(view.feeTotalRial) : 'رایگان',
+    },
+  ];
 }
 
 function InvoiceCard({
@@ -1021,27 +1034,40 @@ function InvoiceCard({
   return (
     <section
       className={cn(
-        'rounded-2xl border p-4 shadow-sm md:p-5',
+        'rounded-2xl border p-4 shadow-sm print:border-gray-300 print:bg-white md:p-5',
         selling ? 'border-rose-100 bg-rose-50/40' : 'border-emerald-100 bg-emerald-50/40',
       )}
     >
-      <h2 className="text-base font-bold text-gray-900">
-        {selling ? 'پیش‌فاکتور فروش' : 'پیش‌فاکتور خرید'}
-      </h2>
+      <div className="flex items-center justify-between gap-3">
+        <h2 className="text-base font-bold text-gray-900">
+          {selling ? 'پیش‌فاکتور فروش' : 'پیش‌فاکتور خرید'}
+        </h2>
+        <PrintButton />
+      </div>
       {view ? (
         <>
           <dl className="mt-3 space-y-2.5 text-sm">
+            <Row label="قیمت لحظه سفارش" value={formatSpotPerGram(view.basePricePerGram)} />
             <Row label="نرخ واحد معامله" value={formatWholeToman(view.unitPricePerGram)} />
             <Row label="وزن خالص سفارش" value={formatWeight(view.weightGrams)} />
-            <Row label="کارمزد معامله" value={feeLabel(view, selling)} />
           </dl>
           <div className="mt-4 rounded-2xl bg-white/80 px-4 py-3 ring-1 ring-black/5">
-            <p className="text-xs text-gray-500">
-              {selling ? 'مبلغ قابل دریافت' : 'مبلغ قابل پرداخت'}
-            </p>
-            <p className="mt-1 text-left text-2xl font-bold text-gray-900 md:text-3xl" dir="ltr">
-              {formatWholeToman(view.customerTotalRial)}
-            </p>
+            <dl className="text-sm">
+              <Row label="مبلغ طلا" value={formatWholeToman(view.goldCommercialRial)} />
+              {feeLines(view, selling).map((line) => (
+                <Row key={line.key} label={line.label} value={line.value} />
+              ))}
+              {view.wageAmount ? <Row label="اجرت" value={formatWholeToman(view.wageAmount)} /> : null}
+              {view.taxAmount ? <Row label="مالیات" value={formatWholeToman(view.taxAmount)} /> : null}
+            </dl>
+            <div className="mt-2 border-t border-black/5 pt-2">
+              <p className="text-xs text-gray-500">
+                {selling ? 'مبلغ قابل دریافت' : 'مبلغ قابل پرداخت'}
+              </p>
+              <p className="mt-1 text-left text-2xl font-bold text-gray-900 md:text-3xl" dir="ltr">
+                {formatWholeToman(view.customerTotalRial)}
+              </p>
+            </div>
           </div>
         </>
       ) : (
@@ -1049,7 +1075,7 @@ function InvoiceCard({
           وزن یا مبلغ را وارد کنید تا جزئیات پیش‌فاکتور نمایش داده شود.
         </p>
       )}
-      <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-gray-900">
+      <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-gray-900 print:hidden">
         <input
           type="checkbox"
           className={cn('mt-1 h-5 w-5 shrink-0', selling ? 'accent-rose-600' : 'accent-emerald-600')}
@@ -1064,7 +1090,7 @@ function InvoiceCard({
       <Button
         type="button"
         className={cn(
-          'mt-4 h-12 w-full gap-2 text-white disabled:opacity-50',
+          'mt-4 h-12 w-full gap-2 text-white disabled:opacity-50 print:hidden',
           selling
             ? 'bg-rose-600 hover:bg-rose-700'
             : 'bg-emerald-600 hover:bg-emerald-700',
@@ -1081,7 +1107,7 @@ function InvoiceCard({
 
 function TradeSideTabs({ side }: { side: TradeSide }) {
   return (
-    <div className="mb-4 grid grid-cols-2 gap-2" role="tablist" aria-label="نوع معامله">
+    <div className="mb-4 grid grid-cols-2 gap-2 print:hidden" role="tablist" aria-label="نوع معامله">
       <Link
         href="/portal/orders/new?side=buy"
         role="tab"
@@ -1140,7 +1166,7 @@ function LivePriceCard({
   sellMaxRial?: string | null;
 }) {
   return (
-    <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm md:p-6">
+    <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm print:border-gray-300 print:bg-white md:p-6">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-gray-500">قیمت لحظه‌ای طلای آبشده</p>
@@ -1158,7 +1184,7 @@ function LivePriceCard({
         <button
           type="button"
           onClick={onRefresh}
-          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-amber-600"
+          className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-amber-600 print:hidden"
           aria-label="بروزرسانی قیمت"
         >
           <RefreshCw className={cn('h-5 w-5', refreshing && 'animate-spin')} />
@@ -1166,7 +1192,7 @@ function LivePriceCard({
       </div>
       {!loading && !error && value ? (
         <p className="mt-3 flex items-center gap-2 text-xs text-gray-500">
-          <span className="relative flex h-2 w-2" aria-hidden>
+          <span className="relative flex h-2 w-2 print:hidden" aria-hidden>
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-60" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-emerald-500" />
           </span>
@@ -1176,7 +1202,7 @@ function LivePriceCard({
       {!loading && !error ? (
         <div
           className={cn(
-            'mt-4 rounded-xl px-3 py-2.5 text-sm',
+            'mt-4 rounded-xl px-3 py-2.5 text-sm print:hidden',
             selling ? 'bg-rose-50 text-rose-900' : 'bg-emerald-50 text-emerald-900',
           )}
         >
@@ -1206,7 +1232,7 @@ function LivePriceCard({
         </div>
       ) : null}
       {error ? (
-        <button type="button" onClick={onRefresh} className="mt-3 h-11 text-sm font-medium text-amber-700">
+        <button type="button" onClick={onRefresh} className="mt-3 h-11 text-sm font-medium text-amber-700 print:hidden">
           تلاش مجدد
         </button>
       ) : null}
@@ -1264,7 +1290,7 @@ function StatusBanner({
   return (
     <section
       className={cn(
-        'rounded-2xl border px-4 py-3',
+        'rounded-2xl border px-4 py-3 print:hidden',
         danger ? 'border-red-200 bg-red-50 text-[#DC2626]' : 'border-amber-200 bg-amber-50 text-[#92400E]',
       )}
     >
@@ -1279,7 +1305,7 @@ function StatusBanner({
 
 function KycBlock() {
   return (
-    <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#202124]">
+    <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#202124] print:hidden">
       <div className="flex items-start gap-3">
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#F59E0B]" />
         <div>
@@ -1299,7 +1325,7 @@ function KycBlock() {
 
 function AccountBlock() {
   return (
-    <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#202124]">
+    <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#202124] print:hidden">
       <p className="font-bold">حساب اعتباری شما برای معامله فعال نیست.</p>
       <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
         مشاهده اعتبار
@@ -1321,15 +1347,37 @@ function PurchaseSuccess({
 }) {
   const status = ORDER_STATUS_LABELS[order.status] ?? order.status;
   return (
-    <div className="mx-auto w-full max-w-lg">
-      <section className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center shadow-sm" role="status">
-        <CheckCircle2 className="mx-auto h-12 w-12 text-[#16A34A]" />
+    <div className="portal-order-print mx-auto w-full max-w-lg print:max-w-none">
+      <p className="mb-4 hidden border-b border-gray-200 pb-3 text-right text-sm font-bold text-gray-900 print:block">
+        سامانه طلا — {selling ? 'رسید سفارش فروش' : 'رسید سفارش خرید'}
+      </p>
+      <section className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center shadow-sm print:border-gray-300 print:text-right" role="status">
+        <CheckCircle2 className="mx-auto h-12 w-12 text-[#16A34A] print:hidden" />
         <h1 className="mt-3 text-xl font-bold text-[#202124]">
           {selling ? 'سفارش فروش ثبت شد' : 'سفارش خرید ثبت شد'}
         </h1>
         <p className="mt-2 text-sm text-[#6B7280]">سفارش شما با موفقیت ثبت شد.</p>
         <dl className="mt-6 space-y-3 text-right text-sm">
           <Row label="شماره سفارش" value={toPersianDigits(order.orderNumber)} ltr />
+          <Row label="قیمت لحظه سفارش" value={formatSpotPerGram(order.step1BasePrice)} />
+          {order.goldAmountRial ? (
+            <Row label="مبلغ طلا" value={formatWholeToman(order.goldAmountRial)} />
+          ) : null}
+          {(order.charges ?? []).length > 0 ? (
+            (order.charges ?? []).map((charge) => (
+              <Row
+                key={`${charge.code}-${charge.side}`}
+                label={feeLineLabel(
+                  charge.labelFa || (selling ? 'کارمزد فروش' : 'کارمزد خرید'),
+                  charge.mode,
+                  charge.rateValue,
+                )}
+                value={formatWholeToman(charge.amount)}
+              />
+            ))
+          ) : (
+            <Row label="کارمزد" value={formatWholeToman(order.feeAmountRial ?? '0')} />
+          )}
           <Row label="مبلغ" value={formatWholeToman(order.totalAmountRial)} />
           <Row label="وزن" value={formatWeight(order.weightGrams)} />
           <Row label="عیار" value={purityLabel(order.purityRatio) || formatPurity(order.purityRatio)} />
@@ -1341,7 +1389,8 @@ function PurchaseSuccess({
         <div className="mt-4 text-right">
           <OrderRemainingSteps status={order.status} />
         </div>
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-6 flex flex-col gap-3 print:hidden sm:flex-row">
+          <PrintButton size="default" className="h-12 flex-1" />
           <Button type="button" className="h-12 flex-1" onClick={onView}>
             مشاهده سفارش
           </Button>
@@ -1385,7 +1434,7 @@ function ConfirmPurchase({
   if (!open || !view) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center lg:items-center" role="dialog" aria-modal="true" aria-labelledby="confirm-purchase-title">
+    <div className="fixed inset-0 z-50 flex items-end justify-center print:hidden lg:items-center" role="dialog" aria-modal="true" aria-labelledby="confirm-purchase-title">
       <button type="button" className="absolute inset-0 bg-black/50" aria-label="بستن" onClick={onClose} disabled={submitting} />
       <div className="relative z-10 w-full rounded-t-2xl bg-white p-5 shadow-xl lg:max-w-md lg:rounded-2xl">
         <h2 id="confirm-purchase-title" className="text-lg font-bold text-[#202124]">
@@ -1396,13 +1445,11 @@ function ConfirmPurchase({
         </p>
         <dl className="mt-3 text-sm">
           <Row label="عیار" value={purityLabel(purity)} />
+          <Row label="قیمت لحظه سفارش" value={formatSpotPerGram(view.basePricePerGram)} />
           <Row label="قیمت" value={formatWholeToman(view.unitPricePerGram)} />
-          {view.charges.map((c) => (
-            <Row
-              key={`${c.code}-${c.side}`}
-              label={c.labelFa || (selling ? 'کارمزد فروش' : 'کارمزد خرید')}
-              value={formatWholeToman(c.amount)}
-            />
+          <Row label="مبلغ طلا" value={formatWholeToman(view.goldCommercialRial)} />
+          {feeLines(view, selling).map((line) => (
+            <Row key={line.key} label={line.label} value={line.value} />
           ))}
           <Row
             label={selling ? 'مبلغ قابل دریافت' : 'مبلغ قابل پرداخت'}

@@ -4,7 +4,7 @@ export const ORDER_PROGRESS_STEPS = [
   { id: 'review', label: 'بررسی طلافروش' },
   { id: 'approved', label: 'تأیید سفارش' },
   { id: 'trade', label: 'ایجاد معامله' },
-  { id: 'settled', label: 'تسویه' },
+  { id: 'executed', label: 'انجام معامله' },
 ] as const;
 
 export type OrderProgressStepId = (typeof ORDER_PROGRESS_STEPS)[number]['id'];
@@ -23,9 +23,6 @@ const STATUS_INDEX: Record<string, number> = {
   UNDER_REVIEW: 2,
   REVISION_REQUESTED: 2,
   APPROVED: 3,
-  TRADE_CREATED: 4,
-  SETTLING: 5,
-  COMPLETED: 5,
 };
 
 const REMAINING: Record<string, string> = {
@@ -36,9 +33,9 @@ const REMAINING: Record<string, string> = {
   UNDER_REVIEW: 'طلافروش در حال بررسی سفارش است.',
   REVISION_REQUESTED: 'نیاز به اصلاح دارد؛ پس از اصلاح دوباره بررسی می‌شود.',
   APPROVED: 'سفارش تأیید شد؛ در انتظار ایجاد معامله.',
-  TRADE_CREATED: 'معامله ایجاد شد؛ در انتظار تسویه.',
-  SETTLING: 'تسویه در حال انجام است.',
 };
+
+const EXECUTED = new Set(['TRADE_CREATED', 'SETTLING', 'COMPLETED']);
 
 export function orderProgress(status: string): OrderProgress {
   if (status === 'REJECTED') {
@@ -47,7 +44,7 @@ export function orderProgress(status: string): OrderProgress {
   if (status === 'CANCELLED') {
     return { currentIndex: -1, remainingLabel: null, terminal: 'cancelled' };
   }
-  if (status === 'COMPLETED') {
+  if (EXECUTED.has(status)) {
     return { currentIndex: ORDER_PROGRESS_STEPS.length - 1, remainingLabel: null, terminal: 'completed' };
   }
   const currentIndex = STATUS_INDEX[status] ?? 0;

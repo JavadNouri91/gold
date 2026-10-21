@@ -978,7 +978,7 @@ describe('OrdersService', () => {
       const underReviewOrder = makeOrder({ status: OrderStatus.UNDER_REVIEW });
       (orderRepo.findById as jest.Mock)
         .mockResolvedValueOnce(underReviewOrder)
-        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.TRADE_CREATED }));
+        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.COMPLETED }));
 
       // Concurrency guard: tx re-reads status as UNDER_REVIEW
       (
@@ -1011,20 +1011,20 @@ describe('OrdersService', () => {
         expect.objectContaining({ orderId: ORDER_ID }),
       );
 
-      expect(result.status).toBe(OrderStatus.TRADE_CREATED);
+      expect(result.status).toBe(OrderStatus.COMPLETED);
     });
 
     it('approves a QUOTED Order without assignment', async () => {
       const quotedOrder = makeOrder({ status: OrderStatus.QUOTED });
       (orderRepo.findById as jest.Mock)
         .mockResolvedValueOnce(quotedOrder)
-        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.TRADE_CREATED }));
+        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.COMPLETED }));
       (
         fakeTx as unknown as { order: { findUnique: jest.Mock } }
       ).order.findUnique.mockResolvedValue({ status: 'QUOTED' });
 
       const result = await service.approveOrder('reviewer-user', ORDER_ID, approveDto);
-      expect(result.status).toBe(OrderStatus.TRADE_CREATED);
+      expect(result.status).toBe(OrderStatus.COMPLETED);
       expect(tradesService.confirmTrade).toHaveBeenCalled();
     });
 
@@ -1032,7 +1032,7 @@ describe('OrdersService', () => {
       const assignedOrder = makeOrder({ status: OrderStatus.ASSIGNED });
       (orderRepo.findById as jest.Mock)
         .mockResolvedValueOnce(assignedOrder)
-        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.TRADE_CREATED }));
+        .mockResolvedValueOnce(makeOrder({ status: OrderStatus.COMPLETED }));
 
       // Concurrency guard: tx sees ASSIGNED status
       (
@@ -1040,7 +1040,7 @@ describe('OrdersService', () => {
       ).order.findUnique.mockResolvedValue({ status: 'ASSIGNED' });
 
       const result = await service.approveOrder('reviewer-user', ORDER_ID, approveDto);
-      expect(result.status).toBe(OrderStatus.TRADE_CREATED);
+      expect(result.status).toBe(OrderStatus.COMPLETED);
       expect(tradesService.confirmTrade).toHaveBeenCalled();
     });
 

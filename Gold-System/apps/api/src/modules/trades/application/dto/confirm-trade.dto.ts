@@ -5,7 +5,7 @@ import { IsString, IsOptional, MaxLength } from 'class-validator';
  *
  * Creates a Trade from an APPROVED Order.
  * §3.3: Credit is moved from reserved → consumed atomically.
- * Order: APPROVED → TRADE_CREATED
+ * Order: APPROVED → COMPLETED (confirmation executes the order)
  * Quotation: ACTIVE → CONVERTED
  */
 export class ConfirmTradeDto {

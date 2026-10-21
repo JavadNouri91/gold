@@ -201,7 +201,8 @@ export class OrderEntity {
    * Only APPROVED orders are eligible for Trade creation.
    * Phase 3.6
    *
-   * State machine: APPROVED → TRADE_CREATED (on confirmTrade)
+   * State machine: APPROVED → COMPLETED (on confirmTrade).
+   * TRADE_CREATED remains a legacy executed status.
    */
   canCreateTrade(): boolean {
     return this.status === OrderStatus.APPROVED;

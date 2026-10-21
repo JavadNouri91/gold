@@ -125,6 +125,7 @@ const submitted: Order = {
   weightGrams: '5.000000',
   purityRatio: '0.750000',
   reservedAmountRial: '61750000.00',
+  step1BasePrice: '12350000.00',
   createdAt: '2026-09-29T12:00:00.000Z',
 };
 
@@ -223,6 +224,7 @@ describe('BuyGoldPage', () => {
         customerType: 'HOUSEHOLD',
       }),
     );
+    expect(screen.getByText('قیمت لحظه سفارش')).toBeInTheDocument();
     expect(screen.queryByText('مالیات')).not.toBeInTheDocument();
     expect(screen.queryByText('اجرت')).not.toBeInTheDocument();
 
@@ -269,11 +271,12 @@ describe('BuyGoldPage', () => {
     await screen.findByText('قیمت لحظه‌ای طلای آبشده');
     await calculateFiveGrams();
 
-    const label = screen.getByText('کارمزد معامله');
+    const label = screen.getByText('کارمزد خرید (مبلغ ثابت)');
     const value = label.parentElement?.querySelector('dd')?.textContent ?? '';
     expect(value).toBe(`${toPersianDigits('2,155')} تومان`);
     expect(value).not.toContain('.');
     expect(value.match(/کارمزد/g) ?? []).toHaveLength(0);
+    expect(screen.getByText('مبلغ طلا')).toBeInTheDocument();
   });
 
   it('blocks submission when identity is not active', async () => {

@@ -334,7 +334,7 @@ export class CustomerAccountRepository {
    * will serialize here; the second sees the already-decremented reserved balance.
    *
    * ATOMICITY: Must be called inside the SAME Prisma transaction as Trade creation
-   * and Order status update (APPROVED → TRADE_CREATED), so credit move and Trade
+   * and Order status update (APPROVED → COMPLETED), so credit move and Trade
    * commit or roll back together.
    *
    * INVARIANT: consumeCredit() must only be called after reserveCredit() has

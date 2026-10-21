@@ -17,7 +17,8 @@ jest.mock('next/navigation', () => ({
 
 jest.mock('@/lib/internal-api', () => ({
   internalCustomersApi: { list: jest.fn() },
-  internalOrdersApi: { list: jest.fn(), quotations: jest.fn() },
+  internalOrdersApi: { list: jest.fn(), quotations: jest.fn(), getById: jest.fn(), approve: jest.fn() },
+  internalTradesApi: { confirm: jest.fn() },
   assignmentsApi: { list: jest.fn() },
   internalQuotationsApi: { download: jest.fn(), getById: jest.fn() },
 }));

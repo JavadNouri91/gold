@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { kycApi, type KycDocumentDisplayStatus, type KycPhase, type OwnKycDocument, type OwnKycOverview } from '@/lib/api';
+import { PERSONAL_PHOTO_TYPE } from '@/lib/kyc-portrait-matte';
 import {
   DOCUMENT_STATUS_LABEL,
   documentGridClass,
@@ -332,6 +333,7 @@ export function KycExperience({
           submitting={uploading}
           serverError={uploadError}
           initialFile={seedFile}
+          allowBackgroundRemoval={uploadTarget.type === PERSONAL_PHOTO_TYPE}
           onClose={() => {
             if (!uploading) {
               setUploadType(null);

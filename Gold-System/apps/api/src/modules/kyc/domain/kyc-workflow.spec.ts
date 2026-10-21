@@ -7,6 +7,7 @@ import {
   kycStaffBucket,
   documentDisplayStatus,
   requiredKycTypes,
+  staffUploadBlockReason,
   uploadBlockReason,
   type WorkflowCustomer,
   type WorkflowDocument,
@@ -264,6 +265,37 @@ describe('upload rules', () => {
     expect(
       uploadBlockReason({
         phase: 'IN_PROGRESS',
+        documentType: 'passport',
+        status: null,
+        allowedTypes: ALL,
+      }),
+    ).toMatch(/لازم نیست/);
+  });
+
+  it('lets staff replace approved files and still rejects unknown types', () => {
+    expect(
+      staffUploadBlockReason({
+        documentType: 'national_id_front',
+        status: VerificationStatus.PENDING,
+        allowedTypes: ALL,
+      }),
+    ).toBeNull();
+    expect(
+      staffUploadBlockReason({
+        documentType: 'national_id_front',
+        status: null,
+        allowedTypes: ALL,
+      }),
+    ).toBeNull();
+    expect(
+      staffUploadBlockReason({
+        documentType: 'national_id_front',
+        status: VerificationStatus.APPROVED,
+        allowedTypes: ALL,
+      }),
+    ).toBeNull();
+    expect(
+      staffUploadBlockReason({
         documentType: 'passport',
         status: null,
         allowedTypes: ALL,

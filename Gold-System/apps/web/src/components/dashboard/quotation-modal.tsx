@@ -48,16 +48,26 @@ export function QuotationModal({
     <Modal
       open={open}
       onClose={onClose}
-      title="پیش‌فاکتور"
+      title="پیش‌فاکتور طلا"
+      titleClassName="sr-only"
       rootClassName="quotation-print-host"
-      className="quotation-print-root max-h-[90vh] max-w-2xl overflow-y-auto"
+      className="quotation-print-root max-h-[90vh] max-w-4xl overflow-y-auto border border-border/80 bg-[#fbfaf7] p-4 sm:p-6"
     >
       {error ? <ApiErrorState error={error} onRetry={retry} /> : null}
       {loading ? <SkeletonBlock className="h-32" /> : null}
       {!loading && !error && !quote ? (
         <p className="text-sm text-muted-foreground">برای این سفارش پیش‌فاکتوری صادر نشده است.</p>
       ) : null}
-      {quote ? <QuotationDetails quote={quote} autoPrint={autoPrint} /> : null}
+      {quote ? (
+        <QuotationDetails
+          quote={quote}
+          autoPrint={autoPrint}
+          onChanged={() => {
+            if (orderId) void byOrder.mutate();
+            else void byId.mutate();
+          }}
+        />
+      ) : null}
     </Modal>
   );
 }

@@ -26,7 +26,7 @@
  *
  *   AUDIT:
  *    15.  Audit: TRADE_CREATED logged with correct fields
- *    16.  Audit: ORDER_STATUS_CHANGED logged (APPROVED → TRADE_CREATED)
+ *    16.  Audit: ORDER_STATUS_CHANGED logged (APPROVED → COMPLETED)
  *    17.  Audit: QUOTATION_CONVERTED logged
  *
  *   REVERSAL (§4.2):
@@ -441,6 +441,12 @@ describe('TradesService', () => {
       expect(result.tradeNumber).toBe(TRADE_NUMBER);
       expect(result.orderId).toBe(ORDER_ID);
       expect(result.quotationId).toBe(QUOTATION_ID);
+      expect(
+        (fakeTx as unknown as { order: { update: jest.Mock } }).order.update,
+      ).toHaveBeenCalledWith({
+        where: { id: ORDER_ID },
+        data: expect.objectContaining({ status: 'COMPLETED' }),
+      });
       expect(tradingPolicy.validateTransaction).toHaveBeenCalledWith(
         expect.objectContaining({
           customerId: CUSTOMER_ID,
@@ -505,7 +511,7 @@ describe('TradesService', () => {
       // Simulate race condition: between findById and transaction, Order is no longer APPROVED
       (fakeTx as unknown as { order: { findUnique: jest.Mock } }).order.findUnique = jest
         .fn()
-        .mockResolvedValue({ status: 'TRADE_CREATED' }); // already confirmed
+        .mockResolvedValue({ status: 'COMPLETED' }); // already executed
 
       await expect(service.confirmTrade(ACTOR_USER_ID, dto)).rejects.toThrow(
         OrderNotEligibleForTradeException,
@@ -690,7 +696,7 @@ describe('TradesService', () => {
       );
     });
 
-    it('16. audit: ORDER_STATUS_CHANGED logged (APPROVED → TRADE_CREATED)', async () => {
+    it('16. audit: ORDER_STATUS_CHANGED logged (APPROVED → COMPLETED)', async () => {
       await service.confirmTrade(ACTOR_USER_ID, dto);
 
       expect(auditService.log).toHaveBeenCalledWith(
@@ -699,7 +705,7 @@ describe('TradesService', () => {
           entityType: 'Order',
           entityId: ORDER_ID,
           before: { status: 'APPROVED' },
-          after: expect.objectContaining({ status: 'TRADE_CREATED' }),
+          after: expect.objectContaining({ status: 'COMPLETED' }),
         }),
       );
     });

@@ -28,6 +28,8 @@ export class QuotationResponseDto {
   /** Pipeline snapshot values — null if BLOCKED (§13.2/§13.3) */
   step1BasePrice: string | null;
   wageAmount: string | null;
+  /** Transaction fee snapshot locked on the quotation */
+  feeAmountRial: string;
   discountAmount: string | null;
   roundingAmount: string | null;
 

@@ -24,7 +24,7 @@ export function MobileBottomNavigation() {
   return (
     <nav
       aria-label="ناوبری اصلی"
-      className="fixed inset-x-0 bottom-0 z-20 border-t border-[#E5E7EB] bg-white pb-[env(safe-area-inset-bottom)] lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-20 border-t border-[#E5E7EB] bg-white pb-[env(safe-area-inset-bottom)] print:hidden lg:hidden"
     >
       <ul className="grid grid-cols-5 items-end px-1 pt-1">
         {ITEMS.map((item) => {

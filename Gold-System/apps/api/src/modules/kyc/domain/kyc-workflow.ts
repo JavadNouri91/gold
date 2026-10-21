@@ -272,6 +272,21 @@ export function uploadBlockReason(input: {
   return null;
 }
 
+/**
+ * Staff may upload or replace a required document on the customer's behalf,
+ * including approved files and while a review is open.
+ */
+export function staffUploadBlockReason(input: {
+  documentType: string;
+  status: VerificationStatus | null;
+  allowedTypes: string[];
+}): string | null {
+  if (!input.allowedTypes.includes(input.documentType)) {
+    return 'این نوع مدرک برای این مشتری لازم نیست.';
+  }
+  return null;
+}
+
 /** A customer may withdraw a document only before a reviewer has started. */
 export function canDeleteDocument(phase: KycPhase, status: VerificationStatus | null): boolean {
   if (status !== VerificationStatus.PENDING) return false;

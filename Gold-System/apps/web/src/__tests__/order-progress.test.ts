@@ -17,4 +17,14 @@ describe('orderProgress', () => {
   it('closes the remaining path after rejection', () => {
     expect(orderProgress('REJECTED').terminal).toBe('rejected');
   });
+
+  it.each(['TRADE_CREATED', 'SETTLING', 'COMPLETED'])(
+    'treats %s as an executed order with no settlement wait',
+    (status) => {
+      const progress = orderProgress(status);
+      expect(progress.terminal).toBe('completed');
+      expect(progress.remainingLabel).toBeNull();
+      expect(progress.currentIndex).toBe(5);
+    },
+  );
 });

@@ -3,9 +3,15 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { OrderQuotationActions } from '@/components/dashboard/order-quotation-actions';
 import { toPersianDigits } from '@/lib/utils';
+import { signIn } from './auth-state';
+
+jest.mock('@/lib/auth', () => ({
+  useAuth: () => require('./auth-state').authState,
+}));
 
 jest.mock('@/lib/internal-api', () => ({
-  internalOrdersApi: { quotations: jest.fn() },
+  internalOrdersApi: { quotations: jest.fn(), getById: jest.fn(), approve: jest.fn() },
+  internalTradesApi: { confirm: jest.fn() },
   internalQuotationsApi: { download: jest.fn(), getById: jest.fn() },
 }));
 
@@ -30,6 +36,7 @@ describe('order quotation modal', () => {
         purityRatio: '0.750000',
         step1BasePrice: '100.00',
         wageAmount: '0.00',
+        feeAmountRial: '0.00',
         discountAmount: '0.00',
         roundingAmount: '0.00',
         isComplete: false,
@@ -40,9 +47,11 @@ describe('order quotation modal', () => {
         items: [],
       },
     ]);
+    signIn(['quotation.read']);
+    api.internalOrdersApi.getById.mockResolvedValue({ id: 'ord-1', status: 'QUOTED' });
     render(<OrderQuotationActions orderId="ord-1" status="QUOTED" />);
     await user.click(screen.getByRole('button', { name: 'نمایش' }));
-    expect(await screen.findByRole('dialog', { name: 'پیش‌فاکتور' })).toBeInTheDocument();
+    expect(await screen.findByRole('dialog', { name: 'پیش‌فاکتور طلا' })).toBeInTheDocument();
     expect(screen.getByText(toPersianDigits('QT-21'))).toBeInTheDocument();
   });
 });

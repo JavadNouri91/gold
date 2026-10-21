@@ -275,6 +275,7 @@ export interface StaffQuotation {
   purityRatio: string;
   step1BasePrice: string | null;
   wageAmount: string | null;
+  feeAmountRial: string;
   discountAmount: string | null;
   roundingAmount: string | null;
   isComplete: boolean;
@@ -1012,6 +1013,19 @@ export const internalKycApi = {
     return request(`/customers/kyc/queue${toQuery(params)}`);
   },
 
+  uploadDocument(
+    customerId: string,
+    documentType: string,
+    file: File,
+  ): Promise<KycDocumentRecord> {
+    const body = new FormData();
+    body.append('documentType', documentType);
+    body.append('file', file);
+    return request(`/customers/${customerId}/documents`, {
+      method: 'POST',
+      body,
+    });
+  },
   getDocuments(customerId: string, withUrls = false): Promise<KycDocumentRecord[]> {
     return request<KycDocumentRecord[]>(
       `/customers/${customerId}/documents${toQuery({ withUrls })}`,
@@ -1046,6 +1060,9 @@ export const internalKycApi = {
       body,
     });
   },
+  deleteDocument(customerId: string, documentId: string): Promise<void> {
+    return request(`/customers/${customerId}/documents/${documentId}`, { method: 'DELETE' });
+  },
   replaceDocumentImage(customerId: string, documentId: string, file: File): Promise<KycDocumentRecord> {
     const body = new FormData();
     body.append('file', file);
@@ -1053,6 +1070,9 @@ export const internalKycApi = {
       method: 'POST',
       body,
     });
+  },
+  reopenDocument(customerId: string, documentId: string): Promise<KycDocumentRecord> {
+    return request(`/customers/${customerId}/documents/${documentId}/reopen`, { method: 'POST' });
   },
   decideDocument(
     customerId: string,
