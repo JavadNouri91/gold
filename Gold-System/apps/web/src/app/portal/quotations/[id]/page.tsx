@@ -1,8 +1,10 @@
 'use client';
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import useSWR from 'swr';
-import { quotationsApi } from '@/lib/api';
+import { quotationsApi, ApiClientError } from '@/lib/api';
+import { saveBlob } from '@/lib/download';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { PageSpinner } from '@/components/ui/spinner';
@@ -20,6 +22,8 @@ const QUOTATION_STATUS_LABELS: Record<string, string> = {
 
 export default function QuotationDetailPage() {
   const params = useParams<{ id: string }>();
+  const [downloading, setDownloading] = useState(false);
+  const [downloadError, setDownloadError] = useState<string | null>(null);
 
   const { data: quotation, error, isLoading } = useSWR(
     `quotations/${params.id}`,
@@ -30,7 +34,21 @@ export default function QuotationDetailPage() {
   if (error) return <Alert variant="error">خطا در بارگذاری پیشنهاد قیمت</Alert>;
   if (!quotation) return null;
 
-  const downloadUrl = quotationsApi.getDownloadUrl(params.id);
+  const download = async () => {
+    setDownloading(true);
+    setDownloadError(null);
+    try {
+      const blob = await quotationsApi.download(params.id);
+      const name = quotation.quotationNumber
+        ? `${quotation.quotationNumber}-v${quotation.version}.json`
+        : `quotation-v${quotation.version}.json`;
+      saveBlob(blob, name);
+    } catch (err) {
+      setDownloadError(err instanceof ApiClientError ? err.message : 'دریافت فایل ممکن نیست.');
+    } finally {
+      setDownloading(false);
+    }
+  };
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -68,13 +86,13 @@ export default function QuotationDetailPage() {
         <strong> این پیشنهاد به معنای تأیید قطعی معامله نیست.</strong>
       </Alert>
 
-      {quotation.documentReference && (
+      {downloadError ? <Alert variant="error">{downloadError}</Alert> : null}
+
+      {quotation.documentAvailable && (
         <div className="flex gap-3">
-          <a href={downloadUrl} target="_blank" rel="noopener noreferrer">
-            <Button variant="outline">
-              دانلود پیشنهاد قیمت (PDF)
-            </Button>
-          </a>
+          <Button variant="outline" isLoading={downloading} onClick={() => void download()}>
+            دانلود پیشنهاد قیمت (PDF)
+          </Button>
         </div>
       )}
     </div>
@@ -86,7 +104,7 @@ function InfoRow({
   value,
   children,
 }: {
-  label: string;
+  label?: string;
   value?: string;
   children?: React.ReactNode;
 }) {

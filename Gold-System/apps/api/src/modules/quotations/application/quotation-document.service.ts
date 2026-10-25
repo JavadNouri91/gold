@@ -38,7 +38,7 @@ export interface QuotationDocumentData {
 }
 
 export interface GeneratedDocument {
-  /** S3/MinIO object key */
+  /** Object key */
   key: string;
   mimeType: string;
   generatedAt: Date;
@@ -48,7 +48,7 @@ export interface GeneratedDocument {
  * Quotation Document Service.
  *
  * Generates the quotation document as a structured JSON snapshot and
- * uploads it to S3/MinIO via the existing StorageService.
+ * uploads it to local filesystem storage via the existing StorageService.
  *
  * IMMUTABILITY GUARANTEE:
  *   The document is generated once from the locked PricingCalculation snapshot.
@@ -60,8 +60,9 @@ export interface GeneratedDocument {
  *   PDF upgrade can be added in a future phase without changing the interface.
  *
  * STORAGE:
- *   Uses the existing StorageService (S3/MinIO). Private bucket; access via signed URLs.
- *   Object key pattern: quotations/{quotationNumber}/v{version}.json
+ *   Uses the existing StorageService (local filesystem). Private; access is via
+ *   authenticated API download endpoints only. Object key pattern:
+ *   quotations/{quotationNumber}/v{version}.json
  *
  * FAILURE HANDLING:
  *   If document generation/upload fails, the caller logs the error and proceeds
@@ -116,12 +117,12 @@ export class QuotationDocumentService {
   }
 
   /**
-   * Generates a pre-signed URL to download the quotation document.
+   * Reads the immutable quotation document bytes from storage.
    *
    * Every call to this method MUST be audited by the caller (BR-S02).
    */
-  async getDownloadUrl(documentKey: string): Promise<string> {
-    return this.storageService.getSignedUrl(documentKey);
+  async read(documentKey: string): Promise<Buffer> {
+    return this.storageService.getObject(documentKey);
   }
 
   /**

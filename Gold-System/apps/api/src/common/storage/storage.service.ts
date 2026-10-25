@@ -1,19 +1,18 @@
-import { Injectable, Logger, InternalServerErrorException, OnModuleInit } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-  HeadObjectCommand,
-  HeadBucketCommand,
-  CreateBucketCommand,
-} from '@aws-sdk/client-s3';
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
-import { GetObjectCommand } from '@aws-sdk/client-s3';
+  Injectable,
+  Logger,
+  InternalServerErrorException,
+  NotFoundException,
+  BadRequestException,
+  OnModuleInit,
+} from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { promises as fs } from 'fs';
+import { dirname, join, resolve, sep } from 'path';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface StoredFile {
-  /** S3 object key — store in DB; never store raw file in DB */
+  /** Object key — store in DB; never store raw file in DB */
   key: string;
   bucket: string;
   /** Original filename provided by uploader */
@@ -44,39 +43,46 @@ export const ALLOWED_KYC_MIME_TYPES = [
 /** Maximum KYC document size: 10 MB */
 export const MAX_KYC_FILE_SIZE_BYTES = 10 * 1024 * 1024;
 
+const SAFE_BUCKET_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,62}$/;
+const WINDOWS_DRIVE_OR_UNC_RE = /^[A-Za-z]:[\\/]/;
+const NULL_BYTE = '\u0000';
+
+/**
+ * Local filesystem storage.
+ *
+ * Logical bucket names are directory names under a single configured root, so
+ * `${bucket}/${key}` reproduces the previous S3/MinIO object address and every
+ * database key remains valid. Files are written atomically (temp file + rename)
+ * and every key/bucket is validated against path traversal, absolute paths,
+ * null bytes and escapes outside the configured root or bucket.
+ */
 @Injectable()
 export class StorageService implements OnModuleInit {
   private readonly logger = new Logger(StorageService.name);
-  private readonly client: S3Client;
+  private readonly root: string;
   private readonly bucket: string;
   private readonly kycBucketName: string;
   private readonly quotationsBucketName: string;
-  private readonly signedUrlTtlSeconds: number;
 
   constructor(private readonly config: ConfigService) {
-    const endpoint = this.config.get<string>('STORAGE_ENDPOINT');
-    const region = this.config.get<string>('STORAGE_REGION', 'us-east-1');
-    const accessKeyId = this.config.get<string>('STORAGE_ACCESS_KEY', '');
-    const secretAccessKey = this.config.get<string>('STORAGE_SECRET_KEY', '');
+    this.root = resolve(
+      this.config.get<string>('storage.localRoot') ||
+        this.config.get<string>('STORAGE_LOCAL_ROOT') ||
+        join(process.cwd(), '.data', 'uploads'),
+    );
 
     this.kycBucketName =
       this.config.get<string>('storage.bucketKyc') ||
       this.config.get<string>('STORAGE_BUCKET_KYC') ||
       'gold-kyc-documents';
-    this.bucket = this.config.get<string>('STORAGE_BUCKET', 'gold-kyc');
+    this.bucket =
+      this.config.get<string>('storage.bucketDefault') ||
+      this.config.get<string>('STORAGE_BUCKET') ||
+      'gold-kyc';
     this.quotationsBucketName =
       this.config.get<string>('storage.bucketQuotations') ||
       this.config.get<string>('STORAGE_BUCKET_QUOTATIONS') ||
       'gold-quotations';
-    this.signedUrlTtlSeconds = this.config.get<number>('STORAGE_SIGNED_URL_TTL_SECONDS', 3600);
-
-    this.client = new S3Client({
-      endpoint: endpoint || undefined,
-      region,
-      credentials: { accessKeyId, secretAccessKey },
-      // Required for MinIO path-style addressing
-      forcePathStyle: !!endpoint,
-    });
   }
 
   /** Private bucket configured for KYC document files. */
@@ -92,53 +98,38 @@ export class StorageService implements OnModuleInit {
   }
 
   private async ensureBucket(name: string): Promise<void> {
+    this.assertSafeBucket(name);
+    const dir = join(this.root, name);
     try {
-      await this.client.send(new HeadBucketCommand({ Bucket: name }));
-    } catch (error) {
-      const status =
-        typeof error === 'object' && error && '$metadata' in error
-          ? (error as { $metadata?: { httpStatusCode?: number } }).$metadata?.httpStatusCode
-          : undefined;
-      const code = error instanceof Error ? error.name : '';
-      if (status !== 404 && code !== 'NotFound' && code !== 'NoSuchBucket') {
-        this.logger.warn(`Storage bucket ${name} could not be checked`);
-        return;
-      }
-      try {
-        await this.client.send(new CreateBucketCommand({ Bucket: name }));
-        this.logger.log(`Created private storage bucket ${name}`);
-      } catch (createError) {
-        this.logger.error(`Could not create storage bucket ${name}`, createError);
-      }
+      await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+    } catch (err) {
+      this.logger.error(`Could not create storage bucket directory ${name}`, err);
     }
   }
 
   /**
-   * Upload a file to the private bucket.
+   * Upload a file to the private store.
    * Returns the stored file metadata (key, bucket, etc.).
-   * Throws InternalServerErrorException on S3 failure.
+   * Throws InternalServerErrorException on filesystem failure.
    */
   async upload(input: UploadInput): Promise<StoredFile> {
     const ext = this.extFromMime(input.mimeType);
     const key = `${input.prefix}/${uuidv4()}${ext}`;
     const bucket = input.bucket ?? this.bucket;
 
+    const target = this.resolveKey(bucket, key);
+    const tmpPath = `${target}.${uuidv4()}.tmp`;
     try {
-      await this.client.send(
-        new PutObjectCommand({
-          Bucket: bucket,
-          Key: key,
-          Body: input.buffer,
-          ContentType: input.mimeType,
-          ContentLength: input.sizeBytes,
-          // No ACL — bucket is private; access is via signed URLs only
-          Metadata: {
-            originalName: encodeURIComponent(input.originalName),
-          },
-        }),
-      );
+      await this.ensureDir(dirname(target));
+      await fs.writeFile(tmpPath, input.buffer, { flag: 'wx', mode: 0o600 });
+      await fs.rename(tmpPath, target);
     } catch (err) {
-      this.logger.error(`S3 upload failed for key ${key}`, err);
+      try {
+        await fs.unlink(tmpPath).catch(() => undefined);
+      } catch {
+        /* best-effort cleanup */
+      }
+      this.logger.error(`Local upload failed for key ${key}`, err);
       throw new InternalServerErrorException('File upload failed');
     }
 
@@ -152,67 +143,101 @@ export class StorageService implements OnModuleInit {
   }
 
   /**
-   * Generate a pre-signed URL for a private object.
-   * TTL is controlled by STORAGE_SIGNED_URL_TTL_SECONDS env var.
-   * Every call to this method MUST be audited by the caller (§7.3).
-   */
-  async getSignedUrl(key: string, bucket = this.bucket): Promise<string> {
-    try {
-      const command = new GetObjectCommand({
-        Bucket: bucket,
-        Key: key,
-      });
-      return await getSignedUrl(this.client, command, {
-        expiresIn: this.signedUrlTtlSeconds,
-      });
-    } catch (err) {
-      this.logger.error(`Failed to generate signed URL for key ${key}`, err);
-      throw new InternalServerErrorException('Failed to generate document URL');
-    }
-  }
-
-  /**
    * Delete an object from storage.
    * Use with caution — prefer soft-deletion at the DB layer.
    */
   async delete(key: string, bucket = this.bucket): Promise<void> {
+    const target = this.resolveKey(bucket, key);
     try {
-      await this.client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
+      await fs.unlink(target);
     } catch (err) {
-      this.logger.error(`S3 delete failed for key ${key}`, err);
+      if (this.isMissingFile(err)) return; // idempotent
+      this.logger.error(`Local delete failed for key ${key}`, err);
       throw new InternalServerErrorException('File deletion failed');
     }
   }
 
   /** Read a private object. Caller must audit access before returning it to a client. */
   async getObject(key: string, bucket = this.bucket): Promise<Buffer> {
+    const target = this.resolveKey(bucket, key);
     try {
-      const result = await this.client.send(
-        new GetObjectCommand({
-          Bucket: bucket,
-          Key: key,
-        }),
-      );
-      const bytes = await result.Body?.transformToByteArray();
-      if (!bytes) {
-        throw new InternalServerErrorException('File read failed');
-      }
-      return Buffer.from(bytes);
+      return await fs.readFile(target);
     } catch (err) {
-      if (err instanceof InternalServerErrorException) throw err;
-      this.logger.error(`S3 read failed for key ${key}`, err);
+      if (this.isMissingFile(err)) {
+        throw new NotFoundException('File not found');
+      }
+      this.logger.error(`Local read failed for key ${key}`, err);
       throw new InternalServerErrorException('File read failed');
     }
   }
 
   /** Check whether an object exists in storage */
-  async exists(key: string): Promise<boolean> {
+  async exists(key: string, bucket = this.bucket): Promise<boolean> {
+    const target = this.resolveKey(bucket, key);
     try {
-      await this.client.send(new HeadObjectCommand({ Bucket: this.bucket, Key: key }));
-      return true;
+      const stat = await fs.stat(target);
+      return stat.isFile();
     } catch {
       return false;
     }
+  }
+
+  // ─── Internal helpers ──────────────────────────────────────
+
+  private assertSafeBucket(bucket: string): void {
+    if (!SAFE_BUCKET_RE.test(bucket) || bucket === '.' || bucket === '..') {
+      throw new BadRequestException('Invalid storage bucket');
+    }
+  }
+
+  private assertSafeKey(key: string): void {
+    if (typeof key !== 'string' || key.length === 0) {
+      throw new BadRequestException('Invalid storage key');
+    }
+    if (key.includes(NULL_BYTE)) {
+      throw new BadRequestException('Invalid storage key');
+    }
+    if (key.startsWith('/') || key.startsWith('\\')) {
+      throw new BadRequestException('Invalid storage key');
+    }
+    if (WINDOWS_DRIVE_OR_UNC_RE.test(key)) {
+      throw new BadRequestException('Invalid storage key');
+    }
+    if (key.includes(':')) {
+      // Windows alternate-data-stream marker; also blocks drive letters.
+      throw new BadRequestException('Invalid storage key');
+    }
+    const segments = key.split(/[\\/]/);
+    for (const segment of segments) {
+      if (segment === '' || segment === '.' || segment === '..') {
+        throw new BadRequestException('Invalid storage key');
+      }
+    }
+  }
+
+  /** Validates bucket + key and returns the resolved absolute path, or throws. */
+  private resolveKey(bucket: string, key: string): string {
+    this.assertSafeBucket(bucket);
+    this.assertSafeKey(key);
+    const bucketRoot = resolve(this.root, bucket);
+    const target = resolve(bucketRoot, key);
+    if (target !== bucketRoot && !target.startsWith(bucketRoot + sep)) {
+      throw new BadRequestException('Invalid storage key');
+    }
+    return target;
+  }
+
+  private async ensureDir(dir: string): Promise<void> {
+    await fs.mkdir(dir, { recursive: true, mode: 0o700 });
+  }
+
+  private isMissingFile(err: unknown): boolean {
+    return (
+      typeof err === 'object' &&
+      err !== null &&
+      'code' in err &&
+      (err as { code?: string }).code === 'ENOENT'
+    );
   }
 
   private extFromMime(mime: string): string {
@@ -221,6 +246,7 @@ export class StorageService implements OnModuleInit {
       'image/png': '.png',
       'image/webp': '.webp',
       'application/pdf': '.pdf',
+      'application/json': '.json',
     };
     return map[mime] ?? '';
   }

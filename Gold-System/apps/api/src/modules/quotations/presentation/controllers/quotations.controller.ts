@@ -1,8 +1,19 @@
-import { Controller, Get, HttpCode, HttpStatus, Param, Query, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Header,
+  HttpCode,
+  HttpStatus,
+  Param,
+  Query,
+  StreamableFile,
+  UseGuards,
+} from '@nestjs/common';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { CurrentUser, CurrentUserData } from '../../../../common/decorators/current-user.decorator';
 import { QuotationsService } from '../../application/quotations.service';
 import { ListQuotationsDto } from '../../application/dto/list-quotations.dto';
+import { attachmentDisposition } from '../../../../common/storage/file-disposition';
 
 /**
  * Quotations REST API.
@@ -61,18 +72,27 @@ export class QuotationsController {
 
   /**
    * GET /quotations/:id/download
-   * Get a pre-signed URL to download the quotation document.
+   * Download the quotation document bytes.
    *
    * AUDIT: Every download is audited (BR-S02).
    * CUSTOMER ISOLATION: Customers can only download their own documents.
    * IMMUTABILITY: The document represents the locked pricing snapshot — not a live price.
    *
-   * Returns: pre-signed URL (expires per STORAGE_SIGNED_URL_TTL_SECONDS).
+   * Returns the file bytes with an attachment disposition (authenticated).
    */
   @Get(':id/download')
   @HttpCode(HttpStatus.OK)
-  async downloadQuotation(@CurrentUser() user: CurrentUserData, @Param('id') quotationId: string) {
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async downloadQuotation(
+    @CurrentUser() user: CurrentUserData,
+    @Param('id') quotationId: string,
+  ): Promise<StreamableFile> {
     const isStaff = user.permissions.includes('quotation.read');
-    return this.quotationsService.getDownloadUrl(quotationId, user.userId, isStaff);
+    const file = await this.quotationsService.downloadDocument(quotationId, user.userId, isStaff);
+    return new StreamableFile(file.buffer, {
+      type: file.mimeType,
+      disposition: attachmentDisposition(file.fileName),
+    });
   }
 }

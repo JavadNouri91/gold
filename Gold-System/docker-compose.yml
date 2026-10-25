@@ -13,33 +13,11 @@ services:
       POSTGRES_USER: gold_user
       POSTGRES_PASSWORD: gold_pass
     ports:
-      - '5432:5432'
+      - '127.0.0.1:5432:5432'
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U gold_user -d gold_db']
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-  # ─────────────────────────────────────────
-  # MinIO — S3-compatible object storage (dev)
-  # ─────────────────────────────────────────
-  minio:
-    image: minio/minio:latest
-    container_name: gold_minio
-    restart: unless-stopped
-    command: server /data --console-address ":9001"
-    environment:
-      MINIO_ROOT_USER: minioadmin
-      MINIO_ROOT_PASSWORD: minioadmin
-    ports:
-      - '9000:9000'
-      - '9001:9001'
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
       interval: 10s
       timeout: 5s
       retries: 5
@@ -55,6 +33,9 @@ services:
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      # Must match the uploads_data volume mount below.
+      STORAGE_LOCAL_ROOT: /opt/gold/data/uploads
     ports:
       - '4001:4001'
     depends_on:
@@ -63,6 +44,8 @@ services:
     volumes:
       - ./apps/api:/app/apps/api
       - /app/node_modules
+      # Private uploaded files — kept inside the container, never published.
+      - uploads_data:/opt/gold/data/uploads
     command: pnpm --filter @gold/api dev
 
   # ─────────────────────────────────────────
@@ -86,4 +69,4 @@ services:
 
 volumes:
   postgres_data:
-  minio_data:
+  uploads_data:

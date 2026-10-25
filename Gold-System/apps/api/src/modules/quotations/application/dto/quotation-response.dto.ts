@@ -48,12 +48,3 @@ export class QuotationResponseDto {
 
   items: QuotationItemResponseDto[];
 }
-
-export class QuotationDownloadResponseDto {
-  quotationId: string;
-  quotationNumber: string;
-  /** Pre-signed S3/MinIO URL for the document (expires per STORAGE_SIGNED_URL_TTL_SECONDS) */
-  downloadUrl: string;
-  mimeType: string;
-  expiresIn: string;
-}

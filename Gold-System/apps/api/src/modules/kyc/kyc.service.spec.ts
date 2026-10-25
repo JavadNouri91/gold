@@ -121,7 +121,6 @@ const mockCustomersService = {
 
 const mockStorage = {
   upload: jest.fn(),
-  getSignedUrl: jest.fn(),
   getObject: jest.fn(),
   delete: jest.fn(),
   kycBucket: 'gold-kyc-documents',
@@ -512,10 +511,9 @@ describe('KycService', () => {
 
   // ── getDocuments (§7.3 audit) ───────────────────────────────
   describe('getDocuments', () => {
-    it('generates signed URL and audits each document access when requested', async () => {
+    it('returns the authenticated download path and audits each document access when requested', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
       mockDocRepo.findByCustomerId.mockResolvedValue([makeDocument()]);
-      mockStorage.getSignedUrl.mockResolvedValue('https://minio/signed/abc.jpg?token=xyz');
 
       const results = await service.getDocuments('cust-1', 'reviewer-1', true);
 
@@ -523,7 +521,8 @@ describe('KycService', () => {
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'KYC_DOCUMENT_URL_GENERATED' }),
       );
-      expect(results[0].signedUrl).toBe('https://minio/signed/abc.jpg?token=xyz');
+      expect(results[0].signedUrl).toBe('/api/v1/customers/cust-1/documents/doc-1/file');
+      // No S3/MinIO URL generation is performed anymore.
     });
 
     it('does NOT include fileKey in document response (security)', async () => {
@@ -672,7 +671,12 @@ describe('KycService', () => {
       );
       mockCustomersService.approve.mockResolvedValue(makeCustomer(CustomerStatus.APPROVED));
 
-      await service.decideDocument('cust-1', 'doc-4', { decision: KycDecision.APPROVE }, 'reviewer-1');
+      await service.decideDocument(
+        'cust-1',
+        'doc-4',
+        { decision: KycDecision.APPROVE },
+        'reviewer-1',
+      );
 
       expect(mockKycRepo.updateStatus).toHaveBeenCalledWith(
         'kyc-1',
@@ -708,9 +712,7 @@ describe('KycService', () => {
 
     it('does not approve an already approved document again', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
-      mockDocRepo.findById.mockResolvedValue(
-        makeDocument({ status: VerificationStatus.APPROVED }),
-      );
+      mockDocRepo.findById.mockResolvedValue(makeDocument({ status: VerificationStatus.APPROVED }));
 
       await expect(
         service.decideDocument('cust-1', 'doc-1', { decision: KycDecision.APPROVE }, 'reviewer-1'),
@@ -722,9 +724,7 @@ describe('KycService', () => {
 
     it('does not reject an approved document until it is reopened', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
-      mockDocRepo.findById.mockResolvedValue(
-        makeDocument({ status: VerificationStatus.APPROVED }),
-      );
+      mockDocRepo.findById.mockResolvedValue(makeDocument({ status: VerificationStatus.APPROVED }));
 
       await expect(
         service.decideDocument(
@@ -743,9 +743,7 @@ describe('KycService', () => {
   describe('reopenDocument', () => {
     it('moves an approved document back to under review', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
-      mockDocRepo.findById.mockResolvedValue(
-        makeDocument({ status: VerificationStatus.APPROVED }),
-      );
+      mockDocRepo.findById.mockResolvedValue(makeDocument({ status: VerificationStatus.APPROVED }));
       mockDocRepo.updateStatus.mockResolvedValue(
         makeDocument({ status: VerificationStatus.UNDER_REVIEW, reviewedBy: 'reviewer-1' }),
       );
@@ -930,6 +928,68 @@ describe('KycService', () => {
       await service.readOwnDocumentFile('user-1', 'doc-1');
 
       expect(mockDocRepo.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('audits the owner preview as a viewed event without a URL-generation event', async () => {
+      mockCustomerRepo.findByUserId.mockResolvedValue(makeCustomer());
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(makeDocument());
+      mockStorage.getObject.mockResolvedValue(Buffer.from('image'));
+
+      await service.readOwnDocumentFile('user-1', 'doc-1');
+
+      const viewed = mockAudit.log.mock.calls.filter((call: unknown[]) =>
+        JSON.stringify(call[0]).includes('KYC_DOCUMENT_VIEWED'),
+      );
+      expect(viewed).toHaveLength(1);
+      const urlGenerated = mockAudit.log.mock.calls.filter((call: unknown[]) =>
+        JSON.stringify(call[0]).includes('KYC_DOCUMENT_URL_GENERATED'),
+      );
+      expect(urlGenerated).toHaveLength(0);
+    });
+
+    it('audits the original file view as KYC_DOCUMENT_ORIGINAL_VIEWED', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ originalFileKey: 'kyc-documents/cust-1/orig.jpg' }),
+      );
+      mockStorage.getObject.mockResolvedValue(Buffer.from('image'));
+
+      await service.readDocumentFile(
+        'cust-1',
+        'doc-1',
+        'reviewer-1',
+        undefined,
+        false,
+        true,
+        false,
+      );
+
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_DOCUMENT_ORIGINAL_VIEWED' }),
+      );
+    });
+
+    it('audits the processed file view as KYC_DOCUMENT_PROCESSED_VIEWED', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ processedFileKey: 'kyc-documents/cust-1/processed.png' }),
+      );
+      mockStorage.getObject.mockResolvedValue(Buffer.from('image'));
+
+      await service.readDocumentFile(
+        'cust-1',
+        'doc-1',
+        'reviewer-1',
+        undefined,
+        false,
+        false,
+        true,
+      );
+
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_DOCUMENT_PROCESSED_VIEWED' }),
+      );
     });
   });
 

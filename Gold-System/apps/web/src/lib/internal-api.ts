@@ -291,14 +291,6 @@ export interface StaffQuotationList {
   meta: PageMeta;
 }
 
-export interface QuotationDownload {
-  quotationId: string;
-  quotationNumber: string;
-  downloadUrl: string;
-  mimeType: string;
-  expiresIn: string;
-}
-
 export interface AssignmentRecord {
   id: string;
   orderId: string;
@@ -1143,8 +1135,9 @@ export const internalQuotationsApi = {
   getById(id: string): Promise<StaffQuotation> {
     return request(`/quotations/${id}`);
   },
-  download(id: string): Promise<QuotationDownload> {
-    return request(`/quotations/${id}/download`);
+  /** Download the quotation document bytes (authenticated). */
+  download(id: string): Promise<Blob> {
+    return fetchBlob(`/quotations/${id}/download`);
   },
 };
 

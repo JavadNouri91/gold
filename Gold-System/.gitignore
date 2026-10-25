@@ -20,6 +20,9 @@ NUL
 .env.local
 .env.*.local
 
+# Local uploaded files
+.data/
+
 # Logs
 logs/
 *.log

@@ -24,6 +24,7 @@ import {
   ALLOWED_KYC_MIME_TYPES,
   MAX_KYC_FILE_SIZE_BYTES,
 } from '../../../../common/storage/storage.service';
+import { inlineDisposition } from '../../../../common/storage/file-disposition';
 import { KycService } from '../../application/kyc.service';
 import { KycDecisionDto } from '../../application/dto/kyc-decision.dto';
 import { SubmitDocumentDto } from '../../application/dto/submit-document.dto';
@@ -88,7 +89,7 @@ export class KycController {
     );
     return new StreamableFile(file.buffer, {
       type: file.mimeType,
-      disposition: 'inline; filename="document"',
+      disposition: inlineDisposition(file.fileName),
     });
   }
 
@@ -273,7 +274,7 @@ export class KycController {
     );
     return new StreamableFile(file.buffer, {
       type: file.mimeType,
-      disposition: 'inline; filename="document"',
+      disposition: inlineDisposition(file.fileName),
     });
   }
 
@@ -281,7 +282,9 @@ export class KycController {
   @RequirePermissions('kyc.review')
   @HttpCode(HttpStatus.OK)
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Replace a KYC document image after staff crop/rotate (keeps the original)' })
+  @ApiOperation({
+    summary: 'Replace a KYC document image after staff crop/rotate (keeps the original)',
+  })
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_KYC_FILE_SIZE_BYTES },
@@ -311,7 +314,9 @@ export class KycController {
   @RequirePermissions('kyc.review')
   @HttpCode(HttpStatus.OK)
   @ApiConsumes('multipart/form-data')
-  @ApiOperation({ summary: 'Save a background-free personal photo without replacing the review original' })
+  @ApiOperation({
+    summary: 'Save a background-free personal photo without replacing the review original',
+  })
   @UseInterceptors(
     FileInterceptor('file', {
       limits: { fileSize: MAX_KYC_FILE_SIZE_BYTES },

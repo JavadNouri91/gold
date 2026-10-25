@@ -56,3 +56,5 @@
 - `docs/18-acceptance-criteria.md`
 - `docs/19-implementation-roadmap.md`
 - `docs/20-cursor-development-guide.md`
+- `docs/21-business-decisions.md`
+- `docs/deployment.md`

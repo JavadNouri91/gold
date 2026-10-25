@@ -699,22 +699,9 @@ function DocumentPreview({
   const previewFrame = 'flex h-60 w-full items-center justify-center overflow-hidden rounded-lg border bg-muted';
 
   const preview = failed ? (
-    document.signedUrl ? (
-      <div className={previewFrame}>
-        <a
-          href={document.signedUrl}
-          target="_blank"
-          rel="noreferrer"
-          className="text-sm text-gold-700 underline"
-        >
-          مشاهده مدرک
-        </a>
-      </div>
-    ) : (
-      <div className={previewFrame}>
-        <p className="text-sm text-muted-foreground">پیش‌نمایش مدرک در دسترس نیست.</p>
-      </div>
-    )
+    <div className={previewFrame}>
+      <p className="text-sm text-muted-foreground">پیش‌نمایش مدرک در دسترس نیست.</p>
+    </div>
   ) : !url ? (
     <div className={previewFrame}>
       <p className="text-sm text-muted-foreground">در حال بارگذاری مدرک…</p>
@@ -731,7 +718,7 @@ function DocumentPreview({
     <div className="space-y-2">
       <div className="relative">
         {preview}
-        {url || document.signedUrl ? (
+        {url ? (
           <Button
             size="icon"
             variant="outline"
@@ -739,7 +726,7 @@ function DocumentPreview({
             asChild
           >
             <a
-              href={url ?? document.signedUrl}
+              href={url}
               target="_blank"
               rel="noreferrer"
               aria-label="مشاهده تصویر کامل"

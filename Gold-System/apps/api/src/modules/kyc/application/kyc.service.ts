@@ -45,7 +45,11 @@ export class DocumentResponseDto {
   hasProcessedFile: boolean;
   createdAt: Date;
   updatedAt: Date;
-  /** Signed URL — generated on demand; caller must audit access (§7.3) */
+  /**
+   * Authenticated download path — generated on demand; caller must audit
+   * access (§7.3). Not a pre-signed URL; the client fetches it with the
+   * bearer token via the existing authenticated blob flow.
+   */
   signedUrl?: string;
 
   static fromEntity(entity: CustomerDocumentEntity, signedUrl?: string): DocumentResponseDto {
@@ -294,9 +298,9 @@ export class KycService {
     for (const doc of docs) {
       let signedUrl: string | undefined;
       if (includeSignedUrls) {
-        signedUrl = await this.storage.getSignedUrl(doc.fileKey, this.storage.kycBucket);
+        signedUrl = `/api/v1/customers/${customerId}/documents/${doc.id}/file`;
 
-        // §7.3: Audit every document access with signed URL generation
+        // §7.3: Audit every document access with URL generation
         await this.audit.log({
           actorId,
           action: 'KYC_DOCUMENT_URL_GENERATED',
@@ -493,7 +497,8 @@ export class KycService {
     const useOriginal = Boolean(original && doc.originalFileKey);
     const fileKey = useOriginal ? doc.originalFileKey! : doc.fileKey;
     const buffer = await this.storage.getObject(fileKey, this.storage.kycBucket);
-    const shouldMarkViewed = markAsViewed && !useOriginal && doc.status === VerificationStatus.PENDING;
+    const shouldMarkViewed =
+      markAsViewed && !useOriginal && doc.status === VerificationStatus.PENDING;
     if (shouldMarkViewed) {
       await this.documentRepo.updateStatus(doc.id, VerificationStatus.UNDER_REVIEW, actorId);
     }
@@ -643,11 +648,7 @@ export class KycService {
 
     const verification = await this.kycRepo.findLatestByCustomerId(customerId);
     if (verification?.status === VerificationStatus.APPROVED) {
-      await this.kycRepo.updateStatus(
-        verification.id,
-        VerificationStatus.UNDER_REVIEW,
-        actorId,
-      );
+      await this.kycRepo.updateStatus(verification.id, VerificationStatus.UNDER_REVIEW, actorId);
       await this.audit.log({
         actorId,
         action: 'KYC_REVIEW_REOPENED',
@@ -1184,7 +1185,9 @@ export class KycService {
     }
 
     const documents = await this.documentRepo.findByCustomerId(customer.id);
-    const latestOfType = documents.find((document) => document.documentType === params.documentType);
+    const latestOfType = documents.find(
+      (document) => document.documentType === params.documentType,
+    );
     const reason = staffUploadBlockReason({
       documentType: params.documentType,
       status: latestOfType?.status ?? null,
@@ -1305,7 +1308,15 @@ export class KycService {
     processed = false,
   ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
     const customer = await this.findCustomerByUserId(userId);
-    return this.readDocumentFile(customer.id, documentId, userId, ipAddress, false, false, processed);
+    return this.readDocumentFile(
+      customer.id,
+      documentId,
+      userId,
+      ipAddress,
+      false,
+      false,
+      processed,
+    );
   }
 
   // ----------------------------------------------------------------

@@ -458,6 +458,33 @@ describe('CustomersService', () => {
     });
   });
 
+  describe('readOwnAvatar', () => {
+    it('reads the current user own avatar from their avatarKey', async () => {
+      mockCustomerRepo.findByUserId.mockResolvedValue(
+        makeCustomer({ avatarKey: 'customer-avatars/cust-1/a.png' }),
+      );
+      mockStorage.getObject.mockResolvedValue(Buffer.from('png'));
+
+      const result = await service.readOwnAvatar('user-1');
+
+      expect(mockStorage.getObject).toHaveBeenCalledWith('customer-avatars/cust-1/a.png');
+      expect(result.mimeType).toBe('image/png');
+    });
+
+    it('returns 404 when the customer has no avatar', async () => {
+      mockCustomerRepo.findByUserId.mockResolvedValue(makeCustomer({ avatarKey: null }));
+
+      await expect(service.readOwnAvatar('user-1')).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('never reads another user avatar (resolves only by the token user)', async () => {
+      mockCustomerRepo.findByUserId.mockResolvedValue(null);
+
+      await expect(service.readOwnAvatar('other-user')).rejects.toBeInstanceOf(NotFoundException);
+      expect(mockStorage.getObject).not.toHaveBeenCalled();
+    });
+  });
+
   describe('requestAccountDeletion', () => {
     it('does not delete the account when financial history exists', async () => {
       mockCustomerRepo.findByUserId.mockResolvedValue(makeCustomer());

@@ -1023,6 +1023,7 @@ export interface Quotation {
   generatedAt: string;
   pricingCalculationId?: string;
   documentReference?: string;
+  documentAvailable?: boolean;
 }
 
 export const quotationsApi = {
@@ -1030,8 +1031,9 @@ export const quotationsApi = {
     return request(`/quotations/${id}`);
   },
 
-  getDownloadUrl(id: string): string {
-    return `${apiBase()}/quotations/${id}/download`;
+  /** Download the quotation document bytes (authenticated). */
+  download(id: string): Promise<Blob> {
+    return fetchBlob(`/quotations/${id}/download`);
   },
 };
 

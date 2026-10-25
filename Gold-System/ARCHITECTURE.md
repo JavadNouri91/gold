@@ -45,7 +45,7 @@ Gold System در نسخه فعلی یک Backend واحد دارد، اما Domai
 ### Infrastructure
 - Docker
 - Nginx یا Reverse Proxy معادل
-- S3-compatible Object Storage
+- Local filesystem storage (private)
 
 ### Testing
 - Jest
@@ -83,7 +83,7 @@ Gold System در نسخه فعلی یک Backend واحد دارد، اما Domai
                       |
               +-------+-------+
               |               |
-         PostgreSQL      Object Storage
+         PostgreSQL      Local Storage
               |
         Financial/Gold
            Ledgers
@@ -248,13 +248,13 @@ Use Case
 
 ## 14. File Storage
 
-مدارک KYC و فایل‌های پیش‌فاکتور در Object Storage نگهداری شوند.
+مدارک KYC و فایل‌های پیش‌فاکتور در فایل‌سیستم محلی (Local Storage) نگهداری شوند.
 
 Database فقط metadata/reference را نگه دارد.
 
 فایل‌های حساس:
-- private bucket
-- signed URL
+- private directory (بیرون از مسیر عمومی وب)
+- تحویل فقط از طریق API احراز هویت‌شده
 - access control
 - audit
 
@@ -404,7 +404,7 @@ Docker Compose
 └── reverse-proxy
 ```
 
-Object Storage می‌تواند external باشد.
+Object Storage می‌تواند در آینده با Local Storage جایگزین شود (نسخه فعلی از فایل‌سیستم محلی استفاده می‌کند — docs/deployment.md).
 
 در صورت رشد سیستم، deployment به orchestration پیشرفته قابل ارتقاست.
 

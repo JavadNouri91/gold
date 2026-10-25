@@ -16,6 +16,8 @@ export function validateEnv(config: Record<string, unknown>) {
     SMS_PROVIDER: Joi.string().valid('smsir', 'melipayamak', 'mock').default('mock'),
     SMS_API_KEY: Joi.string().default(''),
     SMS_SENDER_LINE: Joi.string().default(''),
+    // Local filesystem storage — docs/deployment.md
+    STORAGE_LOCAL_ROOT: Joi.string().default('.data/uploads'),
   }).unknown(true);
 
   const { error, value } = schema.validate(config, { abortEarly: false });
@@ -32,5 +34,16 @@ export function validateEnv(config: Record<string, unknown>) {
     );
   }
 
+  if (value.NODE_ENV === 'production' && !isAbsolutePath(value.STORAGE_LOCAL_ROOT)) {
+    throw new Error(
+      'Environment validation failed:\n  - STORAGE_LOCAL_ROOT must be an absolute path when NODE_ENV=production',
+    );
+  }
+
   return value;
+}
+
+function isAbsolutePath(value: string): boolean {
+  if (typeof value !== 'string' || value.length === 0) return false;
+  return value.startsWith('/') || /^[A-Za-z]:[\\/]/.test(value) || value.startsWith('\\\\');
 }

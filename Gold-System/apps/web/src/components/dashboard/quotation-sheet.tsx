@@ -24,6 +24,7 @@ import {
   internalTradesApi,
   type StaffQuotation,
 } from '@/lib/internal-api';
+import { saveBlob } from '@/lib/download';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
@@ -75,8 +76,8 @@ export function QuotationDetails({
     setBusy(true);
     setError(null);
     try {
-      const file = await internalQuotationsApi.download(quote.id);
-      window.open(file.downloadUrl, '_blank', 'noopener,noreferrer');
+      const blob = await internalQuotationsApi.download(quote.id);
+      saveBlob(blob, `${quote.quotationNumber}-v${quote.version}.json`);
     } catch (err) {
       setError(err instanceof ApiClientError ? err.message : 'دریافت فایل ممکن نیست.');
     } finally {

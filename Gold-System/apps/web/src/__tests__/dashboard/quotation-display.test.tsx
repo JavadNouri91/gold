@@ -18,10 +18,15 @@ jest.mock('@/lib/internal-api', () => ({
   },
 }));
 
+jest.mock('@/lib/download', () => ({
+  saveBlob: jest.fn(),
+}));
+
 const api = jest.requireMock('@/lib/internal-api') as {
-  internalQuotationsApi: { getById: jest.Mock };
+  internalQuotationsApi: { getById: jest.Mock; download: jest.Mock };
   internalOrdersApi: { getById: jest.Mock; approve: jest.Mock };
 };
+const downloadLib = jest.requireMock('@/lib/download') as { saveBlob: jest.Mock };
 
 const quoteFixture = {
   id: 'q1',
@@ -77,5 +82,27 @@ describe('quotation display', () => {
     ).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'تأیید' }));
     expect(api.internalOrdersApi.approve).toHaveBeenCalledWith('ord-1');
+  });
+
+  it('downloads the document as a blob via the authenticated API and saves it', async () => {
+    signIn(['quotation.read']);
+    api.internalQuotationsApi.getById.mockResolvedValue({
+      ...quoteFixture,
+      documentAvailable: true,
+    });
+    api.internalOrdersApi.getById.mockResolvedValue({ id: 'ord-1', status: 'QUOTED' });
+    api.internalQuotationsApi.download.mockResolvedValue(
+      new Blob(['{"ok":true}'], { type: 'application/json' }),
+    );
+    const user = userEvent.setup();
+    render(<QuotationModal quotationId="q-download" open onClose={() => undefined} />);
+
+    await user.click(await screen.findByRole('button', { name: 'دریافت سند' }));
+
+    expect(api.internalQuotationsApi.download).toHaveBeenCalledWith('q1');
+    expect(downloadLib.saveBlob).toHaveBeenCalledWith(
+      expect.any(Blob),
+      'QT-44-v2.json',
+    );
   });
 });

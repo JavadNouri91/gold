@@ -7,8 +7,8 @@ if errorlevel 1 (
   set "PATH=%LOCALAPPDATA%\Programs\DockerDesktop\resources\bin;%PATH%"
 )
 
-echo Starting postgres and minio...
-docker compose up -d postgres minio
+echo Starting postgres...
+docker compose up -d postgres
 if errorlevel 1 (
   echo Docker failed. Start Docker Desktop and try again.
   pause

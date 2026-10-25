@@ -158,7 +158,7 @@ describe('QuotationsService', () => {
           provide: QuotationDocumentService,
           useValue: {
             generate: jest.fn(),
-            getDownloadUrl: jest.fn(),
+            read: jest.fn(),
           },
         },
         {
@@ -456,19 +456,18 @@ describe('QuotationsService', () => {
 
   // ─── Document download ─────────────────────────────────────────────────────
 
-  describe('getDownloadUrl', () => {
-    it('returns a signed URL for a Quotation with a document', async () => {
+  describe('downloadDocument', () => {
+    it('returns the document bytes for a Quotation with a document', async () => {
       const quotation = makeQuotation({ documentKey: 'quotations/QT-000001/v1.json' });
       (quotationRepo.findByIdForCustomer as jest.Mock).mockResolvedValue(quotation);
       (prisma.customer.findUnique as jest.Mock).mockResolvedValue({ id: CUSTOMER_ID });
-      (documentService.getDownloadUrl as jest.Mock).mockResolvedValue(
-        'https://storage.example.com/signed-url',
-      );
+      (documentService.read as jest.Mock).mockResolvedValue(Buffer.from('{"ok":true}'));
 
-      const result = await service.getDownloadUrl(QUOTATION_ID, CUSTOMER_USER_ID, false);
+      const result = await service.downloadDocument(QUOTATION_ID, CUSTOMER_USER_ID, false);
 
-      expect(result.downloadUrl).toBe('https://storage.example.com/signed-url');
-      expect(result.quotationNumber).toBe(QUOTATION_NUMBER);
+      expect(result.buffer.toString()).toBe('{"ok":true}');
+      expect(result.mimeType).toBe('application/json');
+      expect(result.fileName).toBe('QT-000001-v1.json');
 
       // Download MUST be audited (BR-S02)
       expect(auditService.log).toHaveBeenCalledWith(
@@ -482,7 +481,7 @@ describe('QuotationsService', () => {
       (prisma.customer.findUnique as jest.Mock).mockResolvedValue({ id: CUSTOMER_ID });
 
       await expect(
-        service.getDownloadUrl(QUOTATION_ID, CUSTOMER_USER_ID, false),
+        service.downloadDocument(QUOTATION_ID, CUSTOMER_USER_ID, false),
       ).rejects.toBeInstanceOf(QuotationDocumentNotReadyException);
     });
 
@@ -491,11 +490,11 @@ describe('QuotationsService', () => {
       (prisma.customer.findUnique as jest.Mock).mockResolvedValue({ id: CUSTOMER_ID });
 
       await expect(
-        service.getDownloadUrl('other-id', CUSTOMER_USER_ID, false),
+        service.downloadDocument('other-id', CUSTOMER_USER_ID, false),
       ).rejects.toBeInstanceOf(QuotationNotFoundException);
 
       // NO audit logged for failed access attempts (QuotationNotFoundException before audit)
-      expect(documentService.getDownloadUrl).not.toHaveBeenCalled();
+      expect(documentService.read).not.toHaveBeenCalled();
     });
   });
 
@@ -517,7 +516,6 @@ describe('QuotationsService', () => {
       const docServiceInstance =
         new (require('./application/quotation-document.service').QuotationDocumentService)({
           upload: jest.fn(),
-          getSignedUrl: jest.fn(),
         });
 
       // The document service only has StorageService as dependency
@@ -532,7 +530,6 @@ describe('QuotationsService', () => {
       const docService =
         new (require('./application/quotation-document.service').QuotationDocumentService)({
           upload: jest.fn().mockResolvedValue({ key: 'test.json', bucket: 'test' }),
-          getSignedUrl: jest.fn(),
         });
 
       const data = {

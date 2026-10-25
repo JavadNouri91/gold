@@ -9,7 +9,7 @@ import { QuotationRepository } from '../infrastructure/repositories/quotation.re
 import { QuotationDocumentService } from './quotation-document.service';
 import { QuotationEntity } from '../domain/entities/quotation.entity';
 import { QuotationItemEntity } from '../domain/entities/quotation-item.entity';
-import { QuotationResponseDto, QuotationDownloadResponseDto } from './dto/quotation-response.dto';
+import { QuotationResponseDto } from './dto/quotation-response.dto';
 import { ListQuotationsDto } from './dto/list-quotations.dto';
 import {
   QuotationNotFoundException,
@@ -349,17 +349,17 @@ export class QuotationsService {
   }
 
   /**
-   * Returns a pre-signed download URL for a Quotation document.
+   * Returns the quotation document bytes for an authenticated download.
    *
    * AUDIT: Every download must be audited (BR-S02).
    * CUSTOMER ISOLATION: Customers can only download their own quotation documents.
    * IMMUTABILITY: The document is the locked snapshot — never a recalculation.
    */
-  async getDownloadUrl(
+  async downloadDocument(
     quotationId: string,
     actorUserId: string,
     isStaff: boolean,
-  ): Promise<QuotationDownloadResponseDto> {
+  ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
     let quotation: QuotationEntity | null;
 
     if (isStaff) {
@@ -375,7 +375,7 @@ export class QuotationsService {
       throw new QuotationDocumentNotReadyException(quotationId);
     }
 
-    const downloadUrl = await this.documentService.getDownloadUrl(quotation.documentKey!);
+    const buffer = await this.documentService.read(quotation.documentKey!);
 
     // Audit: document download (BR-S02, §7.3 principle)
     await this.audit.log({
@@ -390,12 +390,12 @@ export class QuotationsService {
       },
     });
 
+    const mimeType = quotation.documentMimeType ?? 'application/json';
+    const extension = mimeType === 'application/json' ? 'json' : 'bin';
     return {
-      quotationId: quotation.id,
-      quotationNumber: quotation.quotationNumber,
-      downloadUrl,
-      mimeType: quotation.documentMimeType ?? 'application/json',
-      expiresIn: 'See STORAGE_SIGNED_URL_TTL_SECONDS environment configuration',
+      buffer,
+      mimeType,
+      fileName: `${quotation.quotationNumber}-v${quotation.version}.${extension}`,
     };
   }
 
