@@ -4,6 +4,7 @@ import { AssignmentStatus, OrderStatus } from '@gold/shared-types';
 import { PrismaService } from '../../../database/prisma.service';
 import { AuditService } from '../../audit/application/audit.service';
 import { OrderRepository } from '../../orders/infrastructure/repositories/order.repository';
+import { readOrderSide } from '../../orders/application/customer-activity.math';
 import { QuotationRepository } from '../../quotations/infrastructure/repositories/quotation.repository';
 import { AssignmentRepository } from '../infrastructure/repositories/assignment.repository';
 
@@ -16,6 +17,14 @@ import {
   OrderNotUnderReviewException,
 } from '../domain/exceptions/assignment.exceptions';
 import { OrderNotFoundException } from '../../orders/domain/exceptions/order.exceptions';
+
+/** Joins a customer's first/last name for staff-facing lists. */
+function personName(
+  person?: { firstName?: string | null; lastName?: string | null } | null,
+): string | null {
+  const name = [person?.firstName, person?.lastName].filter(Boolean).join(' ').trim();
+  return name || null;
+}
 
 @Injectable()
 export class AssignmentsService {
@@ -201,6 +210,7 @@ export class AssignmentsService {
     const orderRow = await this.prisma.order.findUnique({
       where: { id: orderId },
       include: {
+        items: { orderBy: { createdAt: 'asc' }, take: 1, select: { metadata: true } },
         customer: {
           include: {
             account: true,
@@ -245,6 +255,7 @@ export class AssignmentsService {
       weightGrams: orderRow.weightGrams.toFixed(6),
       purityRatio: orderRow.purityRatio.toFixed(6),
       customerType: orderRow.customerType,
+      side: readOrderSide(orderRow.items?.[0]?.metadata),
       submittedAt: orderRow.submittedAt,
       createdAt: orderRow.createdAt,
     };
@@ -347,25 +358,54 @@ export class AssignmentsService {
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
+        include: {
+          assignedTo: { select: { name: true } },
+          assignedBy: { select: { name: true } },
+          order: {
+            select: {
+              orderNumber: true,
+              status: true,
+              weightGrams: true,
+              totalAmountRial: true,
+              customerId: true,
+              customer: {
+                select: { firstName: true, lastName: true, customerNumber: true },
+              },
+              items: {
+                orderBy: { createdAt: 'asc' },
+                take: 1,
+                select: { metadata: true },
+              },
+            },
+          },
+        },
       }),
       this.prisma.assignment.count({ where }),
     ]);
 
-    const assignments = rows.map((r) =>
-      this.toResponse(
-        new AssignmentEntity({
-          id: r.id,
-          orderId: r.orderId,
-          quotationId: r.quotationId,
-          assignedToId: r.assignedToId,
-          assignedById: r.assignedById,
-          status: r.status as AssignmentStatus,
-          notes: r.notes,
-          completedAt: r.completedAt,
-          createdAt: r.createdAt,
-          updatedAt: r.updatedAt,
-        }),
-      ),
+    const assignments = rows.map(
+      (r): AssignmentResponseDto => ({
+        id: r.id,
+        orderId: r.orderId,
+        quotationId: r.quotationId,
+        assignedToId: r.assignedToId,
+        assignedById: r.assignedById,
+        status: r.status as AssignmentStatus,
+        notes: r.notes,
+        completedAt: r.completedAt,
+        createdAt: r.createdAt,
+        updatedAt: r.updatedAt,
+        assignedToName: r.assignedTo?.name ?? null,
+        assignedByName: r.assignedBy?.name ?? null,
+        orderNumber: r.order?.orderNumber ?? null,
+        orderStatus: r.order?.status ?? null,
+        side: readOrderSide(r.order?.items?.[0]?.metadata),
+        weightGrams: r.order?.weightGrams?.toFixed(6) ?? null,
+        totalAmountRial: r.order?.totalAmountRial?.toFixed(2) ?? null,
+        customerId: r.order?.customerId ?? null,
+        customerName: personName(r.order?.customer ?? null),
+        customerNumber: r.order?.customer?.customerNumber ?? null,
+      }),
     );
 
     return {

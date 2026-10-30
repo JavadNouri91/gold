@@ -485,6 +485,17 @@ export function orderStatusPresentation(status: string): { status: string; label
   return { status: group, label: ORDER_STATUS_GROUP_LABELS[group] ?? status };
 }
 
+/** Buy/sell side of an order or trade. Unclassified rows are not relabeled. */
+export const ORDER_SIDE_LABELS: Record<string, string> = {
+  BUY: 'خرید',
+  SELL: 'فروش',
+};
+
+export function orderSideLabel(side?: string | null): string | null {
+  if (!side) return null;
+  return ORDER_SIDE_LABELS[side] ?? null;
+}
+
 export const TRADE_STATUS_LABELS: Record<string, string> = {
   PENDING_CONFIRMATION: 'در انتظار تأیید',
   CONFIRMED: 'تأیید شده',

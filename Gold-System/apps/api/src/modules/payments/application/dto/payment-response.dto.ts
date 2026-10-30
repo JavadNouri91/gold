@@ -22,6 +22,7 @@ export class PaymentResponseDto {
   tradeNumber: string | null;
   /** Staff list enrichment — order number when linked. */
   orderNumber: string | null;
+  direction: string;
   method: string;
   amount: string;
   currency: string;
@@ -29,6 +30,10 @@ export class PaymentResponseDto {
   referenceNumber: string | null;
   /** True when a receipt file is stored. The storage key is never returned. */
   hasReceipt: boolean;
+  customerBankAccountId: string | null;
+  destinationIban: string | null;
+  destinationBankName: string | null;
+  destinationAccountHolder: string | null;
   notes: string | null;
   receivedAt: string | null;
   recordedByUserId: string | null;
@@ -55,12 +60,17 @@ export class PaymentResponseDto {
     dto.customerMobile = extras?.customerMobile ?? null;
     dto.tradeNumber = extras?.tradeNumber ?? null;
     dto.orderNumber = extras?.orderNumber ?? null;
+    dto.direction = entity.direction;
     dto.method = entity.method;
     dto.amount = entity.amount.toFixed(2);
     dto.currency = entity.currency;
     dto.status = entity.status;
     dto.referenceNumber = entity.referenceNumber;
     dto.hasReceipt = Boolean(entity.receiptKey);
+    dto.customerBankAccountId = entity.customerBankAccountId;
+    dto.destinationIban = entity.destinationIban;
+    dto.destinationBankName = entity.destinationBankName;
+    dto.destinationAccountHolder = entity.destinationAccountHolder;
     dto.notes = entity.notes;
     dto.receivedAt = entity.receivedAt?.toISOString() ?? null;
     dto.recordedByUserId = entity.recordedByUserId;
@@ -72,11 +82,18 @@ export class PaymentResponseDto {
   }
 }
 
-/** KPI cards for the staff payments dashboard. */
-export class StaffPaymentSummaryDto {
+/** KPI cards for the staff payments dashboard, split by direction. */
+export class StaffDirectionSummaryDto {
   pendingCount: number;
+  pendingAmountRial: string;
   todayValidatedAmountRial: string;
   totalSuccessfulAmountRial: string;
+  totalCount: number;
+}
+
+export class StaffPaymentSummaryDto {
+  deposits: StaffDirectionSummaryDto;
+  withdrawals: StaffDirectionSummaryDto;
 }
 
 export class PaymentAllocationResponseDto {
@@ -175,6 +192,10 @@ export class PaymentSummaryDto {
   reversed: AmountCountDto;
   /** Receipts waiting for accountant review. */
   submitted: AmountCountDto;
+  /** Successful withdrawals (VALIDATED). */
+  withdrawn: AmountCountDto;
+  /** Withdrawals waiting for accountant approval (PENDING). */
+  pendingWithdrawal: AmountCountDto;
   /** True when the customer has any non-pending payment, ignoring the current filters. */
   hasAny: boolean;
 }

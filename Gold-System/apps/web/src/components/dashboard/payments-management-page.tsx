@@ -4,17 +4,16 @@ import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 import {
+  ArrowDownToLine,
+  ArrowUpFromLine,
   Check,
-  CheckCircle2,
-  Clock3,
   Download,
-  Eye,
   FileText,
   Plus,
+  Printer,
   Search,
   Trash2,
   Upload,
-  Wallet,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -30,12 +29,14 @@ import { ForbiddenNotice, PermissionGate } from '@/components/dashboard/permissi
 import { ApiErrorState } from '@/components/dashboard/states';
 import { ConfirmDialog } from '@/components/dashboard/confirm-dialog';
 import { PaymentDetailModal } from '@/components/dashboard/payment-detail-modal';
+import { PaymentHeroCards } from '@/components/dashboard/payment-hero-cards';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { SearchableSelect } from '@/components/ui/searchable-select';
 import { MobileNumber } from '@/components/ui/mobile-input';
+import { DatePickerJalali } from '@/components/ui/date-picker-jalali';
 import { ApiClientError } from '@/lib/api';
 import { tomanAmountWordsLabel } from '@/lib/toman-words';
 import {
@@ -64,16 +65,72 @@ const fieldClass =
 type DrawerTab = 'wallet' | 'trade';
 type ConfirmAction = { type: 'validate' | 'fail'; payment: StaffPayment } | null;
 
+type DirectionTab = 'DEPOSIT' | 'WITHDRAWAL';
+
 type Filters = {
   q: string;
   statusGroup: string;
   method: string;
   customerId: string;
+  preset: string;
+  from: string;
+  to: string;
 };
 
-const emptyFilters: Filters = { q: '', statusGroup: '', method: '', customerId: '' };
+const emptyFilters: Filters = {
+  q: '',
+  statusGroup: '',
+  method: '',
+  customerId: '',
+  preset: '',
+  from: '',
+  to: '',
+};
+
+const RANGE_PRESETS: Array<{ id: string; label: string }> = [
+  { id: '', label: 'همه زمان‌ها' },
+  { id: 'today', label: 'امروز' },
+  { id: '7d', label: '۷ روز اخیر' },
+  { id: '30d', label: '۳۰ روز اخیر' },
+  { id: 'custom', label: 'بازه دلخواه' },
+];
+
+function pad2(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
+function toIsoLocal(date: Date): string {
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}`;
+}
+
+function presetBounds(
+  preset: string,
+  customFrom: string,
+  customTo: string,
+): { from?: string; to?: string } {
+  if (preset === 'custom') {
+    return {
+      from: customFrom ? `${customFrom}T00:00:00` : undefined,
+      to: customTo ? `${customTo}T23:59:59` : undefined,
+    };
+  }
+  const now = new Date();
+  if (preset === 'today') {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    return { from: toIsoLocal(start), to: toIsoLocal(now) };
+  }
+  if (preset === '7d') {
+    return { from: toIsoLocal(new Date(now.getTime() - 7 * 24 * 3600 * 1000)), to: toIsoLocal(now) };
+  }
+  if (preset === '30d') {
+    return { from: toIsoLocal(new Date(now.getTime() - 30 * 24 * 3600 * 1000)), to: toIsoLocal(now) };
+  }
+  return {};
+}
 
 function paymentPurpose(row: StaffPayment): string {
+  if (row.direction === 'WITHDRAWAL') return 'برداشت وجه';
   if (row.orderNumber) return `سفارش #${toPersianDigits(row.orderNumber)}`;
   if (row.tradeNumber) return `معامله #${toPersianDigits(row.tradeNumber)}`;
   if (row.tradeId) return 'تسویه معامله';
@@ -106,9 +163,11 @@ export function PaymentsManagementPage() {
   const canValidate = hasPermission(user?.permissions, 'payment.validate');
   const canCreate = hasPermission(user?.permissions, 'payment.create');
 
+  const [activeTab, setActiveTab] = useState<DirectionTab>('DEPOSIT');
   const [draft, setDraft] = useState<Filters>(emptyFilters);
   const [applied, setApplied] = useState<Filters>(emptyFilters);
-  const [page, setPage] = useState(1);
+  const [pageDeposit, setPageDeposit] = useState(1);
+  const [pageWithdrawal, setPageWithdrawal] = useState(1);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmAction>(null);
@@ -116,22 +175,49 @@ export function PaymentsManagementPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [presetCustomerId, setPresetCustomerId] = useState<string | null>(null);
   const [detailPayment, setDetailPayment] = useState<StaffPayment | null>(null);
+  const [detailAutoPrint, setDetailAutoPrint] = useState(false);
 
-  useEffect(() => {
-    const customerId = new URLSearchParams(window.location.search).get('customerId') ?? '';
-    if (!customerId) return;
-    setDraft((current) => ({ ...current, customerId }));
-    setApplied((current) => ({ ...current, customerId }));
-    setPresetCustomerId(customerId);
+  const page = activeTab === 'DEPOSIT' ? pageDeposit : pageWithdrawal;
+  const setPage = activeTab === 'DEPOSIT' ? setPageDeposit : setPageWithdrawal;
+
+  const openDetail = useCallback((payment: StaffPayment, autoPrint = false) => {
+    setDetailAutoPrint(autoPrint);
+    setDetailPayment(payment);
   }, []);
 
-  const listKey = allowed ? ['payments', applied, page] : null;
+  const closeDetail = useCallback(() => {
+    setDetailPayment(null);
+    setDetailAutoPrint(false);
+  }, []);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const customerId = params.get('customerId') ?? '';
+    const statusGroup = params.get('statusGroup') ?? '';
+    const method = params.get('method') ?? '';
+    if (!customerId && !statusGroup && !method) return;
+    setDraft((current) => ({ ...current, customerId, statusGroup, method }));
+    setApplied((current) => ({ ...current, customerId, statusGroup, method }));
+    if (customerId) setPresetCustomerId(customerId);
+  }, []);
+
+  const range = useMemo(
+    () => presetBounds(applied.preset, applied.from, applied.to),
+    [applied.preset, applied.from, applied.to],
+  );
+
+  const listKey = allowed
+    ? ['payments', activeTab, applied.q, applied.statusGroup, applied.method, applied.customerId, range.from, range.to, page]
+    : null;
   const { data, error, isLoading, mutate } = useSWR(listKey, () =>
     internalPaymentsApi.list({
       q: applied.q || undefined,
       statusGroup: applied.statusGroup || undefined,
       method: applied.method || undefined,
       customerId: applied.customerId || undefined,
+      direction: activeTab,
+      from: range.from,
+      to: range.to,
       limit: LIMIT,
       offset: (page - 1) * LIMIT,
     }),
@@ -151,11 +237,20 @@ export function PaymentsManagementPage() {
     setActionBusy(true);
     setActionError(null);
     try {
+      const isWithdrawal = confirm.payment.direction === 'WITHDRAWAL';
       if (confirm.type === 'validate') await internalPaymentsApi.validate(confirm.payment.id);
       else await internalPaymentsApi.fail(confirm.payment.id);
-      setFeedback(confirm.type === 'validate' ? 'پرداخت تأیید شد.' : 'پرداخت رد شد.');
+      setFeedback(
+        confirm.type === 'validate'
+          ? isWithdrawal
+            ? 'برداشت تأیید و به شبا واریز شد.'
+            : 'پرداخت تأیید شد.'
+          : isWithdrawal
+            ? 'برداشت رد شد و مبلغ رزروشده آزاد گردید.'
+            : 'پرداخت رد شد.',
+      );
       setConfirm(null);
-      setDetailPayment(null);
+      closeDetail();
       refresh();
     } catch (err) {
       setActionError(err instanceof ApiClientError ? err.message : 'عملیات انجام نشد.');
@@ -176,10 +271,12 @@ export function PaymentsManagementPage() {
         شناسه: row.id,
         مشتری: row.customerName ?? row.customerId,
         موبایل: row.customerMobile ?? '',
+        جهت: row.direction === 'WITHDRAWAL' ? 'برداشت' : 'واریز',
         مبلغ_ریال: row.amount,
         بابت: paymentPurpose(row),
         روش: statusLabel(PAYMENT_METHOD_LABELS, row.method),
         ارجاع: row.referenceNumber ?? '',
+        شبا: row.destinationIban ?? '',
         وضعیت: statusLabel(PAYMENT_STATUS_LABELS, row.status),
         تاریخ: row.createdAt,
       })),
@@ -222,7 +319,12 @@ export function PaymentsManagementPage() {
       {
         key: 'amount',
         header: 'مبلغ',
-        render: (row) => <span className="font-bold tabular-nums text-slate-900">{formatMoney(row.amount)}</span>,
+        render: (row) => (
+          <span className={cn('font-bold tabular-nums', row.direction === 'WITHDRAWAL' ? 'text-rose-600' : 'text-slate-900')}>
+            {row.direction === 'WITHDRAWAL' ? '−' : ''}
+            {formatMoney(row.amount)}
+          </span>
+        ),
       },
       {
         key: 'purpose',
@@ -232,19 +334,28 @@ export function PaymentsManagementPage() {
       {
         key: 'method',
         header: 'روش پرداخت',
-        render: (row) => statusLabel(PAYMENT_METHOD_LABELS, row.method),
+        render: (row) =>
+          row.direction === 'WITHDRAWAL' ? 'انتقال بانکی' : statusLabel(PAYMENT_METHOD_LABELS, row.method),
       },
       {
         key: 'ref',
-        header: 'شماره ارجاع',
+        header: 'شماره ارجاع / شبا',
         render: (row) =>
-          row.referenceNumber ? (
-            <span dir="ltr" className="font-mono text-xs">
-              {toPersianDigits(row.referenceNumber)}
-            </span>
-          ) : (
-            '—'
-          ),
+          row.direction === 'WITHDRAWAL'
+            ? row.destinationIban
+              ? (
+                  <span dir="ltr" className="font-mono text-xs">
+                    {toPersianDigits(row.destinationIban)}
+                  </span>
+                )
+              : '—'
+            : row.referenceNumber
+              ? (
+                  <span dir="ltr" className="font-mono text-xs">
+                    {toPersianDigits(row.referenceNumber)}
+                  </span>
+                )
+              : '—',
       },
       {
         key: 'date',
@@ -267,33 +378,42 @@ export function PaymentsManagementPage() {
       {
         key: 'actions',
         header: 'عملیات',
+        className: 'whitespace-nowrap',
         render: (row) => (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100"
-              aria-label="مشاهده جزئیات"
-              title="مشاهده جزئیات"
-              onClick={() => setDetailPayment(row)}
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              aria-label={`مشاهده پرداخت ${shortPaymentId(row.id)}`}
+              onClick={() => openDetail(row, false)}
             >
-              <Eye className="h-4 w-4" />
-            </button>
+              نمایش
+            </Button>
+            <Button
+              size="sm"
+              className="gap-1"
+              aria-label={`چاپ پرداخت ${shortPaymentId(row.id)}`}
+              onClick={() => openDetail(row, true)}
+            >
+              <Printer className="h-3.5 w-3.5" aria-hidden />
+              چاپ
+            </Button>
             {canValidate && row.status === 'PENDING' ? (
               <>
                 <button
                   type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-emerald-700 hover:bg-emerald-50"
-                  aria-label="تأیید پرداخت"
-                  title="تأیید پرداخت"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-emerald-700 hover:bg-emerald-50"
+                  aria-label={row.direction === 'WITHDRAWAL' ? 'تأیید برداشت' : 'تأیید پرداخت'}
+                  title={row.direction === 'WITHDRAWAL' ? 'تأیید برداشت' : 'تأیید پرداخت'}
                   onClick={() => setConfirm({ type: 'validate', payment: row })}
                 >
                   <Check className="h-4 w-4" />
                 </button>
                 <button
                   type="button"
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50"
-                  aria-label="رد پرداخت"
-                  title="رد پرداخت"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-rose-600 hover:bg-rose-50"
+                  aria-label={row.direction === 'WITHDRAWAL' ? 'رد برداشت' : 'رد پرداخت'}
+                  title={row.direction === 'WITHDRAWAL' ? 'رد برداشت' : 'رد پرداخت'}
                   onClick={() => setConfirm({ type: 'fail', payment: row })}
                 >
                   <X className="h-4 w-4" />
@@ -304,20 +424,19 @@ export function PaymentsManagementPage() {
         ),
       },
     ],
-    [canValidate],
+    [canValidate, openDetail],
   );
 
   if (!allowed) return <ForbiddenNotice permission="payment.read" />;
 
-  const pendingCount = summary.data?.pendingCount ?? 0;
-  const todayAmount = summary.data?.todayValidatedAmountRial ?? '0';
-  const totalAmount = summary.data?.totalSuccessfulAmountRial ?? '0';
+  const depositCount = summary.data?.deposits.totalCount ?? 0;
+  const withdrawalCount = summary.data?.withdrawals.totalCount ?? 0;
 
   return (
     <div className="space-y-5">
       <PageHeader
-        title="مدیریت پرداخت‌ها و فیش‌ها"
-        description="مشاهده پرداخت‌های آنلاین و حضوری، تأیید فیش‌ها و ثبت واریز جدید."
+        title="مدیریت واریز و برداشت"
+        description="بررسی واریزی‌ها و درخواست‌های برداشت وجه، تأیید فیش‌ها و ثبت واریز جدید."
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" size="sm" onClick={() => void exportExcel()}>
@@ -333,106 +452,134 @@ export function PaymentsManagementPage() {
                 }}
               >
                 <Plus className="ml-1.5 h-4 w-4" aria-hidden />
-                ثبت پرداخت جدید
+                ثبت واریز جدید
               </Button>
             </PermissionGate>
           </div>
         }
       />
 
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-1.5 rounded-2xl bg-slate-100 p-1.5">
         <button
           type="button"
-          onClick={() => {
-            setDraft((c) => ({ ...c, statusGroup: 'submitted' }));
-            setApplied((c) => ({ ...c, statusGroup: 'submitted' }));
-            setPage(1);
-          }}
-          className="rounded-xl border border-amber-200 bg-amber-50/80 p-4 text-right transition hover:border-amber-300"
+          aria-pressed={activeTab === 'DEPOSIT'}
+          onClick={() => setActiveTab('DEPOSIT')}
+          className={cn(
+            'flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
+            activeTab === 'DEPOSIT' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-white',
+          )}
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-amber-900">در انتظار تایید</p>
-            <Clock3 className="h-5 w-5 text-amber-600" aria-hidden />
-          </div>
-          <p className="mt-2 text-2xl font-bold tabular-nums text-amber-950">
-            {formatFaNumber(pendingCount)} مورد
-          </p>
+          <ArrowDownToLine className="h-4 w-4" aria-hidden />
+          واریزی‌ها
+          <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs tabular-nums">
+            {formatFaNumber(depositCount)}
+          </span>
         </button>
         <button
           type="button"
-          onClick={() => {
-            setDraft((c) => ({ ...c, statusGroup: 'successful' }));
-            setApplied((c) => ({ ...c, statusGroup: 'successful' }));
-            setPage(1);
-          }}
-          className="rounded-xl border border-emerald-200 bg-emerald-50/80 p-4 text-right transition hover:border-emerald-300"
+          aria-pressed={activeTab === 'WITHDRAWAL'}
+          onClick={() => setActiveTab('WITHDRAWAL')}
+          className={cn(
+            'flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-sm font-semibold transition',
+            activeTab === 'WITHDRAWAL' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:bg-white',
+          )}
         >
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-emerald-900">واریزی‌های تایید شده امروز</p>
-            <CheckCircle2 className="h-5 w-5 text-emerald-600" aria-hidden />
-          </div>
-          <p className="mt-2 text-xl font-bold tabular-nums text-emerald-950">{formatMoney(todayAmount)}</p>
+          <ArrowUpFromLine className="h-4 w-4" aria-hidden />
+          برداشت‌ها
+          <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs tabular-nums">
+            {formatFaNumber(withdrawalCount)}
+          </span>
         </button>
-        <div className="rounded-xl border border-slate-200 bg-white p-4">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-sm font-medium text-slate-600">کل واریزی‌های سیستم</p>
-            <Wallet className="h-5 w-5 text-slate-400" aria-hidden />
-          </div>
-          <p className="mt-2 text-xl font-bold tabular-nums text-slate-900">{formatMoney(totalAmount)}</p>
-        </div>
       </div>
 
+      <PaymentHeroCards summary={summary.data} direction={activeTab} isLoading={summary.isLoading} />
+
       <form
-        className="grid gap-3 rounded-xl border bg-white p-4 md:grid-cols-[1fr_auto_auto_auto]"
+        className="space-y-3 rounded-xl border bg-white p-4"
         onSubmit={(event) => {
           event.preventDefault();
           setApplied(draft);
           setPage(1);
         }}
       >
-        <label className="relative block text-sm">
-          <span className="sr-only">جستجو</span>
-          <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-          <input
-            className="h-10 w-full rounded-lg border border-input bg-background pr-10 pl-3 text-sm"
-            placeholder="جستجو بر اساس نام، موبایل، شناسه تراکنش یا کد ارجاع..."
-            value={draft.q}
-            onChange={(event) => setDraft((c) => ({ ...c, q: event.target.value }))}
-          />
-        </label>
-        <label className="text-sm">
-          <span className="sr-only">وضعیت</span>
-          <select
-            className="h-10 w-full min-w-[10rem] rounded-lg border border-input bg-background px-3 text-sm"
-            value={draft.statusGroup}
-            onChange={(event) => setDraft((c) => ({ ...c, statusGroup: event.target.value }))}
-            aria-label="وضعیت"
-          >
-            <option value="">وضعیت (همه)</option>
-            <option value="successful">تایید شده</option>
-            <option value="submitted">در انتظار</option>
-            <option value="failed">ناموفق</option>
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="sr-only">روش پرداخت</span>
-          <select
-            className="h-10 w-full min-w-[10rem] rounded-lg border border-input bg-background px-3 text-sm"
-            value={draft.method}
-            onChange={(event) => setDraft((c) => ({ ...c, method: event.target.value }))}
-            aria-label="روش پرداخت"
-          >
-            <option value="">روش پرداخت (همه)</option>
-            {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <Button type="submit" variant="outline">
-          اعمال فیلتر
-        </Button>
+        <div className="grid gap-3 md:grid-cols-[1fr_auto_auto_auto_auto]">
+          <label className="relative block text-sm">
+            <span className="sr-only">جستجو</span>
+            <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <input
+              className="h-10 w-full rounded-lg border border-input bg-background pr-10 pl-3 text-sm"
+              placeholder="جستجو بر اساس نام، موبایل، شناسه تراکنش یا کد ارجاع..."
+              value={draft.q}
+              onChange={(event) => setDraft((c) => ({ ...c, q: event.target.value }))}
+            />
+          </label>
+          <label className="text-sm">
+            <span className="sr-only">وضعیت</span>
+            <select
+              className="h-10 w-full min-w-[10rem] rounded-lg border border-input bg-background px-3 text-sm"
+              value={draft.statusGroup}
+              onChange={(event) => setDraft((c) => ({ ...c, statusGroup: event.target.value }))}
+              aria-label="وضعیت"
+            >
+              <option value="">وضعیت (همه)</option>
+              <option value="successful">تایید شده</option>
+              <option value="submitted">در انتظار</option>
+              <option value="failed">ناموفق</option>
+              <option value="reversed">مسترد شده</option>
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="sr-only">روش پرداخت</span>
+            <select
+              className="h-10 w-full min-w-[10rem] rounded-lg border border-input bg-background px-3 text-sm"
+              value={draft.method}
+              onChange={(event) => setDraft((c) => ({ ...c, method: event.target.value }))}
+              aria-label="روش پرداخت"
+            >
+              <option value="">روش پرداخت (همه)</option>
+              {Object.entries(PAYMENT_METHOD_LABELS).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="text-sm">
+            <span className="sr-only">بازه زمانی</span>
+            <select
+              className="h-10 w-full min-w-[10rem] rounded-lg border border-input bg-background px-3 text-sm"
+              value={draft.preset}
+              onChange={(event) => setDraft((c) => ({ ...c, preset: event.target.value }))}
+              aria-label="بازه زمانی"
+            >
+              {RANGE_PRESETS.map((option) => (
+                <option key={option.id} value={option.id}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <Button type="submit" variant="outline">
+            اعمال فیلتر
+          </Button>
+        </div>
+
+        {draft.preset === 'custom' ? (
+          <div className="grid gap-3 sm:grid-cols-2">
+            <DatePickerJalali
+              label="از تاریخ"
+              value={draft.from}
+              onChange={(value) => setDraft((c) => ({ ...c, from: value }))}
+              allowFuture
+            />
+            <DatePickerJalali
+              label="تا تاریخ"
+              value={draft.to}
+              onChange={(value) => setDraft((c) => ({ ...c, to: value }))}
+              allowFuture
+            />
+          </div>
+        ) : null}
       </form>
 
       {feedback ? <Alert variant="success">{feedback}</Alert> : null}
@@ -443,7 +590,7 @@ export function PaymentsManagementPage() {
         columns={columns}
         rows={data?.data ?? []}
         isLoading={isLoading}
-        emptyMessage="پرداختی یافت نشد"
+        emptyMessage={activeTab === 'WITHDRAWAL' ? 'برداشتی یافت نشد' : 'واریزی‌ای یافت نشد'}
         page={page}
         totalPages={data?.meta.totalPages}
         total={data?.meta.total}
@@ -453,15 +600,35 @@ export function PaymentsManagementPage() {
 
       <ConfirmDialog
         open={confirm !== null}
-        title={confirm?.type === 'fail' ? 'رد پرداخت' : 'تأیید پرداخت'}
-        message={
+        title={
           confirm?.type === 'fail'
-            ? 'این پرداخت به‌عنوان ناموفق ثبت می‌شود و اعتبار مشتری افزایش نمی‌یابد.'
-            : confirm?.payment.tradeId
-              ? 'وضعیت پرداخت به تأییدشده تغییر می‌کند.'
-              : 'پس از تأیید، اعتبار مشتری به اندازه مبلغ این واریز افزایش می‌یابد.'
+            ? confirm?.payment.direction === 'WITHDRAWAL'
+              ? 'رد برداشت'
+              : 'رد پرداخت'
+            : confirm?.payment.direction === 'WITHDRAWAL'
+              ? 'تأیید برداشت'
+              : 'تأیید پرداخت'
         }
-        confirmLabel={confirm?.type === 'fail' ? 'رد پرداخت' : 'تأیید پرداخت'}
+        message={
+          confirm?.payment.direction === 'WITHDRAWAL'
+            ? confirm?.type === 'fail'
+              ? 'درخواست برداشت رد می‌شود و مبلغ رزروشده آزاد می‌گردد.'
+              : 'مبلغ از کیف پول کسر و به شماره شبا مقصد واریز می‌شود.'
+            : confirm?.type === 'fail'
+              ? 'این پرداخت به‌عنوان ناموفق ثبت می‌شود و اعتبار مشتری افزایش نمی‌یابد.'
+              : confirm?.payment.tradeId
+                ? 'وضعیت پرداخت به تأییدشده تغییر می‌کند.'
+                : 'پس از تأیید، اعتبار مشتری به اندازه مبلغ این واریز افزایش می‌یابد.'
+        }
+        confirmLabel={
+          confirm?.type === 'fail'
+            ? confirm?.payment.direction === 'WITHDRAWAL'
+              ? 'رد برداشت'
+              : 'رد پرداخت'
+            : confirm?.payment.direction === 'WITHDRAWAL'
+              ? 'تأیید و واریز به شبا'
+              : 'تأیید پرداخت'
+        }
         destructive={confirm?.type === 'fail'}
         isLoading={actionBusy}
         onClose={() => setConfirm(null)}
@@ -472,12 +639,13 @@ export function PaymentsManagementPage() {
         <PaymentDetailModal
           payment={detailPayment}
           canValidate={canValidate}
-          onClose={() => setDetailPayment(null)}
+          autoPrint={detailAutoPrint}
+          onClose={closeDetail}
           onApprove={() => setConfirm({ type: 'validate', payment: detailPayment })}
           onReject={() => setConfirm({ type: 'fail', payment: detailPayment })}
           onEdit={() => {
             setPresetCustomerId(detailPayment.customerId);
-            setDetailPayment(null);
+            closeDetail();
             if (canCreate) setDrawerOpen(true);
           }}
         />

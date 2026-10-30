@@ -12,6 +12,8 @@ import { ApiErrorState, SkeletonBlock } from '@/components/dashboard/states';
 import { ReviewContextPanel } from '@/components/dashboard/review-panel';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { MobileNumber } from '@/components/ui/mobile-input';
+import { SideBadge } from '@/components/ui/side-badge';
 import { StatusBadge } from '@/components/portal/status-badge';
 import {
   CUSTOMER_ACCOUNT_STATUS_LABELS,
@@ -44,12 +46,21 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
   const review = context.data;
   const orderNumber = row?.orderNumber ?? review?.order.orderNumber;
   const status = row?.status ?? review?.order.status;
+  const side = row?.side ?? review?.order.side ?? null;
   const totalAmount = row?.totalAmountRial ?? review?.order.totalAmountRial;
   const weight = row?.weightGrams ?? review?.order.weightGrams;
   const purity = row?.purityRatio ?? review?.order.purityRatio;
   const reserved = row?.reservedAmountRial ?? review?.order.reservedAmountRial;
   const createdAt = row?.createdAt ?? review?.order.createdAt;
   const loading = (canRead && !order.data && !order.error) || (canReview && !context.data && !context.error);
+
+  const customerId = review?.customer?.id || row?.customerId || '';
+  const customerName =
+    (review?.customer
+      ? `${review.customer.firstName ?? ''} ${review.customer.lastName ?? ''}`.trim()
+      : row?.customerName?.trim()) || '';
+  const customerNumber = review?.customer?.customerNumber || row?.customerNumber || '';
+  const customerMobile = review?.customer?.mobile || row?.customerMobile || '';
 
   return (
     <div className="space-y-4">
@@ -62,6 +73,7 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
                 {toPersianDigits(orderNumber)}
               </span>
               <CopyOrderNumber value={orderNumber} />
+              {side ? <SideBadge side={side} showIcon /> : null}
               {status ? <StatusBadge {...orderStatusPresentation(status)} /> : null}
             </div>
           ) : null}
@@ -127,62 +139,68 @@ export default function OrderDetailPage({ params }: { params: { id: string } }) 
         </div>
 
         <div className="min-w-0 space-y-4">
-          {review?.customer || row ? (
+          {customerId ? (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
                 <CardTitle className="text-base">اطلاعات مشتری</CardTitle>
                 <UserRound className="h-4 w-4 text-muted-foreground" aria-hidden />
               </CardHeader>
               <CardContent className="p-4 pt-0">
-                {review?.customer ? (
-                  <dl className="divide-y divide-border text-sm">
-                    <DetailRow
-                      label="نام مشتری"
-                      value={
-                        <Link className="font-medium text-gold-800" href={`/dashboard/customers/${review.customer.id}`}>
-                          {review.customer.firstName} {review.customer.lastName}
-                        </Link>
-                      }
-                    />
+                <dl className="divide-y divide-border text-sm">
+                  <DetailRow
+                    label="نام مشتری"
+                    value={
+                      <Link
+                        className="font-medium text-gold-800"
+                        href={`/dashboard/customers/${customerId}`}
+                      >
+                        {customerName || 'مشاهده پرونده مشتری'}
+                      </Link>
+                    }
+                  />
+                  {customerNumber ? (
                     <DetailRow
                       label="کد مشتری"
                       value={
                         <span dir="ltr" className="tabular-nums">
-                          {toPersianDigits(review.customer.customerNumber)}
+                          {toPersianDigits(customerNumber)}
                         </span>
                       }
                     />
-                    <DetailRow
-                      label="نوع حساب"
-                      value={statusLabel(CUSTOMER_TYPE_LABELS, review.customer.type)}
-                    />
-                    <DetailRow
-                      label="وضعیت احراز هویت"
-                      value={
-                        <StatusBadge
-                          status={review.customer.kycStatus ?? 'PENDING'}
-                          label={statusLabel(KYC_STATUS_LABELS, review.customer.kycStatus)}
-                        />
-                      }
-                    />
-                    <DetailRow
-                      label="وضعیت حساب"
-                      value={
-                        <StatusBadge
-                          status={review.account?.status ?? review.customer.status}
-                          label={statusLabel(
-                            review.account ? CUSTOMER_ACCOUNT_STATUS_LABELS : CUSTOMER_STATUS_LABELS,
-                            review.account?.status ?? review.customer.status,
-                          )}
-                        />
-                      }
-                    />
-                  </dl>
-                ) : row ? (
-                  <Link className="text-sm font-medium text-gold-800" href={`/dashboard/customers/${row.customerId}`}>
-                    مشاهده مشتری
-                  </Link>
-                ) : null}
+                  ) : null}
+                  {customerMobile ? (
+                    <DetailRow label="موبایل" value={<MobileNumber value={customerMobile} />} />
+                  ) : null}
+                  {review?.customer ? (
+                    <>
+                      <DetailRow
+                        label="نوع حساب"
+                        value={statusLabel(CUSTOMER_TYPE_LABELS, review.customer.type)}
+                      />
+                      <DetailRow
+                        label="وضعیت احراز هویت"
+                        value={
+                          <StatusBadge
+                            status={review.customer.kycStatus ?? 'PENDING'}
+                            label={statusLabel(KYC_STATUS_LABELS, review.customer.kycStatus)}
+                          />
+                        }
+                      />
+                      <DetailRow
+                        label="وضعیت حساب"
+                        value={
+                          <StatusBadge
+                            status={review.account?.status ?? review.customer.status}
+                            label={statusLabel(
+                              review.account ? CUSTOMER_ACCOUNT_STATUS_LABELS : CUSTOMER_STATUS_LABELS,
+                              review.account?.status ?? review.customer.status,
+                            )}
+                          />
+                        }
+                      />
+                    </>
+                  ) : null}
+                </dl>
               </CardContent>
             </Card>
           ) : null}

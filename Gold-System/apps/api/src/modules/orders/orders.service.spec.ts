@@ -208,7 +208,10 @@ describe('OrdersService', () => {
           provide: PrismaService,
           useValue: {
             $transaction: jest.fn(),
-            customer: { findUnique: jest.fn().mockResolvedValue(null) },
+            customer: {
+              findUnique: jest.fn().mockResolvedValue(null),
+              findMany: jest.fn().mockResolvedValue([]),
+            },
             store: { findFirst: jest.fn() },
             order: { update: jest.fn() },
             orderItem: { findFirst: jest.fn().mockResolvedValue(null) },
@@ -1219,6 +1222,24 @@ describe('OrdersService', () => {
       expect(result.id).toBe('other-order-id');
     });
 
+    it('includes customer identity on order detail', async () => {
+      (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder());
+      (prisma.customer.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: CUSTOMER_ID,
+          customerNumber: 'CUST-000001',
+          firstName: 'Ali',
+          lastName: 'Hosseini',
+          mobile: '09123456789',
+        },
+      ]);
+
+      const result = await service.getOrderDetail('staff-user-id', ORDER_ID, true);
+      expect(result.customerName).toBe('Ali Hosseini');
+      expect(result.customerNumber).toBe('CUST-000001');
+      expect(result.customerMobile).toBe('09123456789');
+    });
+
     it('includes locked spot price, wage and fee on order detail', async () => {
       (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder());
 
@@ -1278,6 +1299,25 @@ describe('OrdersService', () => {
         from: new Date(from),
         to: new Date(to),
       });
+    });
+
+    it('attaches customer name, file number and mobile to staff list rows', async () => {
+      (orderRepo.findAll as jest.Mock).mockResolvedValue({ orders: [makeOrder()], total: 1 });
+      (prisma.customer.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: CUSTOMER_ID,
+          customerNumber: 'CUST-000001',
+          firstName: 'Ali',
+          lastName: 'Hosseini',
+          mobile: '09123456789',
+        },
+      ]);
+
+      const result = await service.listOrders('staff-user-id', { page: 1, limit: 20 }, true);
+
+      expect(result.orders[0]!.customerName).toBe('Ali Hosseini');
+      expect(result.orders[0]!.customerNumber).toBe('CUST-000001');
+      expect(result.orders[0]!.customerMobile).toBe('09123456789');
     });
 
     it('includes BUY and SELL on listed orders', async () => {

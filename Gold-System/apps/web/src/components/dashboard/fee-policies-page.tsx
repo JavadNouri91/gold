@@ -19,17 +19,20 @@ import {
 } from '@/lib/utils';
 
 const TYPES = ['HOUSEHOLD', 'PARTNER', 'VIP', null] as const;
-const SIDES = ['BUY', 'SELL'] as const;
+const SIDES = ['BUY', 'SELL', 'PICKUP'] as const;
+type Side = (typeof SIDES)[number];
 
-const SIDE_LABEL: Record<string, string> = {
+const SIDE_LABEL: Record<Side, string> = {
   BUY: 'کارمزد خرید',
   SELL: 'کارمزد فروش',
+  PICKUP: 'کارمزد تبدیل به فیزیکی',
 };
 
 const BASE_LABEL: Record<string, string> = {
   GOLD_VALUE_STEP4: 'مبلغ طلا (گام ۴)',
   AFTER_GROUP_RULE_STEP5: 'پس از تعدیل گروهی (گام ۵)',
   GOLD_COMMERCIAL_TOTAL: 'مبلغ تجاری طلا (نهایی قیمت)',
+  PICKUP_GOLD_VALUE: 'ارزش طلا در لحظه درخواست',
 };
 
 const MODE_LABEL: Record<string, string> = {
@@ -40,7 +43,7 @@ const MODE_LABEL: Record<string, string> = {
 
 type CellKey = string;
 
-function cellKey(type: string | null, side: string): CellKey {
+function cellKey(type: string | null, side: Side): CellKey {
   return `${type ?? 'DEFAULT'}|${side}`;
 }
 
@@ -82,7 +85,7 @@ export function FeePoliciesPage() {
 
   async function saveCell(
     type: string | null,
-    side: 'BUY' | 'SELL',
+    side: Side,
     draft: {
       mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
       value: string;
@@ -95,6 +98,7 @@ export function FeePoliciesPage() {
     setSaving(key);
     try {
       const existing = byCell.get(key);
+      const defaultBase = side === 'PICKUP' ? 'PICKUP_GOLD_VALUE' : 'GOLD_COMMERCIAL_TOTAL';
       if (draft.mode === 'PERCENTAGE' && !draft.calculationBase) {
         throw new Error('برای کارمزد درصدی باید پایه محاسبه انتخاب شود.');
       }
@@ -115,11 +119,12 @@ export function FeePoliciesPage() {
         await pricingApi.createFeePolicy({
           ...(type ? { customerType: type } : { customerType: null }),
           side,
+          code: side === 'PICKUP' ? 'PICKUP_CONVERSION_FEE' : undefined,
           mode: draft.mode,
           value: draft.value || '0',
           calculationBase:
             draft.mode === 'PERCENTAGE'
-              ? draft.calculationBase ?? 'GOLD_COMMERCIAL_TOTAL'
+              ? draft.calculationBase ?? defaultBase
               : undefined,
           enabled: draft.enabled,
           labelFa: draft.labelFa || SIDE_LABEL[side],
@@ -138,13 +143,14 @@ export function FeePoliciesPage() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="کارمزد معاملات"
-        description="تنظیم کارمزد خرید و فروش به‌ازای نوع مشتری — مستقل از اجرت و قیمت طلا"
+        title="کارمزدها"
+        description="تنظیم کارمزد خرید، فروش و تبدیل به فیزیکی به‌ازای نوع مشتری — مستقل از اجرت و قیمت طلا"
       />
 
       <Alert variant="info">
         کارمزد از قیمت طلا و اجرت جدا است. برای فروش، کارمزد از مبلغ دریافتی کسر می‌شود و اعتبار ریالی رزرو
-        نمی‌شود.
+        نمی‌شود. کارمزد تبدیل به فیزیکی هنگام ثبت درخواست تحویل رزرو و هنگام تحویل از موجودی ریالی کیف پول
+        کسر می‌شود؛ کارمزد خرید/فروش قبلی تغییری نمی‌کند.
       </Alert>
 
       {error ? (
@@ -160,7 +166,7 @@ export function FeePoliciesPage() {
               <CardHeader>
                 <CardTitle>{typeLabel(type)}</CardTitle>
               </CardHeader>
-              <CardContent className="grid gap-4 md:grid-cols-2">
+              <CardContent className="grid gap-4 md:grid-cols-3">
                 {SIDES.map((side) => {
                   const key = cellKey(type, side);
                   const policy = byCell.get(key);
@@ -193,7 +199,7 @@ function FeeCell({
   saving,
   onSave,
 }: {
-  side: 'BUY' | 'SELL';
+  side: Side;
   policy?: FeePolicy;
   saving: boolean;
   onSave: (draft: {
@@ -206,7 +212,9 @@ function FeeCell({
 }) {
   const [mode, setMode] = useState<'NONE' | 'FIXED' | 'PERCENTAGE'>(policy?.mode ?? 'NONE');
   const [value, setValue] = useState(policy?.value ?? '0');
-  const [base, setBase] = useState(policy?.calculationBase ?? 'GOLD_COMMERCIAL_TOTAL');
+  const [base, setBase] = useState(
+    policy?.calculationBase ?? (side === 'PICKUP' ? 'PICKUP_GOLD_VALUE' : 'GOLD_COMMERCIAL_TOTAL'),
+  );
   const [enabled, setEnabled] = useState(policy?.enabled ?? true);
   const [labelFa, setLabelFa] = useState(policy?.labelFa ?? SIDE_LABEL[side]);
 
@@ -280,7 +288,13 @@ function FeeCell({
         </label>
       ) : null}
 
-      {mode === 'PERCENTAGE' ? (
+      {mode === 'PERCENTAGE' && side === 'PICKUP' ? (
+        <p className="mt-3 text-sm text-[#6B7280]">
+          پایه محاسبه: <span className="font-medium text-[#202124]">{BASE_LABEL.PICKUP_GOLD_VALUE}</span>
+        </p>
+      ) : null}
+
+      {mode === 'PERCENTAGE' && side !== 'PICKUP' ? (
         <label className="mt-3 block text-sm text-[#6B7280]">
           پایه محاسبه
           <select
@@ -288,11 +302,13 @@ function FeeCell({
             value={base}
             onChange={(e) => setBase(e.target.value)}
           >
-            {Object.entries(BASE_LABEL).map(([k, v]) => (
-              <option key={k} value={k}>
-                {v}
-              </option>
-            ))}
+            {Object.entries(BASE_LABEL)
+              .filter(([k]) => k !== 'PICKUP_GOLD_VALUE')
+              .map(([k, v]) => (
+                <option key={k} value={k}>
+                  {v}
+                </option>
+              ))}
           </select>
         </label>
       ) : null}

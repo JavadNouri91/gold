@@ -4,6 +4,7 @@ import {
   CustomerType,
   FeeCalculationBase,
   FeeChargeCode,
+  FeeChargeSide,
   FeeMode,
   TradeSide,
 } from '@gold/shared-types';
@@ -21,7 +22,7 @@ describe('TransactionFeeService', () => {
     return new FeePolicyEntity({
       id: 'fee-1',
       customerType: CustomerType.HOUSEHOLD,
-      side: TradeSide.BUY,
+      side: FeeChargeSide.BUY,
       code: FeeChargeCode.TRANSACTION_FEE,
       labelFa: 'کارمزد خرید',
       mode: FeeMode.PERCENTAGE,
@@ -60,7 +61,7 @@ describe('TransactionFeeService', () => {
 
   it('deducts SELL fee from proceeds', async () => {
     const result = await service(
-      policy({ side: TradeSide.SELL, labelFa: 'کارمزد فروش' }),
+      policy({ side: FeeChargeSide.SELL, labelFa: 'کارمزد فروش' }),
     ).compute(CustomerType.VIP, TradeSide.SELL, bases);
     expect(result.feeTotalRial.toFixed(2)).toBe('21000.00');
     expect(result.receivableRial?.toFixed(2)).toBe('1029000.00');
@@ -82,7 +83,7 @@ describe('TransactionFeeService', () => {
     await expect(
       service(
         policy({
-          side: TradeSide.SELL,
+          side: FeeChargeSide.SELL,
           mode: FeeMode.FIXED,
           value: new Decimal('2000000'),
           calculationBase: null,

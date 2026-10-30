@@ -17,6 +17,7 @@ import {
   Scale,
   Tag,
   Wallet,
+  X,
 } from 'lucide-react';
 import {
   internalOrdersApi,
@@ -37,8 +38,8 @@ import {
   cn,
   formatDateTime,
   formatFaNumber,
-  formatMoney,
   formatWeight,
+  formatWholeMoney,
   statusLabel,
   toPersianDigits,
 } from '@/lib/utils';
@@ -47,10 +48,13 @@ export function QuotationDetails({
   quote,
   autoPrint = false,
   onChanged,
+  onClose,
 }: {
   quote: StaffQuotation;
   autoPrint?: boolean;
   onChanged?: () => void;
+  /** Closes the surrounding modal. Omitted when the sheet is rendered inline. */
+  onClose?: () => void;
 }) {
   const [error, setError] = useState<string | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -120,9 +124,11 @@ export function QuotationDetails({
     }
   };
 
-  const totalFormatted = formatMoney(quote.totalAmountRial);
-  const baseFormatted = formatMoney(quote.step1BasePrice);
+  const totalFormatted = formatWholeMoney(quote.totalAmountRial);
+  const baseFormatted = formatWholeMoney(quote.step1BasePrice);
   const statusText = statusLabel(QUOTATION_STATUS_LABELS, quote.status);
+  const customerName = order.data?.customerName?.trim() || '';
+  const customerNumber = order.data?.customerNumber ?? '';
 
   return (
     <div className="quotation-sheet space-y-5">
@@ -139,19 +145,44 @@ export function QuotationDetails({
             <p className="mt-1 text-xs text-muted-foreground">
               نسخه {formatFaNumber(quote.version)}
             </p>
+            <p className="mt-2 text-sm">
+              <span className="text-muted-foreground">مشتری: </span>
+              <span className="font-semibold text-foreground">{customerName || '—'}</span>
+            </p>
+            {customerNumber ? (
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                کد مشتری:{' '}
+                <span dir="ltr" className="tabular-nums">
+                  {toPersianDigits(customerNumber)}
+                </span>
+              </p>
+            ) : null}
           </div>
         </div>
 
-        <div className="inline-flex items-center gap-2.5 self-start rounded-full border border-border bg-muted/60 px-3.5 py-2 shadow-sm">
-          <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gold-100 text-gold-700">
-            <FileText className="h-4 w-4" aria-hidden />
-          </span>
-          <div className="min-w-0 text-right">
-            <p className="text-[11px] text-muted-foreground">شماره پیش‌فاکتور</p>
-            <p className="font-semibold tabular-nums tracking-wide text-foreground" dir="ltr">
-              {toPersianDigits(quote.quotationNumber)}
-            </p>
+        <div className="flex items-start gap-2 self-start">
+          <div className="inline-flex items-center gap-2.5 rounded-full border border-border bg-muted/60 px-3.5 py-2 shadow-sm">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-gold-100 text-gold-700">
+              <FileText className="h-4 w-4" aria-hidden />
+            </span>
+            <div className="min-w-0 text-right">
+              <p className="text-[11px] text-muted-foreground">شماره پیش‌فاکتور</p>
+              <p className="font-semibold tabular-nums tracking-wide text-foreground" dir="ltr">
+                {toPersianDigits(quote.quotationNumber)}
+              </p>
+            </div>
           </div>
+          {onClose ? (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="بستن پیش‌فاکتور"
+              title="بستن"
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-border bg-white text-muted-foreground shadow-sm transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold-500 print:hidden"
+            >
+              <X className="h-4 w-4" aria-hidden />
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -194,7 +225,7 @@ export function QuotationDetails({
             <MetaCell
               icon={CircleDot}
               label="رند"
-              value={formatMoney(quote.roundingAmount)}
+              value={formatWholeMoney(quote.roundingAmount)}
             />
             <MetaCell icon={CalendarDays} label="قیمت پایه" value={baseFormatted} />
           </div>
@@ -208,7 +239,7 @@ export function QuotationDetails({
             <DetailRow
               icon={BadgeDollarSign}
               label="کارمزد"
-              value={formatMoney(quote.feeAmountRial)}
+              value={formatWholeMoney(quote.feeAmountRial)}
             />
             <DetailRow
               icon={Calculator}
@@ -266,6 +297,16 @@ export function QuotationDetails({
           <ArrowLeft className="hidden h-4 w-4 sm:inline" aria-hidden />
           چاپ
         </Button>
+        {onClose ? (
+          <Button
+            variant="ghost"
+            className="min-w-[7rem] gap-2"
+            onClick={onClose}
+          >
+            <X className="h-4 w-4" aria-hidden />
+            بستن
+          </Button>
+        ) : null}
       </div>
 
       <ConfirmDialog

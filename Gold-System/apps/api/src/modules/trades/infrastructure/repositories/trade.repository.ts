@@ -2,12 +2,28 @@ import { Injectable } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import Decimal from 'decimal.js';
 import { TradeStatus } from '@gold/shared-types';
+import { toLatinDigits } from '../../../../common/digits';
 import { PrismaService } from '../../../../database/prisma.service';
 import { TradeEntity } from '../../domain/entities/trade.entity';
 import { TradeItemEntity } from '../../domain/entities/trade-item.entity';
 
 type TradeRow = Prisma.TradeGetPayload<{ include: { items: true } }>;
 type TradeItemRow = Prisma.TradeItemGetPayload<Record<string, never>>;
+
+type TradeSideAggRow = {
+  side: string;
+  count: number;
+  weight: string;
+  amount: string;
+};
+
+export type { TradeSideAggRow };
+
+/** Raw aggregate rows for the all-time trade summary. */
+export interface TradeSummaryData {
+  byStatus: Array<{ status: string; count: number }>;
+  sides: TradeSideAggRow[];
+}
 
 @Injectable()
 export class TradeRepository {
@@ -49,14 +65,25 @@ export class TradeRepository {
 
   /**
    * Staff: list all Trades with pagination.
+   *
+   * Filters:
+   *   - status: exact TradeStatus match
+   *   - side:   BUY/SELL — snapshot field is authoritative, order-item metadata
+   *             is the legacy fallback (same rule as TradeResponseDto.fromEntity)
+   *   - from/to: inclusive window on confirmedAt (ISO Gregorian strings)
+   *   - q:      search across trade number, customer name, number and mobile
    */
   async findAll(opts: {
     page: number;
     limit: number;
     status?: TradeStatus;
+    side?: 'BUY' | 'SELL';
+    from?: string;
+    to?: string;
+    q?: string;
   }): Promise<{ trades: TradeEntity[]; total: number }> {
     const skip = (opts.page - 1) * opts.limit;
-    const where = opts.status ? { status: opts.status } : {};
+    const where = buildStaffWhere(opts);
 
     const [rows, total] = await this.prisma.$transaction([
       this.prisma.trade.findMany({
@@ -94,6 +121,40 @@ export class TradeRepository {
     ]);
 
     return { trades: rows.map((r) => this.toDomain(r)), total };
+  }
+
+  /**
+   * All-time summary aggregates for the hero cards.
+   *
+   * Status counts come from a groupBy over all Trades; the BUY/SELL split is
+   * computed in SQL (snapshot side authoritative, order-item metadata fallback)
+   * and excludes REVERSED trades so totals always match the split.
+   */
+  async summary(): Promise<TradeSummaryData> {
+    const [byStatus, sides] = await Promise.all([
+      this.prisma.trade.groupBy({
+        by: ['status'],
+        _count: { id: true },
+      }),
+      this.prisma.$queryRaw<TradeSideAggRow[]>`
+        SELECT COALESCE(t.locked_terms_snapshot->>'side', oi.metadata->>'side', 'BUY') AS side,
+               COUNT(*)::int AS count,
+               SUM(t.weight_grams)::text AS weight,
+               SUM(t.total_amount_rial)::text AS amount
+        FROM trades t
+        LEFT JOIN LATERAL (
+          SELECT metadata FROM order_items
+          WHERE order_id = t.order_id ORDER BY created_at ASC LIMIT 1
+        ) oi ON TRUE
+        WHERE t.status::text <> 'REVERSED'
+        GROUP BY 1;
+      `,
+    ]);
+
+    return {
+      byStatus: byStatus.map((row) => ({ status: row.status, count: row._count.id })),
+      sides,
+    };
   }
 
   // ─── Sequence ────────────────────────────────────────────────
@@ -245,4 +306,60 @@ export class TradeRepository {
       createdAt: row.createdAt,
     });
   }
+}
+
+/**
+ * Build the staff `findAll` where clause from the optional filter set.
+ * Each filter is wrapped in its own `AND` group so the `OR` clauses for
+ * side and search never overwrite one another.
+ */
+function buildStaffWhere(opts: {
+  status?: TradeStatus;
+  side?: 'BUY' | 'SELL';
+  from?: string;
+  to?: string;
+  q?: string;
+}): Prisma.TradeWhereInput {
+  const and: Prisma.TradeWhereInput[] = [];
+
+  if (opts.status) {
+    and.push({ status: opts.status });
+  }
+
+  if (opts.side) {
+    and.push({
+      OR: [
+        { lockedTermsSnapshot: { path: ['side'], equals: opts.side } },
+        {
+          order: {
+            items: { some: { metadata: { path: ['side'], equals: opts.side } } },
+          },
+        },
+      ],
+    });
+  }
+
+  if (opts.from || opts.to) {
+    and.push({
+      confirmedAt: {
+        ...(opts.from && { gte: new Date(opts.from) }),
+        ...(opts.to && { lte: new Date(opts.to) }),
+      },
+    });
+  }
+
+  if (opts.q && opts.q.trim()) {
+    const q = opts.q.trim();
+    and.push({
+      OR: [
+        { tradeNumber: { contains: q, mode: 'insensitive' } },
+        { customer: { firstName: { contains: q, mode: 'insensitive' } } },
+        { customer: { lastName: { contains: q, mode: 'insensitive' } } },
+        { customer: { customerNumber: { contains: q, mode: 'insensitive' } } },
+        { customer: { mobile: { contains: toLatinDigits(q) } } },
+      ],
+    });
+  }
+
+  return and.length > 0 ? { AND: and } : {};
 }

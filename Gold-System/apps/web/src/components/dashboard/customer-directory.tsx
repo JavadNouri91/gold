@@ -52,8 +52,8 @@ import {
   cn,
   formatDate,
   formatFaNumber,
-  formatMoney,
   formatWeight,
+  formatWholeMoney,
   latinMobile,
   toLatinDigits,
   toPersianDigits,
@@ -235,7 +235,7 @@ function VerificationBadge({ status }: { status?: string }) {
 function BalanceCell({ value }: { value: string | null | undefined }) {
   const tone = balanceTone(value);
   if (tone === 'hidden') return <span className="text-muted-foreground">—</span>;
-  const formatted = formatMoney(value);
+  const formatted = formatWholeMoney(value);
   if (tone === 'neg') {
     return (
       <span className="inline-flex rounded-full bg-rose-100 px-2.5 py-0.5 text-xs font-bold tabular-nums text-rose-700 dark:bg-rose-950/50 dark:text-rose-300">
@@ -655,7 +655,7 @@ export function CustomerDirectory() {
       unit: 'کاربر',
       hint: canFinance
         ? summary.data?.debtorsBalanceRial
-          ? `مجموع بدهی: ${formatMoney(summary.data.debtorsBalanceRial)}`
+          ? `مجموع بدهی: ${formatWholeMoney(summary.data.debtorsBalanceRial)}`
           : 'مانده منفی'
         : 'نیاز به مجوز حساب',
       icon: Wallet,

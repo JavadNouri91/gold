@@ -14,7 +14,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { ActivitySegment, ActivitySeriesPoint, ActivitySummary } from '@/lib/api';
+import type { ActivityBucket, ActivitySegment, ActivitySeriesPoint, ActivitySummary } from '@/lib/api';
 import { activityBucketLabel } from '@/lib/activity-bucket-label';
 import { formatCompactToman, formatMoney, formatWeight, toPersianDigits } from '@/lib/utils';
 import { moneyTone, toneClass } from '@/lib/portfolio-display';
@@ -197,8 +197,8 @@ export function ActivityVolumeChart({
 }: {
   series: ActivitySeriesPoint[];
   unit: string;
-  bucket: 'week' | 'month' | 'quarter' | 'year';
-  onBucket: (bucket: 'week' | 'month' | 'quarter' | 'year') => void;
+  bucket: ActivityBucket;
+  onBucket: (bucket: ActivityBucket) => void;
 }) {
   const showUnclassified = series.some((point) => (Number(point.unclassifiedGrams) || 0) > 0);
   const rows = series.map((point) => ({

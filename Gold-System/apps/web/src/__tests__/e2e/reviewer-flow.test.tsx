@@ -81,6 +81,12 @@ describe('reviewer flow', () => {
           quotationId: 'q1',
           assignedToId: 'staff-1',
           assignedById: 'staff-2',
+          assignedToName: 'رضا بررسی‌کننده',
+          assignedByName: 'مریم اپراتور',
+          customerId: 'c1',
+          customerName: 'سارا احمدی',
+          customerNumber: 'CUST-000001',
+          side: 'BUY',
           status: 'ACTIVE',
           notes: null,
           completedAt: null,
@@ -96,6 +102,12 @@ describe('reviewer flow', () => {
       'href',
       '/dashboard/orders/ord-1',
     );
+    // The reviewer is shown by name, not by raw user id.
+    expect(screen.getByText('رضا بررسی‌کننده')).toBeInTheDocument();
+    expect(screen.getByText('تخصیص توسط مریم اپراتور')).toBeInTheDocument();
+    // Buy/sell side is labelled on the assignment row.
+    expect(screen.getByText('خرید')).toBeInTheDocument();
+    expect(screen.getByText('سارا احمدی')).toBeInTheDocument();
     queue.unmount();
 
     render(<ReviewContextPanel context={context} onChanged={jest.fn()} />);

@@ -4,6 +4,7 @@ import {
   CustomerType,
   FeeCalculationBase,
   FeeChargeCode,
+  FeeChargeSide,
   FeeMode,
   TradeSide,
 } from '@gold/shared-types';
@@ -426,7 +427,12 @@ export class PricingService {
 
   // ── Fee policies (customer-type BUY/SELL transaction fees) ─────────────────
 
-  private validateFeePolicyInput(mode: FeeMode, value: Decimal, base?: FeeCalculationBase | null) {
+  private validateFeePolicyInput(
+    mode: FeeMode,
+    value: Decimal,
+    base?: FeeCalculationBase | null,
+    side?: FeeChargeSide,
+  ) {
     if (value.lt(0)) {
       throw new BadRequestException('Fee value must be non-negative');
     }
@@ -437,6 +443,16 @@ export class PricingService {
       if (value.gt(100)) {
         throw new BadRequestException('Percentage fee cannot exceed 100');
       }
+      if (side === FeeChargeSide.PICKUP && base !== FeeCalculationBase.PICKUP_GOLD_VALUE) {
+        throw new BadRequestException(
+          'PICKUP conversion fees must use PICKUP_GOLD_VALUE calculation base',
+        );
+      }
+      if (side !== FeeChargeSide.PICKUP && base === FeeCalculationBase.PICKUP_GOLD_VALUE) {
+        throw new BadRequestException(
+          'PICKUP_GOLD_VALUE base is only allowed for PICKUP conversion fees',
+        );
+      }
     }
     if ((mode === FeeMode.FIXED || mode === FeeMode.NONE) && base) {
       throw new BadRequestException('calculationBase must be null when mode is FIXED or NONE');
@@ -446,7 +462,7 @@ export class PricingService {
   private serializeFeePolicy(p: {
     id: string;
     customerType: CustomerType | null;
-    side: TradeSide;
+    side: FeeChargeSide;
     code: FeeChargeCode;
     labelFa: string;
     mode: FeeMode;
@@ -475,7 +491,7 @@ export class PricingService {
     };
   }
 
-  async listFeePolicies(params?: { customerType?: CustomerType; side?: TradeSide }) {
+  async listFeePolicies(params?: { customerType?: CustomerType; side?: FeeChargeSide }) {
     const policies = await this.feeRepo.list({
       customerType: params?.customerType,
       side: params?.side,
@@ -483,23 +499,48 @@ export class PricingService {
     return policies.map((p) => this.serializeFeePolicy(p));
   }
 
+  /** PICKUP only carries the conversion-fee code; BUY/SELL only the transaction fee. */
+  private resolveFeeCode(side: FeeChargeSide, code?: FeeChargeCode): FeeChargeCode {
+    const expected =
+      side === FeeChargeSide.PICKUP
+        ? FeeChargeCode.PICKUP_CONVERSION_FEE
+        : FeeChargeCode.TRANSACTION_FEE;
+    if (code && code !== expected) {
+      throw new BadRequestException(
+        `FeeChargeCode ${code} is not allowed for side ${side}`,
+      );
+    }
+    return expected;
+  }
+
+  private defaultFeeLabel(side: FeeChargeSide): string {
+    if (side === FeeChargeSide.PICKUP) return 'کارمزد تبدیل به فیزیکی';
+    return side === FeeChargeSide.BUY ? 'کارمزد خرید' : 'کارمزد فروش';
+  }
+
   async createFeePolicy(dto: CreateFeePolicyDto, actorId: string) {
+    const side = dto.side;
+    const code = this.resolveFeeCode(side, dto.code);
     const mode = dto.mode;
     const value = new Decimal(dto.value);
-    const calculationBase =
-      mode === FeeMode.PERCENTAGE
-        ? (dto.calculationBase ?? FeeCalculationBase.GOLD_COMMERCIAL_TOTAL)
-        : null;
-    this.validateFeePolicyInput(mode, value, calculationBase);
 
-    const defaultLabel =
-      dto.side === TradeSide.BUY ? 'کارمزد خرید' : 'کارمزد فروش';
+    let calculationBase: FeeCalculationBase | null;
+    if (mode === FeeMode.PERCENTAGE) {
+      calculationBase =
+        dto.calculationBase ??
+        (side === FeeChargeSide.PICKUP
+          ? FeeCalculationBase.PICKUP_GOLD_VALUE
+          : FeeCalculationBase.GOLD_COMMERCIAL_TOTAL);
+    } else {
+      calculationBase = null;
+    }
+    this.validateFeePolicyInput(mode, value, calculationBase, side);
 
     const policy = await this.feeRepo.create({
       customerType: dto.customerType ?? null,
-      side: dto.side,
-      code: dto.code ?? FeeChargeCode.TRANSACTION_FEE,
-      labelFa: dto.labelFa ?? defaultLabel,
+      side,
+      code,
+      labelFa: dto.labelFa ?? this.defaultFeeLabel(side),
       mode,
       value,
       calculationBase,
@@ -525,6 +566,12 @@ export class PricingService {
     const existing = await this.feeRepo.findById(id);
     if (!existing) throw new NotFoundException(`Fee policy ${id} not found`);
 
+    // side and code are immutable — they are the matrix key.
+    if (dto.side !== undefined && dto.side !== existing.side) {
+      throw new BadRequestException('Fee policy side cannot be changed after creation');
+    }
+
+    const side = existing.side;
     const mode = dto.mode ?? existing.mode;
     const value = dto.value !== undefined ? new Decimal(dto.value) : existing.value;
     let calculationBase: FeeCalculationBase | null;
@@ -532,15 +579,17 @@ export class PricingService {
       calculationBase =
         dto.calculationBase !== undefined
           ? dto.calculationBase
-          : (existing.calculationBase ?? FeeCalculationBase.GOLD_COMMERCIAL_TOTAL);
+          : (existing.calculationBase ??
+            (side === FeeChargeSide.PICKUP
+              ? FeeCalculationBase.PICKUP_GOLD_VALUE
+              : FeeCalculationBase.GOLD_COMMERCIAL_TOTAL));
     } else {
       calculationBase = null;
     }
-    this.validateFeePolicyInput(mode, value, calculationBase);
+    this.validateFeePolicyInput(mode, value, calculationBase, side);
 
     const updated = await this.feeRepo.update(id, {
       ...(dto.customerType !== undefined && { customerType: dto.customerType }),
-      ...(dto.side !== undefined && { side: dto.side }),
       ...(dto.labelFa !== undefined && { labelFa: dto.labelFa }),
       mode,
       value,

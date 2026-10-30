@@ -298,7 +298,11 @@ function rasterToPng(raster: Raster, maxBytes: number): Promise<Blob> {
   canvas.height = raster.height;
   const context = canvas.getContext('2d');
   if (!context) return Promise.reject(new PortraitMatteError('تصویر قابل خواندن نیست.'));
-  context.putImageData(new ImageData(raster.data, raster.width, raster.height), 0, 0);
+  context.putImageData(
+    new ImageData(raster.data as Uint8ClampedArray<ArrayBuffer>, raster.width, raster.height),
+    0,
+    0,
+  );
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (!blob) {

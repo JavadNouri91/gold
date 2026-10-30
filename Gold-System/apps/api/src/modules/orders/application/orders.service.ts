@@ -43,6 +43,13 @@ import {
   InsufficientGoldException,
 } from '../domain/exceptions/order.exceptions';
 
+/** Display data attached to staff-facing order responses. */
+interface CustomerSummary {
+  name: string;
+  customerNumber: string;
+  mobile: string;
+}
+
 @Injectable()
 export class OrdersService {
   private readonly logger = new Logger(OrdersService.name);
@@ -806,8 +813,12 @@ export class OrdersService {
       total = result.total;
     }
 
+    const customers = await this.loadCustomerSummaries(orders.map((o) => o.customerId));
+
     return {
-      orders: orders.map((o) => this.toResponse(o, [])),
+      orders: orders.map((o) =>
+        this.toResponse(o, [], undefined, undefined, customers.get(o.customerId) ?? null),
+      ),
       meta: {
         page,
         limit,
@@ -833,7 +844,8 @@ export class OrdersService {
       if (!order) throw new OrderNotFoundException(orderId);
       const charges = await this.loadChargeDtos(orderId);
       const snapshot = await this.loadPricingSnapshot(order.pricingCalculationId);
-      return this.toResponse(order, [], charges, snapshot);
+      const customers = await this.loadCustomerSummaries([order.customerId]);
+      return this.toResponse(order, [], charges, snapshot, customers.get(order.customerId) ?? null);
     }
 
     const { customer } = await this.resolveCustomerAndAccount(actorUserId);
@@ -841,7 +853,8 @@ export class OrdersService {
     if (!order) throw new OrderNotFoundException(orderId);
     const charges = await this.loadChargeDtos(orderId);
     const snapshot = await this.loadPricingSnapshot(order.pricingCalculationId);
-    return this.toResponse(order, [], charges, snapshot);
+    const customers = await this.loadCustomerSummaries([order.customerId]);
+    return this.toResponse(order, [], charges, snapshot, customers.get(order.customerId) ?? null);
   }
 
   // ─── Private helpers ──────────────────────────────────────────
@@ -957,11 +970,43 @@ export class OrdersService {
     };
   }
 
+  /**
+   * Loads display data (name, file number, mobile) for the given customer IDs.
+   * Used by staff list/detail responses so reviewers can tell whose order it is.
+   */
+  private async loadCustomerSummaries(customerIds: string[]): Promise<Map<string, CustomerSummary>> {
+    const uniqueIds = [...new Set(customerIds.filter(Boolean))];
+    if (uniqueIds.length === 0) return new Map();
+
+    const rows = await this.prisma.customer.findMany({
+      where: { id: { in: uniqueIds } },
+      select: {
+        id: true,
+        customerNumber: true,
+        firstName: true,
+        lastName: true,
+        mobile: true,
+      },
+    });
+
+    return new Map(
+      rows.map((row) => [
+        row.id,
+        {
+          name: `${row.firstName} ${row.lastName}`.trim(),
+          customerNumber: row.customerNumber ?? '',
+          mobile: row.mobile ?? '',
+        },
+      ]),
+    );
+  }
+
   private toResponse(
     order: OrderEntity,
     _items: OrderItemEntity[],
     charges?: OrderResponseDto['charges'],
     snapshot?: { step1BasePrice: string; wageAmount: string } | null,
+    customer?: CustomerSummary | null,
   ): OrderResponseDto {
     const dto = new OrderResponseDto();
     dto.id = order.id;
@@ -969,6 +1014,9 @@ export class OrdersService {
     dto.customerId = order.customerId;
     dto.customerAccountId = order.customerAccountId;
     dto.pricingCalculationId = order.pricingCalculationId;
+    dto.customerName = customer?.name ?? null;
+    dto.customerNumber = customer?.customerNumber ?? null;
+    dto.customerMobile = customer?.mobile ?? null;
     dto.status = order.status;
     dto.totalAmountRial = order.totalAmountRial.toFixed(2);
     dto.goldAmountRial = order.goldAmountRial.toFixed(2);

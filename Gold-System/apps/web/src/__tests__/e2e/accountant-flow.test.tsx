@@ -34,8 +34,9 @@ describe('accountant flow', () => {
     signIn(permissions, ['accountant']);
     const hrefs = visibleNav(permissions).map((item) => item.href);
     expect(hrefs).toEqual(
-      expect.arrayContaining(['/dashboard/payments', '/dashboard/settlements', '/dashboard/ledger/financial']),
+      expect.arrayContaining(['/dashboard/payments', '/dashboard/ledger/financial']),
     );
+    expect(hrefs).not.toContain('/dashboard/settlements');
 
     api.internalPaymentsApi.list.mockResolvedValue({
       data: [
@@ -47,6 +48,7 @@ describe('accountant flow', () => {
           customerMobile: '09121111111',
           tradeNumber: 'T-1',
           orderNumber: null,
+          direction: 'DEPOSIT',
           method: 'CASH',
           amount: '80.00',
           currency: 'IRR',
@@ -62,12 +64,23 @@ describe('accountant flow', () => {
       meta: { total: 1, page: 1, limit: 20, totalPages: 1 },
     });
     api.internalPaymentsApi.staffSummary.mockResolvedValue({
-      pendingCount: 1,
-      todayValidatedAmountRial: '0.00',
-      totalSuccessfulAmountRial: '0.00',
+      deposits: {
+        pendingCount: 1,
+        pendingAmountRial: '80.00',
+        todayValidatedAmountRial: '0.00',
+        totalSuccessfulAmountRial: '0.00',
+        totalCount: 1,
+      },
+      withdrawals: {
+        pendingCount: 0,
+        pendingAmountRial: '0.00',
+        todayValidatedAmountRial: '0.00',
+        totalSuccessfulAmountRial: '0.00',
+        totalCount: 0,
+      },
     });
     const payments = render(<PaymentsPage />);
-    expect(await screen.findByText('مدیریت پرداخت‌ها و فیش‌ها')).toBeInTheDocument();
+    expect(await screen.findByText('مدیریت واریز و برداشت')).toBeInTheDocument();
     expect(await screen.findByText(toPersianDigits('R-8'))).toBeInTheDocument();
     payments.unmount();
 

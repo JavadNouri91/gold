@@ -17,6 +17,27 @@ export class PickupCustomerDto {
   mobile!: string;
 }
 
+export class PickupFeeDto {
+  code!: string;
+  labelFa!: string;
+  mode!: string;
+  rateValue!: string;
+  calculationBase!: string | null;
+  baseAmountRial!: string;
+  amountRial!: string;
+  goldPricePerGramRial!: string | null;
+  status!: string;
+  walletAvailableAfterRial!: string | null;
+  reservedAt!: string | null;
+  settledAt!: string | null;
+  releasedAt!: string | null;
+}
+
+export class PickupDocumentsDto {
+  preInvoiceAvailable!: boolean;
+  invoiceAvailable!: boolean;
+}
+
 export class PickupResponseDto {
   id!: string;
   pickupNumber!: string;
@@ -43,6 +64,9 @@ export class PickupResponseDto {
   updatedAt!: string;
   events!: PickupEventDto[];
   customer!: PickupCustomerDto | null;
+  fee!: PickupFeeDto | null;
+  goldPricePerGramRial!: string | null;
+  documents!: PickupDocumentsDto;
 
   static from(entity: PhysicalGoldPickupEntity): PickupResponseDto {
     const dto = new PickupResponseDto();
@@ -85,6 +109,28 @@ export class PickupResponseDto {
           mobile: entity.customer.mobile,
         }
       : null;
+    dto.fee = entity.charge
+      ? {
+          code: entity.charge.code,
+          labelFa: entity.charge.labelFa,
+          mode: entity.charge.mode,
+          rateValue: entity.charge.rateValue.toFixed(6),
+          calculationBase: entity.charge.calculationBase,
+          baseAmountRial: entity.charge.baseAmountRial.toFixed(2),
+          amountRial: entity.charge.amountRial.toFixed(2),
+          goldPricePerGramRial: entity.charge.goldPricePerGramRial?.toFixed(2) ?? null,
+          status: entity.charge.status,
+          walletAvailableAfterRial: entity.charge.walletAvailableAfterRial?.toFixed(2) ?? null,
+          reservedAt: entity.charge.reservedAt?.toISOString() ?? null,
+          settledAt: entity.charge.settledAt?.toISOString() ?? null,
+          releasedAt: entity.charge.releasedAt?.toISOString() ?? null,
+        }
+      : null;
+    dto.goldPricePerGramRial = entity.charge?.goldPricePerGramRial?.toFixed(2) ?? null;
+    dto.documents = {
+      preInvoiceAvailable: !!entity.preInvoiceKey,
+      invoiceAvailable: !!entity.invoiceKey,
+    };
     return dto;
   }
 }

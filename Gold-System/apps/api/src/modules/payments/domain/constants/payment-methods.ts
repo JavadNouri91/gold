@@ -30,6 +30,11 @@ export enum PaymentStatus {
   REVERSED = 'REVERSED',
 }
 
+export enum PaymentDirection {
+  DEPOSIT = 'DEPOSIT',
+  WITHDRAWAL = 'WITHDRAWAL',
+}
+
 export enum SettlementStatus {
   PENDING = 'PENDING',
   SETTLED = 'SETTLED',

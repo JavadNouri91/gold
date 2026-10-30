@@ -26,8 +26,9 @@ import {
   RecordPaymentDto,
   AllocatePaymentDto,
   ValidatePaymentDto,
+  CreateWithdrawalDto,
 } from '../../application/dto/record-payment.dto';
-import { PaymentMethod } from '../../domain/constants/payment-methods';
+import { PaymentDirection, PaymentMethod } from '../../domain/constants/payment-methods';
 import { ListPaymentsQueryDto } from '../../application/dto/list-payments.query';
 import { MAX_RECEIPT_BYTES } from '../../domain/receipt-file';
 
@@ -93,6 +94,7 @@ export class PaymentController {
         tradeId: query.tradeId,
         customerId: query.customerId,
         status: query.status,
+        direction: query.direction as PaymentDirection | undefined,
         statusGroup: query.statusGroup,
         method: query.method,
         from: query.from,
@@ -159,6 +161,25 @@ export class PaymentController {
       amount: body.amount,
       referenceNumber: body.referenceNumber,
       file,
+    });
+  }
+
+  /**
+   * Customer requests a withdrawal to one of their own verified bank accounts.
+   * POST /payments/withdrawals
+   */
+  @Post('withdrawals')
+  @RequireAnyPermission('payment.read', 'customer.payment.read_own')
+  submitWithdrawal(
+    @CurrentUser() user: CurrentUserData,
+    @Body() dto: CreateWithdrawalDto,
+  ) {
+    if (!dto.amount || !dto.bankAccountId) {
+      throw new BadRequestException('اطلاعات برداشت ناقص است.');
+    }
+    return this.paymentService.submitOwnWithdrawal(user.userId, {
+      amount: dto.amount,
+      bankAccountId: dto.bankAccountId,
     });
   }
 

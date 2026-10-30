@@ -60,3 +60,26 @@ export class InvalidScheduledPickupDateException extends BusinessRuleException {
     super('PICKUP_SCHEDULED_DATE_INVALID', reason);
   }
 }
+
+export class InsufficientPickupFeeCreditException extends BusinessRuleException {
+  constructor(available: Decimal, required: Decimal) {
+    super(
+      'PICKUP_INSUFFICIENT_FEE_CREDIT',
+      'موجودی ریالی کیف پول برای پرداخت کارمزد تبدیل کافی نیست.',
+      {
+        availableRial: available.toFixed(2),
+        requiredRial: required.toFixed(2),
+        shortfallRial: required.minus(available).toFixed(2),
+      },
+    );
+  }
+}
+
+export class PickupPriceUnavailableException extends BusinessRuleException {
+  constructor() {
+    super(
+      'PICKUP_PRICE_UNAVAILABLE',
+      'قیمت طلا برای محاسبه کارمزد تبدیل در دسترس نیست.',
+    );
+  }
+}

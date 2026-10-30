@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
+import { Printer } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { staffPickupsApi } from '@/lib/internal-api';
@@ -11,7 +12,9 @@ import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
 import { ApiErrorState } from '@/components/dashboard/states';
 import { FilterBar } from '@/components/dashboard/filter-bar';
 import { DataTable, type Column } from '@/components/dashboard/data-table';
+import { PickupDetailsModal } from '@/components/dashboard/pickup-details-modal';
 import { StatusBadge } from '@/components/portal/status-badge';
+import { Button } from '@/components/ui/button';
 import {
   formatDateTime,
   formatWeight,
@@ -35,6 +38,7 @@ export default function StaffPickupsPage() {
   const [status, setStatus] = useState('');
   const [appliedStatus, setAppliedStatus] = useState('');
   const [page, setPage] = useState(1);
+  const [dialog, setDialog] = useState<{ pickupId: string; autoPrint: boolean } | null>(null);
   const limit = 20;
 
   const list = useSWR(canRead ? ['staff-pickups', appliedStatus, page] : null, () =>
@@ -88,6 +92,40 @@ export default function StaffPickupsPage() {
       header: 'ثبت',
       render: (row) => formatDateTime(row.requestedAt),
     },
+    {
+      key: 'actions',
+      header: 'عملیات',
+      className: 'whitespace-nowrap',
+      render: (row) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            asChild
+            size="sm"
+            className="bg-emerald-600 text-white hover:bg-emerald-700"
+            aria-label={`اقدام روی درخواست ${row.pickupNumber}`}
+          >
+            <Link href={`/dashboard/pickups/${row.id}`}>اقدام</Link>
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            aria-label={`مشاهده درخواست ${row.pickupNumber}`}
+            onClick={() => setDialog({ pickupId: row.id, autoPrint: false })}
+          >
+            نمایش
+          </Button>
+          <Button
+            size="sm"
+            className="gap-1"
+            aria-label={`چاپ درخواست ${row.pickupNumber}`}
+            onClick={() => setDialog({ pickupId: row.id, autoPrint: true })}
+          >
+            <Printer className="h-3.5 w-3.5" aria-hidden />
+            چاپ
+          </Button>
+        </div>
+      ),
+    },
   ];
 
   const totalPages = list.data ? Math.max(1, Math.ceil(list.data.meta.total / limit)) : 1;
@@ -124,6 +162,12 @@ export default function StaffPickupsPage() {
         page={page}
         totalPages={totalPages}
         onPageChange={setPage}
+      />
+      <PickupDetailsModal
+        pickupId={dialog?.pickupId ?? null}
+        open={Boolean(dialog)}
+        autoPrint={dialog?.autoPrint ?? false}
+        onClose={() => setDialog(null)}
       />
     </div>
   );

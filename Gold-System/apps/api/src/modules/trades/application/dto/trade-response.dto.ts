@@ -33,6 +33,23 @@ export class TradeItemResponseDto {
 }
 
 /**
+ * Staff display enrichment — resolved outside the Trade aggregate.
+ * Null for customer-facing responses so staff identities never leak.
+ */
+export interface TradeEnrichment {
+  customerName?: string | null;
+  customerNumber?: string | null;
+  customerMobile?: string | null;
+  orderNumber?: string | null;
+  orderStatus?: string | null;
+  orderCreatedAt?: Date | null;
+  confirmedByName?: string | null;
+  reversedByName?: string | null;
+  /** BUY/SELL derived from the source order when the snapshot has none. */
+  side?: 'BUY' | 'SELL' | null;
+}
+
+/**
  * Trade Response DTO — Phase 3.6
  *
  * External representation of a Trade.
@@ -55,6 +72,20 @@ export class TradeResponseDto {
   customerId: string;
   pricingCalculationId: string;
   status: TradeStatus;
+
+  // Enrichment for staff detail — customer display data
+  customerName: string | null;
+  customerNumber: string | null;
+  customerMobile: string | null;
+
+  // Enrichment for staff detail — source order registration data
+  orderNumber: string | null;
+  orderStatus: string | null;
+  orderCreatedAt: Date | null;
+
+  // Enrichment for staff detail — actor names behind the raw user ids
+  confirmedByName: string | null;
+  reversedByName: string | null;
 
   // Immutable commercial terms (snapshot at confirmation)
   totalAmountRial: string;
@@ -90,7 +121,7 @@ export class TradeResponseDto {
   createdAt: Date;
   updatedAt: Date;
 
-  static fromEntity(entity: TradeEntity): TradeResponseDto {
+  static fromEntity(entity: TradeEntity, extras?: TradeEnrichment): TradeResponseDto {
     const dto = new TradeResponseDto();
     dto.id = entity.id;
     dto.tradeNumber = entity.tradeNumber;
@@ -99,6 +130,14 @@ export class TradeResponseDto {
     dto.customerId = entity.customerId;
     dto.pricingCalculationId = entity.pricingCalculationId;
     dto.status = entity.status;
+    dto.customerName = extras?.customerName ?? null;
+    dto.customerNumber = extras?.customerNumber ?? null;
+    dto.customerMobile = extras?.customerMobile ?? null;
+    dto.orderNumber = extras?.orderNumber ?? null;
+    dto.orderStatus = extras?.orderStatus ?? null;
+    dto.orderCreatedAt = extras?.orderCreatedAt ?? null;
+    dto.confirmedByName = extras?.confirmedByName ?? null;
+    dto.reversedByName = extras?.reversedByName ?? null;
     dto.totalAmountRial = entity.totalAmountRial.toFixed(2);
     dto.goldAmountRial = entity.goldAmountRial.toFixed(2);
     dto.feeAmountRial = entity.feeAmountRial.toFixed(2);
@@ -114,7 +153,8 @@ export class TradeResponseDto {
     dto.isComplete = entity.isComplete;
     dto.customerType = entity.customerType;
     const snapshotSide = entity.lockedTermsSnapshot?.side;
-    dto.side = snapshotSide === 'BUY' || snapshotSide === 'SELL' ? snapshotSide : null;
+    dto.side =
+      snapshotSide === 'BUY' || snapshotSide === 'SELL' ? snapshotSide : (extras?.side ?? null);
     dto.lockedTermsSnapshot = entity.lockedTermsSnapshot;
     dto.confirmedByUserId = entity.confirmedByUserId;
     dto.confirmedAt = entity.confirmedAt;

@@ -16,7 +16,7 @@ jest.mock('@/lib/internal-api', () => ({
 }));
 
 const api = jest.requireMock('@/lib/internal-api') as {
-  internalOrdersApi: { quotations: jest.Mock };
+  internalOrdersApi: { quotations: jest.Mock; getById: jest.Mock };
 };
 
 describe('order quotation modal', () => {

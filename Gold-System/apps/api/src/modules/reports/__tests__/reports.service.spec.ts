@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ReportsService } from '../application/reports.service';
 import { ReportsRepository } from '../infrastructure/repositories/reports.repository';
+import { KycService } from '../../kyc/application/kyc.service';
 import Decimal from 'decimal.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -36,7 +37,6 @@ const dashboardStats = {
     { type: 'VIP', _count: { id: 5 } },
     { type: 'HOUSEHOLD', _count: { id: 37 } },
   ],
-  pendingKyc: 3,
   activeCustomers: 38,
   suspendedCustomers: 2,
   ordersByStatus: [
@@ -54,6 +54,8 @@ const dashboardStats = {
   tradeAgg: { _sum: { totalAmountRial: makeDecimal(100_000_000), weightGrams: makeDecimal(50) } },
   paymentAgg: { _sum: { amount: makeDecimal(80_000_000) } },
   paymentCount: 25,
+  paymentsAwaitingReview: 7,
+  paymentAwaitingAgg: { _sum: { amount: makeDecimal(12_500_000) } },
   settledTrades: 8,
   unsettledTrades: 21,
   recentTrades: [MOCK_TRADE],
@@ -90,6 +92,11 @@ const mockRepo = {
   getAuditReport: jest.fn(),
 };
 
+/** Only the pending-review bucket feeds the dashboard KYC figure. */
+const mockKyc = {
+  getPendingReviewCount: jest.fn(),
+};
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('ReportsService', () => {
@@ -97,9 +104,14 @@ describe('ReportsService', () => {
 
   beforeEach(async () => {
     jest.clearAllMocks();
+    mockKyc.getPendingReviewCount.mockResolvedValue({ awaiting: 3 });
 
     const module: TestingModule = await Test.createTestingModule({
-      providers: [ReportsService, { provide: ReportsRepository, useValue: mockRepo }],
+      providers: [
+        ReportsService,
+        { provide: ReportsRepository, useValue: mockRepo },
+        { provide: KycService, useValue: mockKyc },
+      ],
     }).compile();
 
     service = module.get<ReportsService>(ReportsService);
@@ -114,6 +126,15 @@ describe('ReportsService', () => {
       expect(result.totalCustomers).toBe(42);
       expect(result.pendingKyc).toBe(3);
       expect(result.activeCustomers).toBe(38);
+    });
+
+    it('takes the KYC figure from the awaiting-review bucket, not raw verification rows', async () => {
+      mockKyc.getPendingReviewCount.mockResolvedValueOnce({ awaiting: 0 });
+
+      const result = await service.getDashboard();
+
+      expect(mockKyc.getPendingReviewCount).toHaveBeenCalled();
+      expect(result.pendingKyc).toBe(0);
     });
 
     it('maps customersByType correctly', async () => {
@@ -155,6 +176,12 @@ describe('ReportsService', () => {
       const result = await service.getDashboard();
       expect(result.totalPaymentsValueRial).toBe('80000000.00');
       expect(result.totalPaymentsRecorded).toBe(25);
+    });
+
+    it('exposes PENDING payments awaiting review with 2dp value', async () => {
+      const result = await service.getDashboard();
+      expect(result.paymentsAwaitingReview).toBe(7);
+      expect(result.paymentsAwaitingReviewValueRial).toBe('12500000.00');
     });
 
     it('derives financial account balances from ledger — not trades', async () => {

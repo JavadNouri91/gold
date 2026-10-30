@@ -6,7 +6,6 @@ import {
   ShoppingCart,
   TrendingUp,
   Wallet,
-  Scale,
   BookOpen,
   Coins,
   Truck,
@@ -17,6 +16,7 @@ import {
   Clock,
   Shield,
   Percent,
+  MessageSquare,
 } from 'lucide-react';
 import { hasPermission } from './permissions';
 
@@ -88,16 +88,9 @@ export const DASHBOARD_NAV: NavItem[] = [
   },
   {
     href: '/dashboard/payments',
-    label: 'پرداخت‌ها',
+    label: 'واریز و برداشت',
     icon: Wallet,
     anyOf: ['payment.read', 'payment.create'],
-    group: 'مالی',
-  },
-  {
-    href: '/dashboard/settlements',
-    label: 'تسویه',
-    icon: Scale,
-    anyOf: ['settlement.read', 'financial_report.read'],
     group: 'مالی',
   },
   {
@@ -151,7 +144,7 @@ export const DASHBOARD_NAV: NavItem[] = [
   },
   {
     href: '/dashboard/settings/fees',
-    label: 'کارمزد معاملات',
+    label: 'کارمزدها',
     icon: Percent,
     anyOf: ['pricing.fees.manage'],
     group: 'سیستم',
@@ -161,6 +154,13 @@ export const DASHBOARD_NAV: NavItem[] = [
     label: 'مدیریت نشست',
     icon: Shield,
     anyOf: ['session.policy.manage', 'user.manage'],
+    group: 'سیستم',
+  },
+  {
+    href: '/dashboard/settings/sms',
+    label: 'تنظیمات پیامک',
+    icon: MessageSquare,
+    anyOf: ['sms.settings.manage'],
     group: 'سیستم',
   },
 ];

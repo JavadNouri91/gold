@@ -4,7 +4,7 @@ import { SmsProvider, SmsDeliveryResult } from './sms-provider.interface';
 /**
  * Mock SMS Provider — for development and testing only.
  *
- * Selected when SMS_PROVIDER=mock (default in development).
+ * Selected when the resolved provider is `mock` (the default in development).
  * Logs the message to the console at WARN level so developers
  * can see the SMS content without actually sending it.
  *

@@ -5,19 +5,23 @@ import { cn, toPersianDigits } from '@/lib/utils';
 import type { PhysicalGoldPickup, PhysicalGoldPickupStatus } from '@/lib/api';
 import { PICKUP_STATUS_LABELS } from '@/lib/utils';
 
-const STEPS: PhysicalGoldPickupStatus[] = ['REQUESTED', 'PREPARING', 'READY', 'DELIVERED'];
+export type PickupStepStatus = 'REQUESTED' | 'PREPARING' | 'READY' | 'DELIVERED';
 
-export type PickupStepTimestamps = Partial<
-  Record<'REQUESTED' | 'PREPARING' | 'READY' | 'DELIVERED', string | null>
->;
+const STEPS: PickupStepStatus[] = ['REQUESTED', 'PREPARING', 'READY', 'DELIVERED'];
+
+export type PickupStepTimestamps = Partial<Record<PickupStepStatus, string | null>>;
+
+/** Narrow a pickup status to one of the four sequential stepper stages. */
+export function isStepStatus(status: PhysicalGoldPickupStatus): status is PickupStepStatus {
+  return status !== 'CANCELLED';
+}
 
 /** Prefer column timestamps; fall back to the first matching status event. */
 export function pickupStepTimestamps(pickup: PhysicalGoldPickup): PickupStepTimestamps {
   const fromEvents: PickupStepTimestamps = {};
   for (const event of pickup.events ?? []) {
-    if (STEPS.includes(event.status) && !fromEvents[event.status as keyof PickupStepTimestamps]) {
-      fromEvents[event.status as keyof PickupStepTimestamps] = event.createdAt;
-    }
+    if (!isStepStatus(event.status)) continue;
+    if (!fromEvents[event.status]) fromEvents[event.status] = event.createdAt;
   }
   return {
     REQUESTED: pickup.requestedAt ?? fromEvents.REQUESTED ?? null,

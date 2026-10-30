@@ -1,21 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SmsProvider, SmsDeliveryResult } from './sms-provider.interface';
+import { SmsProvider, SmsDeliveryResult, SmsRuntimeConfig } from './sms-provider.interface';
 
 /**
  * Melipayamak Provider Adapter
  *
  * docs/21-business-decisions.md §10.1 — one of the two candidate providers.
- * open-questions.md #31 — final selection TBD.
  *
- * Selected when SMS_PROVIDER=melipayamak.
+ * Selected by the `provider` value of the resolved SMS settings
+ * (admin panel → settings → SMS, or SMS_PROVIDER in .env).
  *
  * Uses Melipayamak REST API.
- * Credentials via env: SMS_API_KEY (username), MELIPAYAMAK_PASSWORD, SMS_SENDER_LINE.
+ * Credentials come from the resolved config; the env config is the fallback
+ * for callers that inject this provider directly.
  * Base URL override: MELIPAYAMAK_BASE_URL.
  *
  * SECURITY:
- * - Credentials come from environment/config — NEVER hard-coded.
+ * - Credentials come from configuration — NEVER hard-coded.
  */
 @Injectable()
 export class MelipayamakProvider implements SmsProvider {
@@ -24,15 +25,18 @@ export class MelipayamakProvider implements SmsProvider {
 
   constructor(private readonly configService: ConfigService) {}
 
-  async send(to: string, message: string): Promise<SmsDeliveryResult> {
-    const smsConfig = this.configService.get('sms');
-    const username = smsConfig.apiKey as string;
-    const password = smsConfig.melipayamakPassword as string;
-    const from = smsConfig.senderLine as string;
-    const baseUrl = smsConfig.melipayamakBaseUrl as string;
+  async send(to: string, message: string, config?: SmsRuntimeConfig): Promise<SmsDeliveryResult> {
+    const resolved = config ?? this.envConfig();
+    const username = resolved.apiKey;
+    const password = resolved.melipayamakPassword;
+    const from = resolved.senderLine;
+    const baseUrl = resolved.melipayamakBaseUrl;
 
     if (!username || !password) {
       return { success: false, error: 'Melipayamak credentials not configured' };
+    }
+    if (!from) {
+      return { success: false, error: 'SMS_SENDER_LINE not configured' };
     }
 
     try {
@@ -66,5 +70,18 @@ export class MelipayamakProvider implements SmsProvider {
       this.logger.error(`[Melipayamak] Network/timeout error: ${msg}`);
       return { success: false, error: `NETWORK_ERROR: ${msg}` };
     }
+  }
+
+  private envConfig(): SmsRuntimeConfig {
+    const smsConfig = this.configService.get('sms');
+    return {
+      provider: 'melipayamak',
+      apiKey: (smsConfig?.apiKey as string) ?? '',
+      senderLine: (smsConfig?.senderLine as string) ?? '',
+      smsirBaseUrl: (smsConfig?.smsirBaseUrl as string) ?? 'https://api.sms.ir/v1',
+      melipayamakBaseUrl:
+        (smsConfig?.melipayamakBaseUrl as string) ?? 'https://rest.payamak-panel.com/api/SendSMS',
+      melipayamakPassword: (smsConfig?.melipayamakPassword as string) ?? '',
+    };
   }
 }

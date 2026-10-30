@@ -179,6 +179,23 @@ model UserSessionPolicy {
   @@map("user_session_policies")
 }
 
+/// SMS provider credentials editable from the admin panel.
+/// Singleton row id = "global". Empty/null fields fall back to the .env values.
+/// Secrets are stored AES-256-GCM encrypted (see common/crypto/secret-box.ts).
+model SmsSetting {
+  id                           String   @id
+  provider                     String   @default("mock")
+  apiKeyEncrypted              String?  @map("api_key_encrypted")
+  senderLine                   String?  @map("sender_line")
+  smsirBaseUrl                 String?  @map("smsir_base_url")
+  melipayamakBaseUrl           String?  @map("melipayamak_base_url")
+  melipayamakPasswordEncrypted String?  @map("melipayamak_password_encrypted")
+  updatedAt                    DateTime @updatedAt @map("updated_at")
+  updatedById                  String?  @map("updated_by_id")
+
+  @@map("sms_settings")
+}
+
 /// Short-lived proof that credentials were accepted while a session slot must be freed.
 /// Only the SHA-256 hash of the token is stored.
 model LoginConfirmation {
@@ -303,6 +320,7 @@ model CustomerBankAccount {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  payments      Payment[]
 
   @@unique([customerId, iban])
   @@index([customerId])
@@ -494,7 +512,7 @@ model PricingRule {
 model CustomerTypeFeePolicy {
   id               String              @id @default(cuid())
   customerType     CustomerType?       @map("customer_type")
-  side             TradeSide
+  side             FeeChargeSide
   code             FeeChargeCode       @default(TRANSACTION_FEE)
   labelFa          String              @default("کارمزد معامله") @map("label_fa")
   mode             FeeMode             @default(NONE)
@@ -535,6 +553,31 @@ model TransactionChargeSnapshot {
 
   @@index([orderId])
   @@map("transaction_charge_snapshots")
+}
+
+/// Immutable conversion-fee charge locked at pickup request (melted → physical bar).
+model PickupChargeSnapshot {
+  id                       String              @id @default(cuid())
+  pickupId                 String              @unique @map("pickup_id")
+  code                     FeeChargeCode       @default(PICKUP_CONVERSION_FEE)
+  labelFa                  String              @map("label_fa")
+  mode                     FeeMode             @default(NONE)
+  rateValue                Decimal             @default(0) @map("rate_value") @db.Decimal(20, 6)
+  calculationBase          FeeCalculationBase? @map("calculation_base")
+  baseAmountRial           Decimal             @default(0) @map("base_amount_rial") @db.Decimal(20, 2)
+  amountRial               Decimal             @default(0) @map("amount_rial") @db.Decimal(20, 2)
+  goldPricePerGramRial     Decimal?            @map("gold_price_per_gram_rial") @db.Decimal(20, 2)
+  policyId                 String?             @map("policy_id")
+  status                   PickupChargeStatus  @default(NONE)
+  walletAvailableAfterRial Decimal?            @map("wallet_available_after_rial") @db.Decimal(20, 2)
+  reservedAt               DateTime?           @map("reserved_at")
+  settledAt                DateTime?           @map("settled_at")
+  releasedAt               DateTime?           @map("released_at")
+  createdAt                DateTime            @default(now()) @map("created_at")
+  pickup                   PhysicalGoldPickup  @relation(fields: [pickupId], references: [id], onDelete: Cascade)
+
+  @@index([pickupId])
+  @@map("pickup_charge_snapshots")
 }
 
 model PricingCalculation {
@@ -889,34 +932,41 @@ model PurchaseItem {
 }
 
 model Payment {
-  id                String              @id @default(cuid())
-  idempotencyKey    String              @unique @map("idempotency_key")
-  tradeId           String?             @map("trade_id")
-  customerId        String              @map("customer_id")
-  method            PaymentMethod
-  amount            Decimal             @db.Decimal(20, 2)
-  currency          String              @default("IRR")
-  status            PaymentStatus       @default(PENDING)
-  referenceNumber   String?             @map("reference_number")
-  receiptKey        String?             @map("receipt_key")
-  receiptMimeType   String?             @map("receipt_mime_type")
-  receiptFileName   String?             @map("receipt_file_name")
-  notes             String?
-  receivedAt        DateTime?           @map("received_at")
-  recordedByUserId  String?             @map("recorded_by_user_id")
-  validatedAt       DateTime?           @map("validated_at")
-  validatedByUserId String?             @map("validated_by_user_id")
-  createdAt         DateTime            @default(now()) @map("created_at")
-  updatedAt         DateTime            @updatedAt @map("updated_at")
-  allocations       PaymentAllocation[]
-  customer          Customer            @relation(fields: [customerId], references: [id])
-  recordedBy        User?               @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
-  trade             Trade?              @relation(fields: [tradeId], references: [id])
-  validatedBy       User?               @relation("PaymentValidatedBy", fields: [validatedByUserId], references: [id])
+  id                        String              @id @default(cuid())
+  idempotencyKey            String              @unique @map("idempotency_key")
+  tradeId                   String?             @map("trade_id")
+  customerId                String              @map("customer_id")
+  direction                 PaymentDirection    @default(DEPOSIT)
+  method                    PaymentMethod
+  amount                    Decimal             @db.Decimal(20, 2)
+  currency                  String              @default("IRR")
+  status                    PaymentStatus       @default(PENDING)
+  referenceNumber           String?             @map("reference_number")
+  receiptKey                String?             @map("receipt_key")
+  receiptMimeType           String?             @map("receipt_mime_type")
+  receiptFileName           String?             @map("receipt_file_name")
+  customerBankAccountId     String?             @map("customer_bank_account_id")
+  destinationIban           String?             @map("destination_iban")
+  destinationBankName       String?             @map("destination_bank_name")
+  destinationAccountHolder  String?             @map("destination_account_holder")
+  notes                     String?
+  receivedAt                DateTime?           @map("received_at")
+  recordedByUserId          String?             @map("recorded_by_user_id")
+  validatedAt               DateTime?           @map("validated_at")
+  validatedByUserId         String?             @map("validated_by_user_id")
+  createdAt                 DateTime            @default(now()) @map("created_at")
+  updatedAt                 DateTime            @updatedAt @map("updated_at")
+  allocations               PaymentAllocation[]
+  customer                  Customer            @relation(fields: [customerId], references: [id])
+  customerBankAccount       CustomerBankAccount? @relation(fields: [customerBankAccountId], references: [id], onDelete: SetNull)
+  recordedBy                User?               @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
+  trade                     Trade?              @relation(fields: [tradeId], references: [id])
+  validatedBy               User?               @relation("PaymentValidatedBy", fields: [validatedByUserId], references: [id])
 
   @@index([tradeId])
   @@index([customerId])
   @@index([status])
+  @@index([direction])
   @@index([createdAt])
   @@map("payments")
 }
@@ -1188,10 +1238,26 @@ enum FeeCalculationBase {
   GOLD_VALUE_STEP4
   AFTER_GROUP_RULE_STEP5
   GOLD_COMMERCIAL_TOTAL
+  PICKUP_GOLD_VALUE
 }
 
 enum FeeChargeCode {
   TRANSACTION_FEE
+  PICKUP_CONVERSION_FEE
+}
+
+/// BUY/SELL are transaction fee sides; PICKUP is the melted→physical conversion fee side.
+enum FeeChargeSide {
+  BUY
+  SELL
+  PICKUP
+}
+
+enum PickupChargeStatus {
+  NONE
+  RESERVED
+  SETTLED
+  RELEASED
 }
 
 enum SupplierStatus {
@@ -1231,6 +1297,11 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REVERSED
+}
+
+enum PaymentDirection {
+  DEPOSIT
+  WITHDRAWAL
 }
 
 enum SettlementStatus {
@@ -1434,6 +1505,12 @@ model PhysicalGoldPickup {
   readyById          String?                   @map("ready_by_id")
   deliveredById      String?                   @map("delivered_by_id")
   cancelledById      String?                   @map("cancelled_by_id")
+  preInvoiceKey         String?                @map("pre_invoice_key")
+  preInvoiceMimeType    String?                @map("pre_invoice_mime_type")
+  preInvoiceGeneratedAt DateTime?              @map("pre_invoice_generated_at")
+  invoiceKey            String?                @map("invoice_key")
+  invoiceMimeType       String?                @map("invoice_mime_type")
+  invoiceGeneratedAt    DateTime?              @map("invoice_generated_at")
   createdAt      DateTime                  @default(now()) @map("created_at")
   updatedAt      DateTime                  @updatedAt @map("updated_at")
   customer       Customer                  @relation(fields: [customerId], references: [id])
@@ -1442,6 +1519,7 @@ model PhysicalGoldPickup {
   deliveredBy    User?                     @relation("PickupDeliveredBy", fields: [deliveredById], references: [id])
   cancelledBy    User?                     @relation("PickupCancelledBy", fields: [cancelledById], references: [id])
   events         PhysicalGoldPickupEvent[]
+  charge         PickupChargeSnapshot?
 
   @@index([customerId, status])
   @@index([status, requestedAt])

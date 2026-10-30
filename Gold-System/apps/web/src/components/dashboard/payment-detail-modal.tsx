@@ -1,11 +1,14 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import useSWR from 'swr';
-import { Download, Expand, FileText, Pencil, X } from 'lucide-react';
+import { Download, Expand, FileText, Pencil, Printer, X } from 'lucide-react';
 import { fetchBlob } from '@/lib/api';
 import { internalCustomersApi, type StaffPayment } from '@/lib/internal-api';
+import { usePrintPageSize } from '@/lib/print';
 import { StatusBadge } from '@/components/portal/status-badge';
+import { Button } from '@/components/ui/button';
 import { MobileNumber } from '@/components/ui/mobile-input';
 import {
   PAYMENT_METHOD_LABELS,
@@ -45,6 +48,7 @@ function statusClass(status: string): string {
 export function PaymentDetailModal({
   payment,
   canValidate,
+  autoPrint = false,
   onClose,
   onApprove,
   onReject,
@@ -52,6 +56,7 @@ export function PaymentDetailModal({
 }: {
   payment: StaffPayment;
   canValidate: boolean;
+  autoPrint?: boolean;
   onClose: () => void;
   onApprove: () => void;
   onReject: () => void;
@@ -77,7 +82,7 @@ export function PaymentDetailModal({
   }, [onClose, zoomed]);
 
   useEffect(() => {
-    if (!payment.hasReceipt) {
+    if (payment.direction === 'WITHDRAWAL' || !payment.hasReceipt) {
       setReceiptKind('none');
       setReceiptUrl(null);
       return;
@@ -103,13 +108,29 @@ export function PaymentDetailModal({
       cancelled = true;
       if (revoked) URL.revokeObjectURL(revoked);
     };
-  }, [payment.hasReceipt, payment.id]);
+  }, [payment.hasReceipt, payment.direction, payment.id]);
+
+  usePrintPageSize('A5 portrait');
+
+  useEffect(() => {
+    document.body.dataset.printDoc = 'true';
+    return () => {
+      delete document.body.dataset.printDoc;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!autoPrint) return;
+    const timer = window.setTimeout(() => window.print(), 300);
+    return () => window.clearTimeout(timer);
+  }, [autoPrint, payment.id]);
 
   const name = customer.data?.fullName ?? payment.customerName ?? 'مشتری';
   const mobile = customer.data?.mobile ?? payment.customerMobile ?? '';
   const verified = (customer.data?.verificationStatus ?? '') === 'VERIFIED';
   const pending = payment.status === 'PENDING';
   const note = payment.notes?.trim();
+  const withdrawal = payment.direction === 'WITHDRAWAL';
 
   const downloadReceipt = () => {
     if (!receiptUrl) return;
@@ -120,8 +141,22 @@ export function PaymentDetailModal({
     link.click();
   };
 
-  const rows = useMemo(
-    () => [
+  const rows = useMemo(() => {
+    if (withdrawal) {
+      return [
+        { label: 'شناسه رهگیری سیستم', value: shortPaymentId(payment.id), ltr: true },
+        { label: 'روش پرداخت', value: 'انتقال بانکی' },
+        { label: 'بانک مقصد', value: payment.destinationBankName ?? '—' },
+        {
+          label: 'شماره شبا',
+          value: payment.destinationIban ? toPersianDigits(payment.destinationIban) : '—',
+          ltr: true,
+        },
+        { label: 'صاحب حساب', value: payment.destinationAccountHolder ?? '—' },
+        { label: 'تاریخ ثبت', value: formatDateTime(payment.createdAt) },
+      ];
+    }
+    return [
       { label: 'شناسه رهگیری سیستم', value: shortPaymentId(payment.id), ltr: true },
       { label: 'روش پرداخت', value: methodDetail(payment.method) },
       {
@@ -130,52 +165,109 @@ export function PaymentDetailModal({
         ltr: true,
       },
       { label: 'تاریخ ثبت', value: formatDateTime(payment.createdAt) },
-    ],
-    [payment],
-  );
+    ];
+  }, [payment, withdrawal]);
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" dir="rtl">
-      <button type="button" className="absolute inset-0 bg-black/40" aria-label="بستن" onClick={onClose} />
+  return createPortal(
+    <div className="print-doc-host fixed inset-0 z-50 flex items-center justify-center p-4 print:p-0" dir="rtl">
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/40 print:hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+        onClick={onClose}
+      />
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="payment-detail-title"
-        className="relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl"
+        className="print-doc relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl print:max-h-none print:max-w-none print:overflow-visible print:rounded-none print:shadow-none"
       >
-        <header className="flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
+        <header className="print-screen-only flex items-center justify-between gap-3 border-b border-slate-200 px-6 py-4">
           <h2 id="payment-detail-title" className="text-base font-bold text-slate-900 sm:text-lg">
-            جزئیات پرداخت و بررسی فیش
+            {withdrawal ? 'جزئیات برداشت وجه' : 'جزئیات پرداخت و بررسی فیش'}
           </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="بستن"
-            className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50"
-          >
-            <X className="h-5 w-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="gap-1.5" onClick={() => window.print()}>
+              <Printer className="h-3.5 w-3.5" aria-hidden />
+              چاپ
+            </Button>
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="بستن"
+              className="inline-flex h-10 w-10 items-center justify-center rounded-xl text-slate-500 hover:bg-slate-50"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
         </header>
 
-        <div className="grid min-h-0 flex-1 gap-6 overflow-y-auto p-6 lg:grid-cols-2">
-          <section className="relative min-h-[18rem] overflow-hidden rounded-2xl border border-slate-200 bg-slate-50">
-            {receiptKind === 'image' && receiptUrl ? (
+        <div className="hidden print-doc-card print:block">
+          <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-slate-300 pb-1.5">
+            <p className="text-sm font-bold text-slate-900">
+              {withdrawal ? 'برداشت وجه' : 'فیش پرداخت'} {shortPaymentId(payment.id)}
+            </p>
+            <p className="text-xs text-slate-600">{formatDateTime(payment.createdAt)}</p>
+          </div>
+          <p className="mt-1 text-xs text-slate-700">
+            مشتری: {name}
+            {mobile ? (
+              <>
+                {' — '}
+                <MobileNumber value={mobile} />
+              </>
+            ) : null}
+          </p>
+        </div>
+
+        <div className="print-doc-columns grid min-h-0 flex-1 gap-6 overflow-y-auto p-6 lg:grid-cols-2 print:overflow-visible print:p-0">
+          <section className="relative min-h-[18rem] overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 print:min-h-0">
+            {withdrawal ? (
+              <div className="flex h-full min-h-[18rem] flex-col justify-center gap-4 p-6 print:min-h-0">
+                <div className="flex items-center gap-2 text-sm font-bold text-slate-900">
+                  <FileText className="h-4 w-4 text-slate-500" aria-hidden />
+                  حساب مقصد برداشت
+                </div>
+                <dl className="space-y-3 text-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-slate-500">بانک</dt>
+                    <dd className="font-semibold text-slate-900">{payment.destinationBankName ?? '—'}</dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-slate-500">شماره شبا</dt>
+                    <dd className="font-mono font-semibold text-slate-900" dir="ltr">
+                      {payment.destinationIban ? toPersianDigits(payment.destinationIban) : '—'}
+                    </dd>
+                  </div>
+                  <div className="flex items-start justify-between gap-3">
+                    <dt className="text-slate-500">صاحب حساب</dt>
+                    <dd className="font-semibold text-slate-900">{payment.destinationAccountHolder ?? '—'}</dd>
+                  </div>
+                </dl>
+                <p className="rounded-xl bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-800">
+                  {pending
+                    ? 'مبلغ این برداشت تا زمان تأیید مالی رزرو شده است.'
+                    : 'مبلغ از کیف پول کسر و به شماره شبا مقصد واریز شده است.'}
+                </p>
+              </div>
+            ) : receiptKind === 'image' && receiptUrl ? (
               // Blob preview; next/image is not suitable for object URLs here.
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={receiptUrl} alt="فیش واریزی" className="h-full w-full object-contain p-4" />
+              <img src={receiptUrl} alt="فیش واریزی" className="h-full w-full object-contain p-4 print:max-h-[70mm] print:p-0" />
             ) : receiptKind === 'pdf' && receiptUrl ? (
-              <div className="flex h-full min-h-[18rem] flex-col items-center justify-center gap-3 p-6 text-center">
+              <div className="flex h-full min-h-[18rem] flex-col items-center justify-center gap-3 p-6 text-center print:min-h-0">
                 <FileText className="h-12 w-12 text-slate-400" aria-hidden />
                 <p className="text-sm font-medium text-slate-700">فیش به‌صورت PDF بارگذاری شده است.</p>
               </div>
             ) : (
-              <div className="flex h-full min-h-[18rem] flex-col items-center justify-center gap-2 p-6 text-center">
+              <div className="flex h-full min-h-[18rem] flex-col items-center justify-center gap-2 p-6 text-center print:min-h-0">
                 <FileText className="h-10 w-10 text-slate-300" aria-hidden />
                 <p className="text-sm text-slate-500">{receiptError ?? 'فیشی برای این پرداخت ثبت نشده است.'}</p>
               </div>
             )}
-            {receiptUrl ? (
-              <div className="absolute left-3 top-3 flex gap-2">
+            {!withdrawal && receiptUrl ? (
+              <div className="absolute left-3 top-3 flex gap-2 print:hidden">
                 <button
                   type="button"
                   onClick={downloadReceipt}
@@ -222,8 +314,11 @@ export function PaymentDetailModal({
 
             <dl className="divide-y divide-slate-100 rounded-2xl border border-slate-200">
               <div className="flex items-start justify-between gap-3 px-4 py-3">
-                <dt className="text-sm text-slate-500">مبلغ واریزی</dt>
-                <dd className="text-lg font-bold tabular-nums text-emerald-600">{formatMoney(payment.amount)}</dd>
+                <dt className="text-sm text-slate-500">{withdrawal ? 'مبلغ برداشت' : 'مبلغ واریزی'}</dt>
+                <dd className={cn('text-lg font-bold tabular-nums', withdrawal ? 'text-rose-600' : 'text-emerald-600')}>
+                  {withdrawal ? '−' : ''}
+                  {formatMoney(payment.amount)}
+                </dd>
               </div>
               {rows.map((row) => (
                 <div key={row.label} className="flex items-start justify-between gap-3 px-4 py-3">
@@ -256,7 +351,7 @@ export function PaymentDetailModal({
           </section>
         </div>
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4">
+        <footer className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-white px-6 py-4 print:hidden">
           <div className="flex flex-wrap gap-2">
             {canValidate && pending ? (
               <>
@@ -265,7 +360,7 @@ export function PaymentDetailModal({
                   onClick={onApprove}
                   className="inline-flex min-h-11 items-center rounded-xl bg-emerald-500 px-4 text-sm font-bold text-white hover:bg-emerald-600"
                 >
-                  ✓ تایید و اعمال پرداخت
+                  {withdrawal ? '✓ تأیید و واریز به شبا' : '✓ تایید و اعمال پرداخت'}
                 </button>
                 <button
                   type="button"
@@ -277,24 +372,27 @@ export function PaymentDetailModal({
               </>
             ) : null}
           </div>
-          <button
-            type="button"
-            onClick={onEdit}
-            className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-200"
-          >
-            <Pencil className="h-4 w-4" aria-hidden />
-            ویرایش اطلاعات
-          </button>
+          {!withdrawal ? (
+            <button
+              type="button"
+              onClick={onEdit}
+              className="inline-flex min-h-11 items-center gap-1.5 rounded-xl border border-slate-200 bg-slate-100 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+            >
+              <Pencil className="h-4 w-4" aria-hidden />
+              ویرایش اطلاعات
+            </button>
+          ) : null}
         </footer>
       </div>
 
       {zoomed && receiptUrl ? (
-        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6">
+        <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-6 print:hidden">
           <button type="button" className="absolute inset-0" aria-label="بستن بزرگ‌نمایی" onClick={() => setZoomed(false)} />
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src={receiptUrl} alt="فیش واریزی" className="relative z-10 max-h-full max-w-full rounded-xl object-contain" />
         </div>
       ) : null}
-    </div>
+    </div>,
+    document.body,
   );
 }

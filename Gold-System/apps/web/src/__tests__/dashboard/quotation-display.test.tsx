@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QuotationModal } from '@/components/dashboard/quotation-modal';
-import { toPersianDigits } from '@/lib/utils';
+import { formatWholeMoney, toPersianDigits } from '@/lib/utils';
 import { signIn } from './auth-state';
 
 jest.mock('@/lib/auth', () => ({
@@ -62,6 +62,7 @@ describe('quotation display', () => {
     expect(screen.getByText(toPersianDigits('QT-44'))).toBeInTheDocument();
     expect(screen.getByText(/مقادیر تاریخی دوباره محاسبه نمی‌شوند/)).toBeInTheDocument();
     expect(screen.getByText('قیمت کل')).toBeInTheDocument();
+    expect((await screen.findAllByText(formatWholeMoney(quoteFixture.totalAmountRial))).length).toBeGreaterThan(0);
     expect(screen.getByText('وزن')).toBeInTheDocument();
     expect(screen.getByText(/مبلغ فاکتور/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'چاپ' })).toBeInTheDocument();
@@ -104,5 +105,32 @@ describe('quotation display', () => {
       expect.any(Blob),
       'QT-44-v2.json',
     );
+  });
+
+  it('offers a close control at the top and at the bottom of the sheet', async () => {
+    signIn(['quotation.read']);
+    api.internalQuotationsApi.getById.mockResolvedValue(quoteFixture);
+    api.internalOrdersApi.getById.mockResolvedValue({ id: 'ord-1', status: 'QUOTED' });
+    const onClose = jest.fn();
+    const user = userEvent.setup();
+    render(<QuotationModal quotationId="q1" open onClose={onClose} />);
+
+    await user.click(await screen.findByRole('button', { name: 'بستن پیش‌فاکتور' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'بستن' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps a close control when the quotation cannot be loaded', async () => {
+    signIn(['quotation.read']);
+    api.internalQuotationsApi.getById.mockRejectedValue(new Error('not found'));
+    const onClose = jest.fn();
+    const user = userEvent.setup();
+    render(<QuotationModal quotationId="missing" open onClose={onClose} />);
+
+    await user.click(await screen.findByRole('button', { name: 'بستن پیش‌فاکتور' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole('button', { name: 'بستن' }));
+    expect(onClose).toHaveBeenCalledTimes(2);
   });
 });

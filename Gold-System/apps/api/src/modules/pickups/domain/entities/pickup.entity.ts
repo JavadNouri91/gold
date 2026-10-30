@@ -18,6 +18,25 @@ export interface PickupCustomerSnapshot {
   firstName: string;
   lastName: string;
   mobile: string;
+  type: string | null;
+}
+
+export interface PickupChargeSnapshotData {
+  id: string;
+  code: string;
+  labelFa: string;
+  mode: string;
+  rateValue: Decimal;
+  calculationBase: string | null;
+  baseAmountRial: Decimal;
+  amountRial: Decimal;
+  goldPricePerGramRial: Decimal | null;
+  policyId: string | null;
+  status: string;
+  walletAvailableAfterRial: Decimal | null;
+  reservedAt: Date | null;
+  settledAt: Date | null;
+  releasedAt: Date | null;
 }
 
 export class PhysicalGoldPickupEntity {
@@ -47,6 +66,13 @@ export class PhysicalGoldPickupEntity {
   readonly updatedAt: Date;
   readonly events: PickupEventSnapshot[];
   readonly customer: PickupCustomerSnapshot | null;
+  readonly charge: PickupChargeSnapshotData | null;
+  readonly preInvoiceKey: string | null;
+  readonly preInvoiceMimeType: string | null;
+  readonly preInvoiceGeneratedAt: Date | null;
+  readonly invoiceKey: string | null;
+  readonly invoiceMimeType: string | null;
+  readonly invoiceGeneratedAt: Date | null;
 
   constructor(data: {
     id: string;
@@ -74,6 +100,13 @@ export class PhysicalGoldPickupEntity {
     updatedAt: Date;
     events?: PickupEventSnapshot[];
     customer?: PickupCustomerSnapshot | null;
+    charge?: PickupChargeSnapshotData | null;
+    preInvoiceKey?: string | null;
+    preInvoiceMimeType?: string | null;
+    preInvoiceGeneratedAt?: Date | null;
+    invoiceKey?: string | null;
+    invoiceMimeType?: string | null;
+    invoiceGeneratedAt?: Date | null;
   }) {
     this.id = data.id;
     this.pickupNumber = data.pickupNumber;
@@ -100,6 +133,13 @@ export class PhysicalGoldPickupEntity {
     this.updatedAt = data.updatedAt;
     this.events = data.events ?? [];
     this.customer = data.customer ?? null;
+    this.charge = data.charge ?? null;
+    this.preInvoiceKey = data.preInvoiceKey ?? null;
+    this.preInvoiceMimeType = data.preInvoiceMimeType ?? null;
+    this.preInvoiceGeneratedAt = data.preInvoiceGeneratedAt ?? null;
+    this.invoiceKey = data.invoiceKey ?? null;
+    this.invoiceMimeType = data.invoiceMimeType ?? null;
+    this.invoiceGeneratedAt = data.invoiceGeneratedAt ?? null;
   }
 
   canTransitionTo(next: PhysicalGoldPickupStatus): boolean {

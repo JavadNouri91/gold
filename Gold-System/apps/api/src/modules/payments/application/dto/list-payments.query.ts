@@ -62,6 +62,10 @@ export class ListPaymentsQueryDto {
   type?: 'BUY' | 'SELL' | 'OTHER';
 
   @IsOptional()
+  @IsIn(['DEPOSIT', 'WITHDRAWAL'])
+  direction?: 'DEPOSIT' | 'WITHDRAWAL';
+
+  @IsOptional()
   @IsString()
   @MaxLength(80)
   q?: string;

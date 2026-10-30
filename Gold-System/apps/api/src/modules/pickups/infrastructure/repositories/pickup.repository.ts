@@ -1,5 +1,12 @@
 import { Injectable } from '@nestjs/common';
-import { Prisma, PhysicalGoldPickupStatus as PrismaPickupStatus } from '@prisma/client';
+import {
+  Prisma,
+  PhysicalGoldPickupStatus as PrismaPickupStatus,
+  FeeChargeCode,
+  FeeMode,
+  FeeCalculationBase,
+  PickupChargeStatus,
+} from '@prisma/client';
 import Decimal from 'decimal.js';
 import { PrismaService } from '../../../../database/prisma.service';
 import { PhysicalGoldPickupStatus } from '../../domain/constants/pickup-states';
@@ -18,8 +25,10 @@ const pickupInclude = {
       firstName: true,
       lastName: true,
       mobile: true,
+      type: true,
     },
   },
+  charge: true,
 } satisfies Prisma.PhysicalGoldPickupInclude;
 
 type PickupRow = Prisma.PhysicalGoldPickupGetPayload<{
@@ -247,6 +256,94 @@ export class PickupRepository {
     return this.mapRow(row, extras.get(input.id));
   }
 
+  async createChargeInTx(
+    tx: Prisma.TransactionClient,
+    data: {
+      pickupId: string;
+      code: string;
+      labelFa: string;
+      mode: string;
+      rateValue: Decimal;
+      calculationBase: string | null;
+      baseAmountRial: Decimal;
+      amountRial: Decimal;
+      goldPricePerGramRial: Decimal | null;
+      policyId: string | null;
+      status: 'NONE' | 'RESERVED';
+      walletAvailableAfterRial: Decimal | null;
+      reservedAt: Date | null;
+    },
+  ): Promise<void> {
+    await tx.pickupChargeSnapshot.create({
+      data: {
+        pickupId: data.pickupId,
+        code: data.code as FeeChargeCode,
+        labelFa: data.labelFa,
+        mode: data.mode as FeeMode,
+        rateValue: data.rateValue.toFixed(6),
+        calculationBase: data.calculationBase as FeeCalculationBase | null,
+        baseAmountRial: data.baseAmountRial.toFixed(2),
+        amountRial: data.amountRial.toFixed(2),
+        goldPricePerGramRial: data.goldPricePerGramRial?.toFixed(2) ?? null,
+        policyId: data.policyId,
+        status: data.status as PickupChargeStatus,
+        walletAvailableAfterRial: data.walletAvailableAfterRial?.toFixed(2) ?? null,
+        reservedAt: data.reservedAt,
+      },
+    });
+  }
+
+  async updateChargeInTx(
+    tx: Prisma.TransactionClient,
+    pickupId: string,
+    data: {
+      status: 'RESERVED' | 'SETTLED' | 'RELEASED' | 'NONE';
+      settledAt?: Date | null;
+      releasedAt?: Date | null;
+      reservedAt?: Date | null;
+    },
+  ): Promise<void> {
+    await tx.pickupChargeSnapshot.update({
+      where: { pickupId },
+      data: {
+        status: data.status as PickupChargeStatus,
+        ...(data.settledAt !== undefined && { settledAt: data.settledAt }),
+        ...(data.releasedAt !== undefined && { releasedAt: data.releasedAt }),
+        ...(data.reservedAt !== undefined && { reservedAt: data.reservedAt }),
+      },
+    });
+  }
+
+  async setPreInvoiceInTx(
+    tx: Prisma.TransactionClient,
+    pickupId: string,
+    data: { key: string; mimeType: string; generatedAt: Date },
+  ): Promise<void> {
+    await tx.physicalGoldPickup.update({
+      where: { id: pickupId },
+      data: {
+        preInvoiceKey: data.key,
+        preInvoiceMimeType: data.mimeType,
+        preInvoiceGeneratedAt: data.generatedAt,
+      },
+    });
+  }
+
+  async setInvoiceInTx(
+    tx: Prisma.TransactionClient,
+    pickupId: string,
+    data: { key: string; mimeType: string; generatedAt: Date },
+  ): Promise<void> {
+    await tx.physicalGoldPickup.update({
+      where: { id: pickupId },
+      data: {
+        invoiceKey: data.key,
+        invoiceMimeType: data.mimeType,
+        invoiceGeneratedAt: data.generatedAt,
+      },
+    });
+  }
+
   private async loadExtras(
     db: PrismaService | Prisma.TransactionClient,
     ids: string[],
@@ -311,8 +408,38 @@ export class PickupRepository {
             firstName: row.customer.firstName,
             lastName: row.customer.lastName,
             mobile: row.customer.mobile,
+            type: row.customer.type,
           }
         : null,
+      charge: row.charge
+        ? {
+            id: row.charge.id,
+            code: row.charge.code,
+            labelFa: row.charge.labelFa,
+            mode: row.charge.mode,
+            rateValue: new Decimal(row.charge.rateValue.toString()),
+            calculationBase: row.charge.calculationBase,
+            baseAmountRial: new Decimal(row.charge.baseAmountRial.toString()),
+            amountRial: new Decimal(row.charge.amountRial.toString()),
+            goldPricePerGramRial: row.charge.goldPricePerGramRial
+              ? new Decimal(row.charge.goldPricePerGramRial.toString())
+              : null,
+            policyId: row.charge.policyId,
+            status: row.charge.status,
+            walletAvailableAfterRial: row.charge.walletAvailableAfterRial
+              ? new Decimal(row.charge.walletAvailableAfterRial.toString())
+              : null,
+            reservedAt: row.charge.reservedAt,
+            settledAt: row.charge.settledAt,
+            releasedAt: row.charge.releasedAt,
+          }
+        : null,
+      preInvoiceKey: row.preInvoiceKey,
+      preInvoiceMimeType: row.preInvoiceMimeType,
+      preInvoiceGeneratedAt: row.preInvoiceGeneratedAt,
+      invoiceKey: row.invoiceKey,
+      invoiceMimeType: row.invoiceMimeType,
+      invoiceGeneratedAt: row.invoiceGeneratedAt,
     });
   }
 }

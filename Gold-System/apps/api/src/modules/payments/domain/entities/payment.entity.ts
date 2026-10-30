@@ -1,5 +1,6 @@
 import Decimal from 'decimal.js';
 import {
+  PaymentDirection,
   PaymentMethod,
   PaymentStatus,
   VALID_PAYMENT_TRANSITIONS,
@@ -20,6 +21,7 @@ export class PaymentEntity {
   readonly idempotencyKey: string;
   readonly tradeId: string | null;
   readonly customerId: string;
+  readonly direction: PaymentDirection;
   readonly method: PaymentMethod;
   readonly amount: Decimal;
   readonly currency: string;
@@ -28,6 +30,10 @@ export class PaymentEntity {
   readonly receiptKey: string | null;
   readonly receiptMimeType: string | null;
   readonly receiptFileName: string | null;
+  readonly customerBankAccountId: string | null;
+  readonly destinationIban: string | null;
+  readonly destinationBankName: string | null;
+  readonly destinationAccountHolder: string | null;
   readonly notes: string | null;
   readonly receivedAt: Date | null;
   readonly recordedByUserId: string | null;
@@ -41,6 +47,7 @@ export class PaymentEntity {
     idempotencyKey: string;
     tradeId: string | null;
     customerId: string;
+    direction?: PaymentDirection;
     method: PaymentMethod;
     amount: Decimal;
     currency: string;
@@ -49,6 +56,10 @@ export class PaymentEntity {
     receiptKey?: string | null;
     receiptMimeType?: string | null;
     receiptFileName?: string | null;
+    customerBankAccountId?: string | null;
+    destinationIban?: string | null;
+    destinationBankName?: string | null;
+    destinationAccountHolder?: string | null;
     notes: string | null;
     receivedAt: Date | null;
     recordedByUserId: string | null;
@@ -61,6 +72,7 @@ export class PaymentEntity {
     this.idempotencyKey = data.idempotencyKey;
     this.tradeId = data.tradeId;
     this.customerId = data.customerId;
+    this.direction = data.direction ?? PaymentDirection.DEPOSIT;
     this.method = data.method;
     this.amount = new Decimal(data.amount.toString());
     this.currency = data.currency;
@@ -69,6 +81,10 @@ export class PaymentEntity {
     this.receiptKey = data.receiptKey ?? null;
     this.receiptMimeType = data.receiptMimeType ?? null;
     this.receiptFileName = data.receiptFileName ?? null;
+    this.customerBankAccountId = data.customerBankAccountId ?? null;
+    this.destinationIban = data.destinationIban ?? null;
+    this.destinationBankName = data.destinationBankName ?? null;
+    this.destinationAccountHolder = data.destinationAccountHolder ?? null;
     this.notes = data.notes;
     this.receivedAt = data.receivedAt;
     this.recordedByUserId = data.recordedByUserId;

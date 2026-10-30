@@ -4,7 +4,7 @@ import { ChevronDown, Pencil, Power } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import type { TradingMeter, TradingSessionView } from '@/lib/internal-api';
-import { cn, formatFaNumber, formatMoney, formatWeight, toLatinDigits, toPersianDigits } from '@/lib/utils';
+import { cn, formatFaNumber, formatWeight, formatWholeMoney, toLatinDigits, toPersianDigits } from '@/lib/utils';
 
 export const WEEKDAYS = [
   { id: 'SATURDAY', label: 'شنبه' },
@@ -91,7 +91,7 @@ export function Ring({
 
 export function money(value: string | number | null | undefined): string {
   if (value == null || value === '') return 'بدون سقف';
-  return formatMoney(value);
+  return formatWholeMoney(value);
 }
 
 export function grams(value: string | number | null | undefined): string {

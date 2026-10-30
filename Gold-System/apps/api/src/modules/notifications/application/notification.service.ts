@@ -3,7 +3,7 @@ import { NotificationRepository } from '../infrastructure/repositories/notificat
 import {
   SmsProvider,
   SMS_PROVIDER_TOKEN,
-} from '../infrastructure/providers/sms-provider.interface';
+} from '../../sms/infrastructure/providers/sms-provider.interface';
 import { AuditService } from '../../audit/application/audit.service';
 import { NotificationEntity } from '../domain/entities/notification.entity';
 import {

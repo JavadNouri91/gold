@@ -208,6 +208,11 @@ export enum PaymentMethod {
   CASH = 'CASH',
 }
 
+export enum PaymentDirection {
+  DEPOSIT = 'DEPOSIT',
+  WITHDRAWAL = 'WITHDRAWAL',
+}
+
 export enum SettlementStatus {
   PENDING = 'PENDING',
   PARTIAL = 'PARTIAL',
@@ -252,10 +257,21 @@ export enum FeeCalculationBase {
   GOLD_VALUE_STEP4 = 'GOLD_VALUE_STEP4',
   AFTER_GROUP_RULE_STEP5 = 'AFTER_GROUP_RULE_STEP5',
   GOLD_COMMERCIAL_TOTAL = 'GOLD_COMMERCIAL_TOTAL',
+  /** Gold value at the moment a physical pickup is requested (per-gram price × weight). */
+  PICKUP_GOLD_VALUE = 'PICKUP_GOLD_VALUE',
 }
 
 export enum FeeChargeCode {
   TRANSACTION_FEE = 'TRANSACTION_FEE',
+  /** Fee for converting melted gold into a physical bar at the store. */
+  PICKUP_CONVERSION_FEE = 'PICKUP_CONVERSION_FEE',
+}
+
+/** Side a fee policy applies to. BUY/SELL are transaction fees; PICKUP is physical conversion. */
+export enum FeeChargeSide {
+  BUY = 'BUY',
+  SELL = 'SELL',
+  PICKUP = 'PICKUP',
 }
 
 export enum LedgerDirection {

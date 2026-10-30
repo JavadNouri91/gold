@@ -23,6 +23,23 @@ export class CreatePickupDto {
   @IsString()
   @MaxLength(500)
   customerNote?: string;
+
+  /** Locks the preview price used to compute the conversion fee (optional). */
+  @IsOptional()
+  @IsString()
+  priceSnapshotId?: string;
+}
+
+export class PickupFeePreviewQueryDto {
+  /** Whole grams only — fractional pickup weights are not allowed. */
+  @IsNotEmpty({ message: 'وزن طلا را وارد کنید.' })
+  @IsNumberString({}, { message: 'وزن باید عدد صحیح گرم باشد.' })
+  @Matches(/^[1-9]\d*$/, { message: 'وزن باید عدد صحیح گرم و بیشتر از صفر باشد.' })
+  weightGrams!: string;
+
+  @IsOptional()
+  @IsString()
+  priceSnapshotId?: string;
 }
 
 export class CancelPickupDto {

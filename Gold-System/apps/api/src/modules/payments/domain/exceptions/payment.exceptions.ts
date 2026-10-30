@@ -175,3 +175,49 @@ export class PaymentNotValidatedException extends HttpException {
     );
   }
 }
+
+/**
+ * 422 — Requested withdrawal amount exceeds the withdrawable wallet balance.
+ */
+export class InsufficientWithdrawalBalanceException extends HttpException {
+  constructor(available: string, requested: string) {
+    super(
+      {
+        code: 'INSUFFICIENT_WITHDRAWAL_BALANCE',
+        message: `مبلغ درخواستی از موجودی قابل برداشت بیشتر است. (موجودی: ${available}، درخواستی: ${requested})`,
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+}
+
+/**
+ * 404 — Destination bank account not found or not verified for the customer.
+ */
+export class WithdrawalBankAccountNotFoundException extends HttpException {
+  constructor(bankAccountId: string) {
+    super(
+      {
+        code: 'WITHDRAWAL_BANK_ACCOUNT_NOT_FOUND',
+        message: 'حساب بانکی مقصد معتبر نیست. شماره شبا را در پروفایل ثبت و تأیید کنید.',
+        bankAccountId,
+      },
+      HttpStatus.NOT_FOUND,
+    );
+  }
+}
+
+/**
+ * 422 — Withdrawal rows cannot be allocated to a trade.
+ */
+export class WithdrawalCannotBeAllocatedException extends HttpException {
+  constructor(paymentId: string) {
+    super(
+      {
+        code: 'WITHDRAWAL_CANNOT_BE_ALLOCATED',
+        message: `Payment "${paymentId}" is a withdrawal and cannot be allocated to a trade.`,
+      },
+      HttpStatus.UNPROCESSABLE_ENTITY,
+    );
+  }
+}

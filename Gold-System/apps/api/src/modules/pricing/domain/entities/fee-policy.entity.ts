@@ -3,14 +3,14 @@ import {
   CustomerType,
   FeeCalculationBase,
   FeeChargeCode,
+  FeeChargeSide,
   FeeMode,
-  TradeSide,
 } from '@gold/shared-types';
 
 export class FeePolicyEntity {
   readonly id: string;
   readonly customerType: CustomerType | null;
-  readonly side: TradeSide;
+  readonly side: FeeChargeSide;
   readonly code: FeeChargeCode;
   readonly labelFa: string;
   readonly mode: FeeMode;
@@ -25,7 +25,7 @@ export class FeePolicyEntity {
   constructor(props: {
     id: string;
     customerType: CustomerType | null;
-    side: TradeSide;
+    side: FeeChargeSide;
     code: FeeChargeCode;
     labelFa: string;
     mode: FeeMode;

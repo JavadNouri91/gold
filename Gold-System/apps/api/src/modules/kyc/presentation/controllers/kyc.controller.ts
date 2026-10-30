@@ -135,6 +135,13 @@ export class KycController {
     });
   }
 
+  @Get('kyc/pending-count')
+  @RequirePermissions('kyc.review', 'customer.read')
+  @ApiOperation({ summary: 'Count customers waiting for KYC document review (sidebar badge)' })
+  getPendingReviewCount() {
+    return this.kyc.getPendingReviewCount();
+  }
+
   @Get('kyc/queue')
   @RequirePermissions('kyc.review', 'customer.read')
   @ApiOperation({ summary: 'Staff KYC queue with optional bucket / display / type filters' })
@@ -403,6 +410,20 @@ export class KycController {
     @Req() req: Request,
   ) {
     return this.kyc.makeDecision(customerId, dto, requireActorId(user), req.ip ?? undefined);
+  }
+
+  @Post(':customerId/kyc/activate')
+  @RequirePermissions('kyc.review')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Activate a customer account after all required documents are approved',
+  })
+  activateCustomer(
+    @CurrentUser() user: CurrentUserData,
+    @Param('customerId') customerId: string,
+    @Req() req: Request,
+  ) {
+    return this.kyc.activateCustomer(customerId, requireActorId(user), req.ip ?? undefined);
   }
 
   @Get(':customerId/kyc/history')

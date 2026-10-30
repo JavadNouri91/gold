@@ -16,6 +16,7 @@ import { NotificationService } from '../../notifications/application/notificatio
 import { NotificationType } from '../../notifications/domain/constants/notification-types';
 import { PaymentEntity, PaymentAllocationEntity } from '../domain/entities/payment.entity';
 import {
+  PaymentDirection,
   PaymentMethod,
   PaymentStatus,
   PAYMENT_METHOD_DEFINITIONS,
@@ -31,6 +32,8 @@ import {
   MissingPaymentReferenceException,
   PaymentNotValidatedException,
   DepositCannotBeAllocatedException,
+  WithdrawalBankAccountNotFoundException,
+  WithdrawalCannotBeAllocatedException,
 } from '../domain/exceptions/payment.exceptions';
 import { assertReceiptFile } from '../domain/receipt-file';
 import {
@@ -285,13 +288,22 @@ export class PaymentService {
       );
     }
 
+    const isWithdrawal = payment.direction === PaymentDirection.WITHDRAWAL;
+
     const updated = await this.prisma.$transaction(async (tx) => {
       const next = await this.paymentRepo.updateStatusInTx(tx, paymentId, PaymentStatus.VALIDATED, {
         validatedAt: new Date(),
         validatedByUserId: actorUserId,
       });
 
-      if (!payment.tradeId) {
+      if (isWithdrawal) {
+        await this.customerAccounts.settleWithdrawalInTx(tx, {
+          customerId: payment.customerId,
+          amount: payment.amount,
+          paymentId,
+          actorId: actorUserId,
+        });
+      } else if (!payment.tradeId) {
         let account = await tx.customerAccount.findUnique({
           where: { customerId: payment.customerId },
         });
@@ -324,9 +336,19 @@ export class PaymentService {
       after: {
         status: PaymentStatus.VALIDATED,
         validatedAt: updated.validatedAt?.toISOString(),
-        creditGranted: !payment.tradeId,
+        creditGranted: !isWithdrawal && !payment.tradeId,
+        creditDebited: isWithdrawal,
       },
     });
+
+    if (isWithdrawal) {
+      this.notifyCustomer(
+        payment.customerId,
+        NotificationType.PAYMENT_RECORDED,
+        'برداشت تأیید شد',
+        `درخواست برداشت به مبلغ ${payment.amount.toFixed(2)} ریال تأیید و به شبا واریز شد.`,
+      );
+    }
 
     return PaymentResponseDto.from(updated);
   }
@@ -347,9 +369,20 @@ export class PaymentService {
       );
     }
 
-    const updated = await this.prisma.$transaction(async (tx) =>
-      this.paymentRepo.updateStatusInTx(tx, paymentId, PaymentStatus.FAILED),
-    );
+    const isWithdrawal = payment.direction === PaymentDirection.WITHDRAWAL;
+
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const next = await this.paymentRepo.updateStatusInTx(tx, paymentId, PaymentStatus.FAILED);
+      if (isWithdrawal) {
+        await this.customerAccounts.releaseWithdrawalInTx(tx, {
+          customerId: payment.customerId,
+          amount: payment.amount,
+          paymentId,
+          actorId: actorUserId,
+        });
+      }
+      return next;
+    });
 
     await this.audit.log({
       actorId: actorUserId,
@@ -358,8 +391,17 @@ export class PaymentService {
       entityType: 'Payment',
       entityId: paymentId,
       before: { status: payment.status },
-      after: { status: PaymentStatus.FAILED },
+      after: { status: PaymentStatus.FAILED, creditReleased: isWithdrawal },
     });
+
+    if (isWithdrawal) {
+      this.notifyCustomer(
+        payment.customerId,
+        NotificationType.PAYMENT_RECORDED,
+        'درخواست برداشت رد شد',
+        `درخواست برداشت به مبلغ ${payment.amount.toFixed(2)} ریال رد شد و مبلغ رزروشده آزاد گردید.`,
+      );
+    }
 
     return PaymentResponseDto.from(updated);
   }
@@ -397,6 +439,9 @@ export class PaymentService {
 
     if (payment.status !== PaymentStatus.VALIDATED) {
       throw new PaymentNotValidatedException(paymentId, payment.status);
+    }
+    if (payment.direction === PaymentDirection.WITHDRAWAL) {
+      throw new WithdrawalCannotBeAllocatedException(paymentId);
     }
     if (!payment.tradeId) {
       throw new DepositCannotBeAllocatedException(paymentId);
@@ -572,6 +617,7 @@ export class PaymentService {
     customerId?: string;
     status?: PaymentStatus;
     statusGroup?: 'successful' | 'failed' | 'reversed' | 'submitted';
+    direction?: PaymentDirection;
     method?: PaymentMethod;
     from?: string;
     to?: string;
@@ -584,6 +630,7 @@ export class PaymentService {
       customerId: opts.customerId,
       status: opts.status,
       statusGroup: opts.statusGroup,
+      direction: opts.direction,
       method: opts.method,
       from: opts.from ? new Date(opts.from) : undefined,
       to: opts.to ? new Date(opts.to) : undefined,
@@ -627,29 +674,43 @@ export class PaymentService {
       })(),
     );
     const successful = [...SUCCESSFUL_PAYMENT_STATUSES] as PaymentStatus[];
+    const todayWindow = {
+      OR: [
+        { validatedAt: { gte: todayStart, lt: tomorrowStart } },
+        {
+          AND: [
+            { validatedAt: null },
+            { createdAt: { gte: todayStart, lt: tomorrowStart } },
+          ],
+        },
+      ],
+    };
 
-    const [pendingCount, todayValidatedAmountRial, totalSuccessfulAmountRial] = await Promise.all([
-      this.paymentRepo.count({ status: PaymentStatus.PENDING }),
-      this.paymentRepo.sumAmount({
-        status: { in: successful },
-        OR: [
-          { validatedAt: { gte: todayStart, lt: tomorrowStart } },
-          {
-            AND: [
-              { validatedAt: null },
-              { createdAt: { gte: todayStart, lt: tomorrowStart } },
-            ],
-          },
-        ],
-      }),
-      this.paymentRepo.sumAmount({ status: { in: successful } }),
+    const summarizeDirection = async (direction: PaymentDirection) => {
+      const base = { direction };
+      const [pendingCount, pendingAmountRial, todayValidatedAmountRial, totalSuccessfulAmountRial, totalCount] =
+        await Promise.all([
+          this.paymentRepo.count({ direction, status: PaymentStatus.PENDING }),
+          this.paymentRepo.sumAmount({ direction, status: PaymentStatus.PENDING }),
+          this.paymentRepo.sumAmount({ ...base, status: { in: successful }, ...todayWindow }),
+          this.paymentRepo.sumAmount({ direction, status: { in: successful } }),
+          this.paymentRepo.count({ direction }),
+        ]);
+      return {
+        pendingCount,
+        pendingAmountRial,
+        todayValidatedAmountRial,
+        totalSuccessfulAmountRial,
+        totalCount,
+      };
+    };
+
+    const [deposits, withdrawals] = await Promise.all([
+      summarizeDirection(PaymentDirection.DEPOSIT),
+      summarizeDirection(PaymentDirection.WITHDRAWAL),
     ]);
 
-    return {
-      pendingCount,
-      todayValidatedAmountRial,
-      totalSuccessfulAmountRial,
-    };
+    return { deposits, withdrawals };
   }
 
   /**
@@ -811,6 +872,95 @@ export class PaymentService {
     });
   }
 
+  /**
+   * Customer requests a withdrawal. The destination must be one of the
+   * customer's own VERIFIED bank accounts. The requested amount is reserved
+   * immediately (removed from the withdrawable balance) and released on
+   * rejection / debited on accountant approval.
+   */
+  async submitOwnWithdrawal(
+    actorUserId: string,
+    input: { amount: string; bankAccountId: string },
+  ): Promise<LedgerPaymentDto> {
+    const customerId = await this.resolveCustomerId(actorUserId);
+    if (!customerId) throw new ForbiddenException('حساب مشتری برای ثبت برداشت پیدا نشد.');
+
+    let amount: Decimal;
+    try {
+      amount = new Decimal(input.amount);
+    } catch {
+      throw new InvalidPaymentAmountException(input.amount);
+    }
+    if (amount.lessThanOrEqualTo(0)) {
+      throw new InvalidPaymentAmountException(input.amount);
+    }
+
+    const bankAccount = await this.prisma.customerBankAccount.findFirst({
+      where: { id: input.bankAccountId, customerId, status: 'VERIFIED' },
+    });
+    if (!bankAccount) {
+      throw new WithdrawalBankAccountNotFoundException(input.bankAccountId);
+    }
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const created = await this.paymentRepo.createPaymentInTx(tx, {
+        idempotencyKey: randomUUID(),
+        tradeId: null,
+        customerId,
+        direction: PaymentDirection.WITHDRAWAL,
+        method: PaymentMethod.BANK_TRANSFER,
+        amount,
+        currency: 'IRR',
+        referenceNumber: null,
+        customerBankAccountId: bankAccount.id,
+        destinationIban: bankAccount.iban,
+        destinationBankName: bankAccount.bankName,
+        destinationAccountHolder: bankAccount.accountHolder,
+        notes: `درخواست برداشت وجه به شبا ${bankAccount.iban}`,
+        receivedAt: new Date(),
+        recordedByUserId: actorUserId,
+      });
+
+      await this.customerAccounts.reserveWithdrawalInTx(tx, {
+        customerId,
+        amount,
+        paymentId: created.id,
+        actorId: actorUserId,
+      });
+
+      return created;
+    });
+
+    await this.audit.log({
+      actorId: actorUserId,
+      actorType: 'USER',
+      action: 'WITHDRAWAL_REQUESTED',
+      entityType: 'Payment',
+      entityId: payment.id,
+      after: {
+        customerId,
+        direction: PaymentDirection.WITHDRAWAL,
+        amount: payment.amount.toFixed(2),
+        destinationIban: bankAccount.iban,
+      },
+    });
+
+    this.notifyCustomer(
+      customerId,
+      NotificationType.PAYMENT_RECORDED,
+      'درخواست برداشت ثبت شد',
+      `درخواست برداشت به مبلغ ${amount.toFixed(2)} ریال ثبت و مبلغ رزرو شد. پس از تأیید مالی به شبا واریز می‌شود.`,
+    );
+
+    return this.toLedgerDto({
+      payment,
+      orderId: null,
+      orderNumber: null,
+      tradeNumber: null,
+      relatedSide: null,
+    });
+  }
+
   async listOwnPayableTrades(
     actorUserId: string,
   ): Promise<
@@ -969,6 +1119,34 @@ export class PaymentService {
       select: { id: true },
     });
     return customer?.id ?? null;
+  }
+
+  /** Fire-and-forget customer notification resolved by customer id. */
+  private notifyCustomer(
+    customerId: string,
+    type: NotificationType,
+    subject: string,
+    body: string,
+  ): void {
+    this.prisma.customer
+      .findUnique({
+        where: { id: customerId },
+        select: { userId: true, mobile: true },
+      })
+      .then((c) =>
+        this.notificationService.dispatch({
+          recipientId: c?.userId ?? null,
+          recipientMobile: c?.mobile ?? null,
+          type,
+          subject,
+          body,
+          relatedEntityType: 'Payment',
+          relatedEntityId: undefined,
+        }),
+      )
+      .catch((err: unknown) =>
+        this.logger.error(`[PaymentService] notification failed: ${err}`),
+      );
   }
 
   private toLedgerDto(record: LedgerPaymentRecord): LedgerPaymentDto {

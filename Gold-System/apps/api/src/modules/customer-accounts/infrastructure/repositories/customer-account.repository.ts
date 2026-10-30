@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../../../../database/prisma.service';
 import { CustomerAccountEntity } from '../../domain/entities/customer-account.entity';
 import { InsufficientCreditException } from '../../../orders/domain/exceptions/order.exceptions';
+import { InsufficientWithdrawalBalanceException } from '../../../payments/domain/exceptions/payment.exceptions';
 import Decimal from 'decimal.js';
 import { Prisma, CreditTransactionType } from '@prisma/client';
 
@@ -148,6 +149,16 @@ export class CustomerAccountRepository {
     }
   }
 
+  /** Available rial credit (limit − reserved − consumed). Call inside a locked tx. */
+  async availableRialInTx(tx: Prisma.TransactionClient, customerId: string): Promise<Decimal> {
+    const row = await tx.customerAccount.findUnique({ where: { customerId } });
+    if (!row) throw new Error(`CustomerAccount for customer ${customerId} not found`);
+    const limit = new Decimal(row.creditLimitRial.toString());
+    const reserved = new Decimal(row.reservedCreditRial.toString());
+    const consumed = new Decimal(row.consumedCreditRial.toString());
+    return limit.minus(reserved).minus(consumed);
+  }
+
   /**
    * Reserves credit for an Order submission.
    *
@@ -169,7 +180,10 @@ export class CustomerAccountRepository {
     amount: Decimal;
     orderId: string;
     actorId: string;
-  }): Promise<void> {
+    /** Override the immutable ledger source (e.g. 'PICKUP'). */
+    sourceType?: string;
+    sourceId?: string;
+  }): Promise<Decimal> {
     const { tx, customerId, amount, orderId, actorId } = params;
 
     if (amount.lte(0)) {
@@ -224,12 +238,13 @@ export class CustomerAccountRepository {
         creditPool: 'RIAL',
         amount,
         balanceAfter,
-        sourceType: 'ORDER',
-        sourceId: orderId,
+        sourceType: params.sourceType ?? 'ORDER',
+        sourceId: params.sourceId ?? orderId,
         createdBy: actorId,
         reason: `Credit reserved for order submission`,
       },
     });
+    return balanceAfter;
   }
 
   /**
@@ -257,6 +272,8 @@ export class CustomerAccountRepository {
     orderId: string;
     actorId: string;
     reason: string;
+    sourceType?: string;
+    sourceId?: string;
   }): Promise<void> {
     const { tx, customerId, amount, orderId, actorId, reason } = params;
 
@@ -316,8 +333,8 @@ export class CustomerAccountRepository {
         creditPool: 'RIAL',
         amount,
         balanceAfter,
-        sourceType: 'ORDER',
-        sourceId: orderId,
+        sourceType: params.sourceType ?? 'ORDER',
+        sourceId: params.sourceId ?? orderId,
         createdBy: actorId,
         reason,
       },
@@ -347,6 +364,8 @@ export class CustomerAccountRepository {
     tradeId: string;
     orderId: string;
     actorId: string;
+    sourceType?: string;
+    sourceId?: string;
   }): Promise<void> {
     const { tx, customerId, amount, tradeId, orderId, actorId } = params;
 
@@ -409,8 +428,8 @@ export class CustomerAccountRepository {
         creditPool: 'RIAL',
         amount,
         balanceAfter,
-        sourceType: 'TRADE',
-        sourceId: tradeId,
+        sourceType: params.sourceType ?? 'TRADE',
+        sourceId: params.sourceId ?? tradeId,
         createdBy: actorId,
         reason: `Credit consumed at Trade confirmation (order ${orderId})`,
       },
@@ -503,6 +522,233 @@ export class CustomerAccountRepository {
         sourceId: tradeId,
         createdBy: actorId,
         reason,
+      },
+    });
+  }
+
+  /**
+   * Reserves a withdrawal amount against the customer's rial wallet at request time.
+   *
+   * The amount is moved into `reservedCreditRial` so it is no longer part of the
+   * withdrawable (available) balance. It is settled at accountant approval and
+   * released back on rejection.
+   *
+   * CONCURRENCY: SELECT FOR UPDATE serializes concurrent requests.
+   */
+  async reserveWithdrawalInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      customerId: string;
+      amount: Decimal;
+      paymentId: string;
+      actorId: string;
+    },
+  ): Promise<Decimal> {
+    const { customerId, amount, paymentId, actorId } = params;
+    if (amount.lte(0)) {
+      throw new Error('Withdrawal reservation amount must be positive');
+    }
+
+    const rows = await tx.$queryRaw<
+      Array<{
+        id: string;
+        credit_limit_rial: Prisma.Decimal;
+        reserved_credit_rial: Prisma.Decimal;
+        consumed_credit_rial: Prisma.Decimal;
+      }>
+    >`
+      SELECT id, credit_limit_rial, reserved_credit_rial, consumed_credit_rial
+      FROM customer_accounts
+      WHERE customer_id = ${customerId}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
+      throw new Error(`CustomerAccount for customer ${customerId} not found`);
+    }
+
+    const row = rows[0];
+    const limit = new Decimal(row.credit_limit_rial.toString());
+    const reserved = new Decimal(row.reserved_credit_rial.toString());
+    const consumed = new Decimal(row.consumed_credit_rial.toString());
+    const available = limit.minus(reserved).minus(consumed);
+
+    if (amount.gt(available)) {
+      throw new InsufficientWithdrawalBalanceException(available.toFixed(2), amount.toFixed(2));
+    }
+
+    await tx.$executeRaw`
+      UPDATE customer_accounts
+      SET reserved_credit_rial = reserved_credit_rial + ${amount}::numeric,
+          updated_at = NOW()
+      WHERE id = ${row.id}
+    `;
+
+    const balanceAfter = available.minus(amount);
+    await tx.creditTransaction.create({
+      data: {
+        accountId: row.id,
+        type: CreditTransactionType.RESERVATION,
+        creditPool: 'RIAL',
+        amount,
+        balanceAfter,
+        sourceType: 'WITHDRAWAL',
+        sourceId: paymentId,
+        createdBy: actorId,
+        reason: 'رزرو موجودی برای درخواست برداشت وجه',
+      },
+    });
+    return balanceAfter;
+  }
+
+  /**
+   * Releases a previously reserved withdrawal amount back to the wallet.
+   * Called when a withdrawal request is rejected or cancelled.
+   */
+  async releaseWithdrawalInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      customerId: string;
+      amount: Decimal;
+      paymentId: string;
+      actorId: string;
+    },
+  ): Promise<void> {
+    const { customerId, amount, paymentId, actorId } = params;
+    if (amount.lte(0)) {
+      throw new Error('Withdrawal release amount must be positive');
+    }
+
+    const rows = await tx.$queryRaw<
+      Array<{
+        id: string;
+        credit_limit_rial: Prisma.Decimal;
+        reserved_credit_rial: Prisma.Decimal;
+        consumed_credit_rial: Prisma.Decimal;
+      }>
+    >`
+      SELECT id, credit_limit_rial, reserved_credit_rial, consumed_credit_rial
+      FROM customer_accounts
+      WHERE customer_id = ${customerId}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
+      throw new Error(`CustomerAccount for customer ${customerId} not found`);
+    }
+
+    const row = rows[0];
+    const reserved = new Decimal(row.reserved_credit_rial.toString());
+    if (amount.gt(reserved)) {
+      throw new Error(
+        `Cannot release ${amount.toFixed(2)} Rial from account with only ${reserved.toFixed(2)} Rial reserved ` +
+          `for withdrawal ${paymentId}. Possible double-release bug.`,
+      );
+    }
+
+    await tx.$executeRaw`
+      UPDATE customer_accounts
+      SET reserved_credit_rial = reserved_credit_rial - ${amount}::numeric,
+          updated_at = NOW()
+      WHERE id = ${row.id}
+    `;
+
+    const limit = new Decimal(row.credit_limit_rial.toString());
+    const consumed = new Decimal(row.consumed_credit_rial.toString());
+    const newReserved = reserved.minus(amount);
+    const balanceAfter = limit.minus(newReserved).minus(consumed);
+
+    await tx.creditTransaction.create({
+      data: {
+        accountId: row.id,
+        type: CreditTransactionType.RELEASE,
+        creditPool: 'RIAL',
+        amount,
+        balanceAfter,
+        sourceType: 'WITHDRAWAL',
+        sourceId: paymentId,
+        createdBy: actorId,
+        reason: 'آزادسازی موجودی رزروشده درخواست برداشت',
+      },
+    });
+  }
+
+  /**
+   * Settles a reserved withdrawal at accountant approval: the amount leaves the
+   * wallet permanently. Both `creditLimitRial` and `reservedCreditRial` are
+   * decremented together, so the free (available) balance stays what it was after
+   * the reservation — the money is already "blocked" from the customer's view.
+   */
+  async settleWithdrawalInTx(
+    tx: Prisma.TransactionClient,
+    params: {
+      customerId: string;
+      amount: Decimal;
+      paymentId: string;
+      actorId: string;
+    },
+  ): Promise<void> {
+    const { customerId, amount, paymentId, actorId } = params;
+    if (amount.lte(0)) {
+      throw new Error('Withdrawal settle amount must be positive');
+    }
+
+    const rows = await tx.$queryRaw<
+      Array<{
+        id: string;
+        credit_limit_rial: Prisma.Decimal;
+        reserved_credit_rial: Prisma.Decimal;
+        consumed_credit_rial: Prisma.Decimal;
+      }>
+    >`
+      SELECT id, credit_limit_rial, reserved_credit_rial, consumed_credit_rial
+      FROM customer_accounts
+      WHERE customer_id = ${customerId}
+      FOR UPDATE
+    `;
+
+    if (rows.length === 0) {
+      throw new Error(`CustomerAccount for customer ${customerId} not found`);
+    }
+
+    const row = rows[0];
+    const limit = new Decimal(row.credit_limit_rial.toString());
+    const reserved = new Decimal(row.reserved_credit_rial.toString());
+    if (amount.gt(reserved)) {
+      throw new Error(
+        `Cannot settle ${amount.toFixed(2)} Rial — only ${reserved.toFixed(2)} Rial is reserved for withdrawal ${paymentId}.`,
+      );
+    }
+    if (amount.gt(limit)) {
+      throw new Error(
+        `Cannot settle ${amount.toFixed(2)} Rial — wallet limit is only ${limit.toFixed(2)} Rial.`,
+      );
+    }
+
+    await tx.$executeRaw`
+      UPDATE customer_accounts
+      SET credit_limit_rial = credit_limit_rial - ${amount}::numeric,
+          reserved_credit_rial = reserved_credit_rial - ${amount}::numeric,
+          updated_at = NOW()
+      WHERE id = ${row.id}
+    `;
+
+    const consumed = new Decimal(row.consumed_credit_rial.toString());
+    const newLimit = limit.minus(amount);
+    const newReserved = reserved.minus(amount);
+    const balanceAfter = newLimit.minus(newReserved).minus(consumed);
+
+    await tx.creditTransaction.create({
+      data: {
+        accountId: row.id,
+        type: CreditTransactionType.DECREASE,
+        creditPool: 'RIAL',
+        amount,
+        balanceAfter,
+        sourceType: 'WITHDRAWAL',
+        sourceId: paymentId,
+        createdBy: actorId,
+        reason: 'تسویه درخواست برداشت و کسر نهایی از کیف پول',
       },
     });
   }

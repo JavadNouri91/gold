@@ -52,7 +52,7 @@ const PERMISSIONS = [
   { key: 'customer.account.read', module: 'customer-accounts', description: 'Read any customer account' },
   // Pricing
   { key: 'pricing.rules.manage', module: 'pricing', description: 'Manage pricing rules and adjustments' },
-  { key: 'pricing.fees.manage', module: 'pricing', description: 'Manage customer-type BUY/SELL transaction fees' },
+  { key: 'pricing.fees.manage', module: 'pricing', description: 'Manage customer-type BUY/SELL transaction and physical conversion fees' },
   // Customer group / credit
   { key: 'customer.group.assign', module: 'customers', description: 'Assign customer type/group' },
   { key: 'credit.manage', module: 'customer-accounts', description: 'Manage customer credit' },
@@ -63,6 +63,8 @@ const PERMISSIONS = [
   { key: 'session.policy.manage', module: 'sessions', description: 'Manage concurrent session limits' },
   // Notifications
   { key: 'notification.manage', module: 'notifications', description: 'Manage notifications' },
+  // SMS provider configuration (admin panel → settings → SMS)
+  { key: 'sms.settings.manage', module: 'sms', description: 'Configure the SMS provider, API key and sender line' },
   // Audit
   { key: 'audit.read', module: 'audit', description: 'Read audit logs' },
   // KYC

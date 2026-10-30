@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import Decimal from 'decimal.js';
+import { KycService } from '../../kyc/application/kyc.service';
 import { ReportsRepository } from '../infrastructure/repositories/reports.repository';
 import {
   CustomerReportQuery,
@@ -87,14 +88,20 @@ function orderSide(metadata: unknown): 'BUY' | 'SELL' | null {
  */
 @Injectable()
 export class ReportsService {
-  constructor(private readonly repo: ReportsRepository) {}
+  constructor(
+    private readonly repo: ReportsRepository,
+    private readonly kyc: KycService,
+  ) {}
 
   // ─────────────────────────────────────────────────────────────────────────
   // Dashboard
   // ─────────────────────────────────────────────────────────────────────────
 
   async getDashboard(): Promise<DashboardSummaryDto> {
-    const stats = await this.repo.getDashboardStats();
+    const [stats, pendingKyc] = await Promise.all([
+      this.repo.getDashboardStats(),
+      this.kyc.getPendingReviewCount(),
+    ]);
 
     // Order counts
     const ordersByStatus: Record<string, number> = {};
@@ -173,7 +180,7 @@ export class ReportsService {
     return {
       totalCustomers: stats.totalCustomers,
       customersByType,
-      pendingKyc: stats.pendingKyc,
+      pendingKyc: pendingKyc.awaiting,
       activeCustomers: stats.activeCustomers,
       suspendedCustomers: stats.suspendedCustomers,
 
@@ -193,6 +200,8 @@ export class ReportsService {
 
       totalPaymentsRecorded: stats.paymentCount,
       totalPaymentsValueRial: toStr2(stats.paymentAgg._sum.amount),
+      paymentsAwaitingReview: stats.paymentsAwaitingReview,
+      paymentsAwaitingReviewValueRial: toStr2(stats.paymentAwaitingAgg._sum.amount),
       settledTrades: stats.settledTrades,
       unsettledTrades: stats.unsettledTrades,
 

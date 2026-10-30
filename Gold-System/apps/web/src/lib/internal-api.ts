@@ -214,6 +214,12 @@ export interface StaffOrder {
   id: string;
   orderNumber: string;
   customerId: string;
+  /** Customer display name (staff list/detail enrichment). */
+  customerName?: string | null;
+  /** Customer file number, e.g. CUST-000001. */
+  customerNumber?: string | null;
+  /** Customer mobile in Latin digits. */
+  customerMobile?: string | null;
   customerAccountId?: string;
   pricingCalculationId?: string | null;
   status: string;
@@ -302,6 +308,18 @@ export interface AssignmentRecord {
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
+  /** Reviewer display name (staff list enrichment). */
+  assignedToName?: string | null;
+  /** Operator who created the assignment. */
+  assignedByName?: string | null;
+  orderNumber?: string | null;
+  orderStatus?: string | null;
+  side?: 'BUY' | 'SELL' | null;
+  weightGrams?: string | null;
+  totalAmountRial?: string | null;
+  customerId?: string | null;
+  customerName?: string | null;
+  customerNumber?: string | null;
 }
 
 export interface AssignmentList {
@@ -320,6 +338,8 @@ export interface ReviewContext {
     weightGrams: string;
     purityRatio: string;
     customerType: string | null;
+    /** BUY/SELL as stored on the order item at creation time. */
+    side?: 'BUY' | 'SELL' | null;
     submittedAt: string | null;
     createdAt: string;
   };
@@ -369,6 +389,7 @@ export interface StaffTrade {
   customerId: string;
   status: string;
   totalAmountRial: string;
+  feeAmountRial: string;
   weightGrams: string;
   purityRatio: string;
   unitPriceRial: string;
@@ -380,7 +401,24 @@ export interface StaffTrade {
   roundingAmount: string | null;
   isComplete: boolean;
   customerType: string | null;
+  side?: 'BUY' | 'SELL' | null;
+  /** Staff detail enrichment — customer display name. */
+  customerName?: string | null;
+  /** Staff detail enrichment — customer file number (CUST-…). */
+  customerNumber?: string | null;
+  /** Staff detail enrichment — customer mobile (Latin digits). */
+  customerMobile?: string | null;
+  /** Staff detail enrichment — source order number. */
+  orderNumber?: string | null;
+  /** Staff detail enrichment — source order status. */
+  orderStatus?: string | null;
+  /** Staff detail enrichment — source order registration date (ISO). */
+  orderCreatedAt?: string | null;
   confirmedByUserId: string;
+  /** Staff detail enrichment — name of the confirming staff user. */
+  confirmedByName?: string | null;
+  /** Staff detail enrichment — name of the staff user who reversed it. */
+  reversedByName?: string | null;
   confirmedAt: string;
   reversedByUserId: string | null;
   reversedAt: string | null;
@@ -396,6 +434,17 @@ export interface StaffTradeList {
   limit: number;
 }
 
+export interface TradeSummary {
+  totalTrades: number;
+  confirmedTrades: number;
+  reversedTrades: number;
+  totalWeightGrams: string;
+  totalTurnoverRial: string;
+  buy: { count: number; weightGrams: string; turnoverRial: string };
+  sell: { count: number; weightGrams: string; turnoverRial: string };
+  buyRatioPercent: number | null;
+}
+
 export interface StaffPayment {
   id: string;
   tradeId: string | null;
@@ -404,12 +453,17 @@ export interface StaffPayment {
   customerMobile?: string | null;
   tradeNumber?: string | null;
   orderNumber?: string | null;
+  direction?: 'DEPOSIT' | 'WITHDRAWAL';
   method: string;
   amount: string;
   currency: string;
   status: string;
   referenceNumber: string | null;
   hasReceipt?: boolean;
+  customerBankAccountId?: string | null;
+  destinationIban?: string | null;
+  destinationBankName?: string | null;
+  destinationAccountHolder?: string | null;
   notes: string | null;
   receivedAt: string | null;
   validatedAt: string | null;
@@ -417,10 +471,17 @@ export interface StaffPayment {
   updatedAt: string;
 }
 
-export interface StaffPaymentSummary {
+export interface StaffDirectionSummary {
   pendingCount: number;
+  pendingAmountRial: string;
   todayValidatedAmountRial: string;
   totalSuccessfulAmountRial: string;
+  totalCount: number;
+}
+
+export interface StaffPaymentSummary {
+  deposits: StaffDirectionSummary;
+  withdrawals: StaffDirectionSummary;
 }
 
 export interface TradePaymentStatus {
@@ -585,6 +646,8 @@ export interface DashboardSummary {
   totalTradeWeightGrams: string | null;
   totalPaymentsRecorded: number;
   totalPaymentsValueRial: string | null;
+  paymentsAwaitingReview: number;
+  paymentsAwaitingReviewValueRial: string | null;
   settledTrades: number;
   unsettledTrades: number;
   supplierPayableRial: string | null;
@@ -1005,6 +1068,16 @@ export const internalKycApi = {
     return request(`/customers/kyc/queue${toQuery(params)}`);
   },
 
+  /** Sidebar badge: number of customers waiting for document review. */
+  pendingCount(): Promise<{ awaiting: number }> {
+    return request('/customers/kyc/pending-count');
+  },
+
+  /** APPROVED → ACTIVE. Server rejects until every required document is approved. */
+  activate(customerId: string): Promise<{ id: string; status: string; accountStatus: string }> {
+    return request(`/customers/${customerId}/kyc/activate`, { method: 'POST' });
+  },
+
   uploadDocument(
     customerId: string,
     documentType: string,
@@ -1169,8 +1242,19 @@ export const assignmentsApi = {
 };
 
 export const internalTradesApi = {
-  list(params?: { status?: string; page?: number; limit?: number }): Promise<StaffTradeList> {
+  list(params?: {
+    status?: string;
+    side?: 'BUY' | 'SELL';
+    q?: string;
+    from?: string;
+    to?: string;
+    page?: number;
+    limit?: number;
+  }): Promise<StaffTradeList> {
     return request(`/trades${toQuery(params ?? {})}`);
+  },
+  summary(): Promise<TradeSummary> {
+    return request('/trades/summary');
   },
   getById(id: string): Promise<StaffTrade> {
     return request(`/trades/${id}`);
@@ -1192,6 +1276,7 @@ export const internalPaymentsApi = {
     customerId?: string;
     status?: string;
     statusGroup?: string;
+    direction?: 'DEPOSIT' | 'WITHDRAWAL';
     method?: string;
     from?: string;
     to?: string;
@@ -1336,6 +1421,12 @@ export const staffPickupsApi = {
   },
   getById(id: string): Promise<PhysicalGoldPickup> {
     return request(`/staff/pickups/${id}`);
+  },
+  downloadPreInvoice(id: string): Promise<Blob> {
+    return fetchBlob(`/staff/pickups/${id}/pre-invoice`);
+  },
+  downloadInvoice(id: string): Promise<Blob> {
+    return fetchBlob(`/staff/pickups/${id}/invoice`);
   },
   markPreparing(
     id: string,
@@ -1761,5 +1852,84 @@ export const tradingApi = {
     scheduleEnabled: boolean;
   }> {
     return request('/trading/market', { method: 'PATCH', body: JSON.stringify({ enabled }) });
+  },
+};
+
+export type SmsProviderName = 'smsir' | 'melipayamak' | 'mock';
+
+export interface SmsSettingsView {
+  provider: SmsProviderName;
+  senderLine: string;
+  smsirBaseUrl: string;
+  melipayamakBaseUrl: string;
+  /** Masked hint only — the API never returns the stored secret. */
+  apiKeyMasked: string;
+  apiKeySource: 'database' | 'environment' | 'none';
+  melipayamakPasswordConfigured: boolean;
+  storedInDatabase: boolean;
+  updatedAt: string | null;
+  updatedById: string | null;
+}
+
+export interface SmsSettingsBody {
+  provider: SmsProviderName;
+  /** Omit to keep the stored key, send '' to clear it. */
+  apiKey?: string;
+  senderLine?: string;
+  smsirBaseUrl?: string;
+  melipayamakBaseUrl?: string;
+  /** Omit to keep the stored password, send '' to clear it. */
+  melipayamakPassword?: string;
+}
+
+export interface SmsTestResult {
+  success: boolean;
+  provider: string;
+  providerReference?: string;
+  error?: string;
+}
+
+export interface SmsCreditResult {
+  credit: number | null;
+  provider: string;
+  available: boolean;
+  message: string | null;
+  checkedAt: string;
+}
+
+export interface SmsLineListResult {
+  lines: string[];
+  provider: string;
+  available: boolean;
+  message: string | null;
+  current: string;
+  checkedAt: string;
+}
+
+export const smsSettingsApi = {
+  get(): Promise<SmsSettingsView> {
+    return request('/sms-settings');
+  },
+  /** Plaintext secrets — audited server-side on every call. */
+  reveal(): Promise<{ apiKey: string; melipayamakPassword: string; apiKeySource: string }> {
+    return request('/sms-settings/reveal');
+  },
+  update(body: SmsSettingsBody): Promise<SmsSettingsView> {
+    return request('/sms-settings', { method: 'PATCH', body: JSON.stringify(body) });
+  },
+  /** Forget database overrides; the .env values apply again. */
+  reset(): Promise<SmsSettingsView> {
+    return request('/sms-settings', { method: 'DELETE' });
+  },
+  sendTest(mobile: string): Promise<SmsTestResult> {
+    return request('/sms-settings/test', { method: 'POST', body: JSON.stringify({ mobile }) });
+  },
+  /** Panel credit, resolved server-side so the key stays on the API. */
+  credit(): Promise<SmsCreditResult> {
+    return request('/sms-settings/credit');
+  },
+  /** Sender lines registered on the provider panel (SMS.ir only). */
+  lines(): Promise<SmsLineListResult> {
+    return request('/sms-settings/lines');
   },
 };

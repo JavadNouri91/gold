@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { SWRConfig } from 'swr';
 import { PaymentsManagementPage } from '@/components/dashboard/payments-management-page';
 import { signIn } from './auth-state';
 import { toPersianDigits } from '@/lib/utils';
@@ -63,6 +64,7 @@ const pendingPayment = {
   customerMobile: '09121111111',
   tradeNumber: null,
   orderNumber: null,
+  direction: 'DEPOSIT',
   method: 'BANK_TRANSFER',
   amount: '1500000.00',
   currency: 'IRR',
@@ -82,6 +84,31 @@ const validatedPayment = {
   referenceNumber: 'R-8',
 };
 
+const pendingWithdrawal = {
+  id: 'pay-wd',
+  tradeId: null,
+  customerId: 'c1',
+  customerName: 'علی رضایی',
+  customerMobile: '09121111111',
+  tradeNumber: null,
+  orderNumber: null,
+  direction: 'WITHDRAWAL',
+  method: 'BANK_TRANSFER',
+  amount: '8000000.00',
+  currency: 'IRR',
+  status: 'PENDING',
+  referenceNumber: null,
+  customerBankAccountId: 'ba-1',
+  destinationIban: 'IR000560000000000000000001',
+  destinationBankName: 'بانک سامان',
+  destinationAccountHolder: 'علی رضایی',
+  notes: 'درخواست برداشت وجه به شبا …',
+  receivedAt: null,
+  validatedAt: null,
+  createdAt: '2026-06-02T00:00:00.000Z',
+  updatedAt: '2026-06-02T00:00:00.000Z',
+};
+
 describe('PaymentsManagementPage', () => {
   beforeEach(() => {
     internalPaymentsApi.list.mockReset();
@@ -93,15 +120,27 @@ describe('PaymentsManagementPage', () => {
     internalCustomersApi.list.mockReset();
     internalCustomersApi.getById.mockReset();
     internalCustomersApi.getById.mockResolvedValue({ ...customer, verificationStatus: 'VERIFIED' });
+    window.print = jest.fn();
 
     internalPaymentsApi.list.mockResolvedValue({
       data: [pendingPayment, validatedPayment],
       meta: { total: 2, page: 1, limit: 20, totalPages: 1 },
     });
     internalPaymentsApi.staffSummary.mockResolvedValue({
-      pendingCount: 5,
-      todayValidatedAmountRial: '1000000.00',
-      totalSuccessfulAmountRial: '5000000.00',
+      deposits: {
+        pendingCount: 5,
+        pendingAmountRial: '1500000.00',
+        todayValidatedAmountRial: '1000000.00',
+        totalSuccessfulAmountRial: '5000000.00',
+        totalCount: 9,
+      },
+      withdrawals: {
+        pendingCount: 2,
+        pendingAmountRial: '8000000.00',
+        todayValidatedAmountRial: '3000000.00',
+        totalSuccessfulAmountRial: '12000000.00',
+        totalCount: 3,
+      },
     });
   });
 
@@ -109,10 +148,66 @@ describe('PaymentsManagementPage', () => {
     signIn(['payment.read', 'payment.create', 'payment.validate']);
     render(<PaymentsManagementPage />);
 
-    expect(await screen.findByText('مدیریت پرداخت‌ها و فیش‌ها')).toBeInTheDocument();
+    expect(await screen.findByText('مدیریت واریز و برداشت')).toBeInTheDocument();
     expect(await screen.findByText(/۵ مورد/)).toBeInTheDocument();
     expect(screen.getByText(toPersianDigits('TRK99'))).toBeInTheDocument();
     expect(screen.getAllByText('علی رضایی').length).toBeGreaterThan(0);
+  });
+
+  it('lists deposits by default and passes direction to the API', async () => {
+    signIn(['payment.read', 'payment.create', 'payment.validate']);
+    render(
+      <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+        <PaymentsManagementPage />
+      </SWRConfig>,
+    );
+
+    await screen.findByText('مدیریت واریز و برداشت');
+    await waitFor(() =>
+      expect(internalPaymentsApi.list).toHaveBeenCalledWith(
+        expect.objectContaining({ direction: 'DEPOSIT' }),
+      ),
+    );
+  });
+
+  it('switches to the withdrawals tab and loads withdrawal rows', async () => {
+    signIn(['payment.read', 'payment.validate']);
+    internalPaymentsApi.list.mockImplementation(async (params) => {
+      if (params?.direction === 'WITHDRAWAL') {
+        return { data: [pendingWithdrawal], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } };
+      }
+      return { data: [pendingPayment, validatedPayment], meta: { total: 2, page: 1, limit: 20, totalPages: 1 } };
+    });
+
+    render(<PaymentsManagementPage />);
+    await screen.findByText('مدیریت واریز و برداشت');
+
+    fireEvent.click(screen.getByRole('button', { name: /برداشت‌ها/ }));
+
+    expect(await screen.findByText(toPersianDigits('IR000560000000000000000001'))).toBeInTheDocument();
+    expect(await screen.findByLabelText('تأیید برداشت')).toBeInTheDocument();
+    expect(screen.getByLabelText('رد برداشت')).toBeInTheDocument();
+  });
+
+  it('opens the withdrawal detail modal showing the destination account', async () => {
+    signIn(['payment.read', 'payment.validate']);
+    internalPaymentsApi.list.mockImplementation(async (params) => {
+      if (params?.direction === 'WITHDRAWAL') {
+        return { data: [pendingWithdrawal], meta: { total: 1, page: 1, limit: 20, totalPages: 1 } };
+      }
+      return { data: [pendingPayment, validatedPayment], meta: { total: 2, page: 1, limit: 20, totalPages: 1 } };
+    });
+
+    render(<PaymentsManagementPage />);
+    await screen.findByText('مدیریت واریز و برداشت');
+    fireEvent.click(screen.getByRole('button', { name: /برداشت‌ها/ }));
+
+    fireEvent.click((await screen.findAllByRole('button', { name: /^مشاهده پرداخت/ }))[0]!);
+
+    expect(await screen.findByRole('dialog', { name: 'جزئیات برداشت وجه' })).toBeInTheDocument();
+    expect(screen.getAllByText('بانک سامان').length).toBeGreaterThan(0);
+    expect(screen.getByText(/مبلغ این برداشت تا زمان تأیید مالی رزرو شده است/)).toBeInTheDocument();
+    expect(screen.getByText('تأیید و واریز به شبا', { exact: false })).toBeInTheDocument();
   });
 
   it('shows approve and reject only for pending rows', async () => {
@@ -121,19 +216,44 @@ describe('PaymentsManagementPage', () => {
 
     expect(await screen.findByLabelText('تأیید پرداخت')).toBeInTheDocument();
     expect(screen.getByLabelText('رد پرداخت')).toBeInTheDocument();
-    expect(screen.getAllByLabelText('مشاهده جزئیات')).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^مشاهده پرداخت/ })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: /^چاپ پرداخت/ })).toHaveLength(2);
   });
 
-  it('opens a details modal from the eye icon instead of navigating', async () => {
+  it('applies statusGroup filter from the URL on mount', async () => {
+    window.history.replaceState({}, '', '/dashboard/payments?statusGroup=submitted');
+    signIn(['payment.read', 'payment.create', 'payment.validate']);
+    render(<PaymentsManagementPage />);
+
+    await waitFor(() =>
+      expect(internalPaymentsApi.list).toHaveBeenCalledWith(
+        expect.objectContaining({ statusGroup: 'submitted' }),
+      ),
+    );
+  });
+
+  it('opens the details modal from the view button without printing', async () => {
     signIn(['payment.read', 'payment.validate']);
     render(<PaymentsManagementPage />);
 
-    fireEvent.click((await screen.findAllByLabelText('مشاهده جزئیات'))[0]!);
+    fireEvent.click((await screen.findAllByRole('button', { name: /^مشاهده پرداخت/ }))[0]!);
 
     expect(await screen.findByRole('dialog', { name: 'جزئیات پرداخت و بررسی فیش' })).toBeInTheDocument();
     expect(screen.getByText('تایید و اعمال پرداخت', { exact: false })).toBeInTheDocument();
     expect(screen.getByText('رد درخواست', { exact: false })).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: 'مشاهده جزئیات' })).not.toBeInTheDocument();
+    expect(window.print).not.toHaveBeenCalled();
+  });
+
+  it('opens the details modal and prints when the print button is clicked', async () => {
+    signIn(['payment.read', 'payment.validate']);
+    render(<PaymentsManagementPage />);
+
+    fireEvent.click((await screen.findAllByRole('button', { name: /^چاپ پرداخت/ }))[0]!);
+
+    expect(await screen.findByRole('dialog', { name: 'جزئیات پرداخت و بررسی فیش' })).toBeInTheDocument();
+    await waitFor(() => expect(window.print).toHaveBeenCalled());
+    expect(screen.getByRole('button', { name: 'مشاهده پرداخت #PAYPEN' })).toHaveTextContent('نمایش');
+    expect(screen.getByRole('button', { name: 'چاپ پرداخت #PAYPEN' })).toHaveTextContent('چاپ');
   });
 
   it('opens the drawer and records a wallet receipt with customer search', async () => {
@@ -146,7 +266,7 @@ describe('PaymentsManagementPage', () => {
     internalPaymentsApi.validate.mockResolvedValue({ id: 'pay-new', status: 'VALIDATED' });
 
     render(<PaymentsManagementPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ثبت پرداخت جدید/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /ثبت واریز جدید/ }));
 
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     expect(screen.getByText('واریز به کیف پول (اعتبار)')).toBeInTheDocument();
@@ -188,7 +308,7 @@ describe('PaymentsManagementPage', () => {
     });
 
     render(<PaymentsManagementPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ثبت پرداخت جدید/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /ثبت واریز جدید/ }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'تسویه معامله / سفارش' }));
 
@@ -212,7 +332,7 @@ describe('PaymentsManagementPage', () => {
   it('asks for a customer before submitting wallet deposit', async () => {
     signIn(['payment.read', 'payment.create']);
     render(<PaymentsManagementPage />);
-    fireEvent.click(await screen.findByRole('button', { name: /ثبت پرداخت جدید/ }));
+    fireEvent.click(await screen.findByRole('button', { name: /ثبت واریز جدید/ }));
     fireEvent.change(screen.getByLabelText('مبلغ (تومان)'), { target: { value: '1000' } });
     fireEvent.click(screen.getByRole('button', { name: 'ثبت و تایید تراکنش' }));
 

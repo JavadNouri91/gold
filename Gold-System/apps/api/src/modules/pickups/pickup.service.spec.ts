@@ -1,6 +1,7 @@
 import { PhysicalGoldPickupStatus } from './domain/constants/pickup-states';
 import { PhysicalGoldPickupEntity } from './domain/entities/pickup.entity';
 import {
+  InsufficientPickupFeeCreditException,
   InsufficientPickupGoldException,
   InvalidPickupStateTransitionException,
   InvalidScheduledPickupDateException,
@@ -96,17 +97,36 @@ describe('PickupService.create', () => {
       },
     };
 
-    const accountRepo = { lockByCustomerId: jest.fn().mockResolvedValue(undefined) };
+    const accountRepo = {
+      lockByCustomerId: jest.fn().mockResolvedValue(undefined),
+      availableRialInTx: jest.fn().mockResolvedValue(new Decimal('0')),
+      reserveCredit: jest.fn().mockResolvedValue(new Decimal('0')),
+    };
     const activity = {
       sellableWeightGrams: jest.fn().mockResolvedValue(available),
     };
     const repo = {
       nextPickupNumber: jest.fn().mockResolvedValue('PKP-000001'),
       createInTx: jest.fn().mockResolvedValue(created),
+      createChargeInTx: jest.fn().mockResolvedValue(undefined),
+      setPreInvoiceInTx: jest.fn().mockResolvedValue(undefined),
     };
     const goldLedger = { postJournalInTx: jest.fn() };
     const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
     const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const feeService = {
+      compute: jest.fn().mockResolvedValue({
+        policy: null,
+        mode: 'NONE',
+        rateValue: new Decimal('0'),
+        calculationBase: null,
+        baseAmountRial: new Decimal('0'),
+        amountRial: new Decimal('0'),
+        goldPricePerGramRial: null,
+      }),
+    };
+    const documentService = { generate: jest.fn().mockResolvedValue(null) };
+    const financialLedger = { postJournalInTx: jest.fn() };
 
     const service = new PickupService(
       prisma as never,
@@ -116,9 +136,25 @@ describe('PickupService.create', () => {
       goldLedger as never,
       notifications as never,
       audit as never,
+      feeService as never,
+      documentService as never,
+      financialLedger as never,
     );
 
-    return { service, prisma, tx, accountRepo, activity, repo, goldLedger, notifications, audit };
+    return {
+      service,
+      prisma,
+      tx,
+      accountRepo,
+      activity,
+      repo,
+      goldLedger,
+      notifications,
+      audit,
+      feeService,
+      documentService,
+      financialLedger,
+    };
   }
 
   it('locks account, checks sellable weight, and creates REQUESTED pickup', async () => {
@@ -154,6 +190,69 @@ describe('PickupService.create', () => {
       InsufficientPickupGoldException,
     );
   });
+
+  it('reserves the conversion fee from the rial wallet and snapshots the charge', async () => {
+    const { service, prisma, accountRepo, repo, feeService, documentService } = buildService();
+    (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => fn({}));
+    feeService.compute.mockResolvedValue({
+      policy: { id: 'pol-1', labelFa: 'کارمزد تبدیل به فیزیکی' },
+      mode: 'FIXED',
+      rateValue: new Decimal('50'),
+      calculationBase: null,
+      baseAmountRial: new Decimal('0'),
+      amountRial: new Decimal('50'),
+      goldPricePerGramRial: null,
+      priceSnapshotId: null,
+    });
+    accountRepo.availableRialInTx.mockResolvedValue(new Decimal('100'));
+    accountRepo.reserveCredit.mockResolvedValue(new Decimal('50'));
+    documentService.generate.mockResolvedValue({
+      key: 'pickups/PKP-000001/pre-invoice.json',
+      mimeType: 'application/json',
+      generatedAt: new Date(),
+    });
+
+    await service.create(USER_ID, { weightGrams: '5.000000' });
+
+    expect(accountRepo.reserveCredit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: CUSTOMER_ID,
+        amount: new Decimal('50'),
+        sourceType: 'PICKUP',
+        sourceId: 'pkp-1',
+      }),
+    );
+    expect(repo.createChargeInTx).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        status: 'RESERVED',
+        amountRial: new Decimal('50'),
+        policyId: 'pol-1',
+      }),
+    );
+    expect(repo.setPreInvoiceInTx).toHaveBeenCalled();
+  });
+
+  it('rejects pickup when the rial wallet cannot cover the conversion fee', async () => {
+    const { service, prisma, accountRepo, feeService } = buildService();
+    (prisma.$transaction as jest.Mock).mockImplementation(async (fn) => fn({}));
+    feeService.compute.mockResolvedValue({
+      policy: { id: 'pol-1', labelFa: 'کارمزد تبدیل به فیزیکی' },
+      mode: 'FIXED',
+      rateValue: new Decimal('200'),
+      calculationBase: null,
+      baseAmountRial: new Decimal('0'),
+      amountRial: new Decimal('200'),
+      goldPricePerGramRial: null,
+      priceSnapshotId: null,
+    });
+    accountRepo.availableRialInTx.mockResolvedValue(new Decimal('100'));
+
+    await expect(service.create(USER_ID, { weightGrams: '5.000000' })).rejects.toBeInstanceOf(
+      InsufficientPickupFeeCreditException,
+    );
+    expect(accountRepo.reserveCredit).not.toHaveBeenCalled();
+  });
 });
 
 describe('PickupService.cancelMine', () => {
@@ -182,6 +281,9 @@ describe('PickupService.cancelMine', () => {
       {} as never,
       { dispatch: jest.fn() } as never,
       { log: jest.fn() } as never,
+      {} as never,
+      {} as never,
+      {} as never,
     );
 
     await expect(
@@ -214,6 +316,9 @@ describe('PickupService.markPreparing', () => {
       {} as never,
       { dispatch: jest.fn() } as never,
       audit as never,
+      {} as never,
+      {} as never,
+      {} as never,
     );
 
     const result = await service.markPreparing('pkp-1', 'staff-1', {
@@ -258,6 +363,7 @@ describe('PickupService.markDelivered', () => {
     };
     const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
     const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const documentService = { generate: jest.fn().mockResolvedValue(null) };
 
     const service = new PickupService(
       prisma as never,
@@ -267,6 +373,9 @@ describe('PickupService.markDelivered', () => {
       goldLedger as never,
       notifications as never,
       audit as never,
+      {} as never,
+      documentService as never,
+      { postJournalInTx: jest.fn() } as never,
     );
 
     const result = await service.markDelivered('pkp-1', 'staff-1', {});
@@ -287,6 +396,167 @@ describe('PickupService.markDelivered', () => {
     repo.findById.mockResolvedValue(makePickup({ status: PhysicalGoldPickupStatus.REQUESTED }));
     await expect(service.markDelivered('pkp-1', 'staff-1', {})).rejects.toBeInstanceOf(
       InvalidPickupStateTransitionException,
+    );
+  });
+
+  it('settles the reserved fee: consumes credit and posts FA-02/FA-16', async () => {
+    const ready = makePickup({
+      status: PhysicalGoldPickupStatus.READY,
+      charge: {
+        id: 'chg-1',
+        code: 'PICKUP_CONVERSION_FEE',
+        labelFa: 'کارمزد تبدیل به فیزیکی',
+        mode: 'FIXED',
+        rateValue: new Decimal('50'),
+        calculationBase: null,
+        baseAmountRial: new Decimal('0'),
+        amountRial: new Decimal('50'),
+        goldPricePerGramRial: null,
+        policyId: 'pol-1',
+        status: 'RESERVED',
+        walletAvailableAfterRial: new Decimal('50'),
+        reservedAt: new Date(),
+        settledAt: null,
+        releasedAt: null,
+      },
+    });
+    const delivered = makePickup({
+      status: PhysicalGoldPickupStatus.DELIVERED,
+      deliveredAt: new Date(),
+      deliveredById: 'staff-1',
+    });
+
+    const repo = {
+      findById: jest.fn().mockResolvedValue(ready),
+      transitionInTx: jest.fn().mockResolvedValue(delivered),
+      updateChargeInTx: jest.fn().mockResolvedValue(undefined),
+      setInvoiceInTx: jest.fn().mockResolvedValue(undefined),
+    };
+    const accountRepo = { consumeCredit: jest.fn().mockResolvedValue(undefined) };
+    const goldLedger = { postJournalInTx: jest.fn().mockResolvedValue({ wasAlreadyPosted: false }) };
+    const financialLedger = { postJournalInTx: jest.fn().mockResolvedValue(undefined) };
+    const prisma = {
+      $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
+      customer: {
+        findUnique: jest.fn().mockResolvedValue({ userId: 'user-1', mobile: '09120000000' }),
+      },
+    };
+    const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
+    const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const documentService = { generate: jest.fn().mockResolvedValue(null) };
+
+    const service = new PickupService(
+      prisma as never,
+      repo as never,
+      {} as never,
+      accountRepo as never,
+      goldLedger as never,
+      notifications as never,
+      audit as never,
+      {} as never,
+      documentService as never,
+      financialLedger as never,
+    );
+
+    await service.markDelivered('pkp-1', 'staff-1', {});
+
+    expect(accountRepo.consumeCredit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        amount: new Decimal('50'),
+        sourceType: 'PICKUP',
+        sourceId: 'pkp-1',
+      }),
+    );
+    expect(financialLedger.postJournalInTx).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        idempotencyKey: 'PICKUP_FEE_pkp-1',
+        sourceType: 'PICKUP_FEE',
+        entries: [
+          { accountCode: 'FA-02', debit: new Decimal('50'), credit: new Decimal('0') },
+          { accountCode: 'FA-16', debit: new Decimal('0'), credit: new Decimal('50') },
+        ],
+      }),
+    );
+    expect(repo.updateChargeInTx).toHaveBeenCalledWith(
+      expect.anything(),
+      'pkp-1',
+      expect.objectContaining({ status: 'SETTLED' }),
+    );
+  });
+});
+
+describe('PickupService.cancelStaff', () => {
+  it('releases the reserved conversion fee back to the wallet', async () => {
+    const requested = makePickup({
+      charge: {
+        id: 'chg-1',
+        code: 'PICKUP_CONVERSION_FEE',
+        labelFa: 'کارمزد تبدیل به فیزیکی',
+        mode: 'FIXED',
+        rateValue: new Decimal('50'),
+        calculationBase: null,
+        baseAmountRial: new Decimal('0'),
+        amountRial: new Decimal('50'),
+        goldPricePerGramRial: null,
+        policyId: 'pol-1',
+        status: 'RESERVED',
+        walletAvailableAfterRial: new Decimal('50'),
+        reservedAt: new Date(),
+        settledAt: null,
+        releasedAt: null,
+      },
+    });
+    const cancelled = makePickup({
+      status: PhysicalGoldPickupStatus.CANCELLED,
+      cancelledAt: new Date(),
+      cancelledById: 'staff-1',
+      cancelledByKind: 'STAFF',
+    });
+
+    const repo = {
+      findById: jest.fn().mockResolvedValue(requested),
+      transitionInTx: jest.fn().mockResolvedValue(cancelled),
+      updateChargeInTx: jest.fn().mockResolvedValue(undefined),
+    };
+    const accountRepo = { releaseCredit: jest.fn().mockResolvedValue(undefined) };
+    const prisma = {
+      $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => fn({})),
+      customer: {
+        findUnique: jest.fn().mockResolvedValue({ userId: 'user-1', mobile: '09120000000' }),
+      },
+    };
+    const audit = { log: jest.fn().mockResolvedValue(undefined) };
+    const notifications = { dispatch: jest.fn().mockResolvedValue(undefined) };
+
+    const service = new PickupService(
+      prisma as never,
+      repo as never,
+      {} as never,
+      accountRepo as never,
+      {} as never,
+      notifications as never,
+      audit as never,
+      {} as never,
+      {} as never,
+      {} as never,
+    );
+
+    await service.cancelStaff('pkp-1', 'staff-1', { reason: 'انصراف مشتری' });
+
+    expect(accountRepo.releaseCredit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customerId: 'cust-1',
+        amount: new Decimal('50'),
+        sourceType: 'PICKUP',
+        sourceId: 'pkp-1',
+      }),
+    );
+    expect(repo.updateChargeInTx).toHaveBeenCalledWith(
+      expect.anything(),
+      'pkp-1',
+      expect.objectContaining({ status: 'RELEASED' }),
     );
   });
 });

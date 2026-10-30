@@ -7,7 +7,7 @@ module.exports = {
     ecmaFeatures: { jsx: true },
   },
   plugins: ['@typescript-eslint'],
-  extends: ['plugin:@typescript-eslint/recommended'],
+  extends: ['next/core-web-vitals', 'plugin:@typescript-eslint/recommended'],
   ignorePatterns: ['.next/**', 'node_modules/**', 'jest.config.js', 'postcss.config.js', 'tailwind.config.ts'],
   rules: {
     '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],

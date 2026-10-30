@@ -11,7 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Alert } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
-import { cn, formatWeight, toLatinDigits, toPersianDigits } from '@/lib/utils';
+import {
+  cn,
+  formatFeeRate,
+  formatWeight,
+  formatWholeMoney,
+  toLatinDigits,
+  toPersianDigits,
+} from '@/lib/utils';
 
 /** In-store molten-gold pickup is always millesimal 750. */
 const PICKUP_PURITY_RATIO = '0.750000';
@@ -59,6 +66,14 @@ export function NewPickupModal({
   );
   const selectedQuick = Number(toLatinDigits(weight).trim());
 
+  const weightValidForPreview = /^[1-9]\d*$/.test(weight) && Number(weight) <= availableGrams;
+  const { data: feePreview } = useSWR(
+    weightValidForPreview ? ['pickup-fee-preview', weight] : null,
+    () => pickupsApi.feePreview({ weightGrams: weight }),
+  );
+  const canAfford = !feePreview || feePreview.canAfford;
+  const shortfallRial = feePreview && !feePreview.canAfford ? feePreview.shortfallRial : null;
+
   function validateWeight(weightGrams: string): string | null {
     if (!weightGrams) {
       return 'وزن طلا را وارد کنید.';
@@ -95,6 +110,7 @@ export function NewPickupModal({
         weightGrams,
         purityRatio: PICKUP_PURITY_RATIO,
         customerNote: note.trim() || undefined,
+        priceSnapshotId: feePreview?.priceSnapshotId ?? undefined,
       });
       await Promise.all([
         mutate('portal-pickups'),
@@ -202,10 +218,60 @@ export function NewPickupModal({
                 disabled={submitting}
               />
 
+              {feePreview ? (
+                <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-muted-foreground">کارمزد تبدیل به فیزیکی</span>
+                    <span className="font-medium tabular-nums">
+                      {feePreview.mode === 'NONE'
+                        ? 'رایگان'
+                        : formatWholeMoney(feePreview.amountRial)}
+                    </span>
+                  </div>
+                  {feePreview.mode !== 'NONE' ? (
+                    <>
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">نوع کارمزد</span>
+                        <span className="font-medium">
+                          {formatFeeRate(feePreview.mode, feePreview.rateValue)
+                            ? `${feePreview.labelFa} (${formatFeeRate(feePreview.mode, feePreview.rateValue)})`
+                            : feePreview.labelFa}
+                        </span>
+                      </div>
+                      {feePreview.mode === 'PERCENTAGE' ? (
+                        <div className="flex items-center justify-between gap-3">
+                          <span className="text-muted-foreground">ارزش طلا (مبنای محاسبه)</span>
+                          <span className="font-medium tabular-nums">
+                            {formatWholeMoney(feePreview.baseAmountRial)}
+                          </span>
+                        </div>
+                      ) : null}
+                      <div className="flex items-center justify-between gap-3">
+                        <span className="text-muted-foreground">موجودی ریالی کیف پول</span>
+                        <span className="font-medium tabular-nums">
+                          {formatWholeMoney(feePreview.availableRial)}
+                        </span>
+                      </div>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {shortfallRial ? (
+                <Alert variant="error">
+                  موجودی ریالی کیف پول برای پرداخت کارمزد تبدیل کافی نیست. کمبود:{' '}
+                  {formatWholeMoney(shortfallRial)}
+                </Alert>
+              ) : null}
+
               {error ? <Alert variant="error">{error}</Alert> : null}
 
               <div className="flex gap-3 pt-1">
-                <Button type="submit" className="flex-1" disabled={!available || submitting}>
+                <Button
+                  type="submit"
+                  className="flex-1"
+                  disabled={!available || submitting || !canAfford}
+                >
                   {submitting ? 'در حال ثبت…' : 'ثبت درخواست و رزرو موجودی'}
                 </Button>
                 <Button type="button" variant="outline" onClick={requestClose} disabled={submitting}>

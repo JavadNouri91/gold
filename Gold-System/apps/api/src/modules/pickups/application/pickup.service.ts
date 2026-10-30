@@ -1,15 +1,19 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
-import { CustomerStatus } from '@gold/shared-types';
+import { CustomerStatus, CustomerType } from '@gold/shared-types';
+import { PhysicalGoldPickupEntity } from '../domain/entities/pickup.entity';
 
 import { PrismaService } from '../../../database/prisma.service';
 import { AuditService } from '../../audit/application/audit.service';
 import { CustomerAccountRepository } from '../../customer-accounts/infrastructure/repositories/customer-account.repository';
+import { FinancialLedgerService } from '../../financial-ledger/application/financial-ledger.service';
 import { CustomerActivityService } from '../../orders/application/customer-activity.service';
 import { GoldLedgerService } from '../../gold-ledger/application/gold-ledger.service';
 import { NotificationService } from '../../notifications/application/notification.service';
 import { NotificationType } from '../../notifications/domain/constants/notification-types';
 import { PickupRepository } from '../infrastructure/repositories/pickup.repository';
+import { PickupFeeService } from './pickup-fee.service';
+import { PickupDocumentService } from './pickup-document.service';
 import {
   PhysicalGoldPickupStatus,
   CUSTOMER_CANCELLABLE_STATUSES,
@@ -17,6 +21,7 @@ import {
 } from '../domain/constants/pickup-states';
 import {
   CustomerNotEligibleForPickupException,
+  InsufficientPickupFeeCreditException,
   InsufficientPickupGoldException,
   InvalidPickupStateTransitionException,
   InvalidScheduledPickupDateException,
@@ -44,6 +49,9 @@ export class PickupService {
     private readonly goldLedger: GoldLedgerService,
     private readonly notifications: NotificationService,
     private readonly audit: AuditService,
+    private readonly feeService: PickupFeeService,
+    private readonly documentService: PickupDocumentService,
+    private readonly financialLedger: FinancialLedgerService,
   ) {}
 
   async create(actorUserId: string, dto: CreatePickupDto): Promise<PickupResponseDto> {
@@ -60,15 +68,24 @@ export class PickupService {
       throw new InsufficientPickupGoldException(new Decimal(0), weightGrams);
     }
 
+    // Compute the conversion fee BEFORE the transaction, from the active policy.
+    const fee = await this.feeService.compute(
+      customer.type as CustomerType | null,
+      weightGrams,
+      dto.priceSnapshotId,
+    );
+    const hasFee = fee.amountRial.gt(0);
+
     const pickup = await this.prisma.$transaction(async (tx) => {
       await this.accountRepo.lockByCustomerId(tx, customer.id);
-      const available = await this.activity.sellableWeightGrams(customer.id, tx);
-      if (weightGrams.gt(available)) {
-        throw new InsufficientPickupGoldException(available, weightGrams);
+
+      const availableWeight = await this.activity.sellableWeightGrams(customer.id, tx);
+      if (weightGrams.gt(availableWeight)) {
+        throw new InsufficientPickupGoldException(availableWeight, weightGrams);
       }
 
       const pickupNumber = await this.repo.nextPickupNumber(tx);
-      return this.repo.createInTx(tx, {
+      const created = await this.repo.createInTx(tx, {
         pickupNumber,
         customerId: customer.id,
         storeId: store.id,
@@ -77,7 +94,79 @@ export class PickupService {
         customerNote: dto.customerNote?.trim() || null,
         actorId: actorUserId,
       });
+
+      // Reserve the conversion fee from the rial wallet (if any).
+      let walletAvailableAfterRial: Decimal | null = null;
+      if (hasFee) {
+        const availableRial = await this.accountRepo.availableRialInTx(tx, customer.id);
+        if (fee.amountRial.gt(availableRial)) {
+          throw new InsufficientPickupFeeCreditException(availableRial, fee.amountRial);
+        }
+        walletAvailableAfterRial = await this.accountRepo.reserveCredit({
+          tx,
+          customerId: customer.id,
+          amount: fee.amountRial,
+          orderId: created.id,
+          actorId: actorUserId,
+          sourceType: 'PICKUP',
+          sourceId: created.id,
+        });
+      }
+
+      await this.repo.createChargeInTx(tx, {
+        pickupId: created.id,
+        code: 'PICKUP_CONVERSION_FEE',
+        labelFa: fee.policy?.labelFa ?? 'کارمزد تبدیل به فیزیکی',
+        mode: fee.mode,
+        rateValue: fee.rateValue,
+        calculationBase: fee.calculationBase,
+        baseAmountRial: fee.baseAmountRial,
+        amountRial: fee.amountRial,
+        goldPricePerGramRial: fee.goldPricePerGramRial,
+        policyId: fee.policy?.id ?? null,
+        status: hasFee ? 'RESERVED' : 'NONE',
+        walletAvailableAfterRial: hasFee ? walletAvailableAfterRial : null,
+        reservedAt: hasFee ? new Date() : null,
+      });
+
+      return created;
     });
+
+    // Non-destructive: store the immutable pre-invoice JSON (best effort).
+    const preInvoice = await this.documentService.generate({
+      documentType: 'PRE_INVOICE',
+      pickupNumber: pickup.pickupNumber,
+      generatedAt: new Date(),
+      customer: {
+        id: customer.id,
+        customerNumber: customer.customerNumber,
+        name: `${customer.firstName} ${customer.lastName}`.trim(),
+        mobile: customer.mobile,
+        customerType: customer.type,
+      },
+      weightGrams,
+      purityRatio: new Decimal(PICKUP_PURITY_RATIO),
+      status: pickup.status,
+      fee: {
+        code: 'PICKUP_CONVERSION_FEE',
+        labelFa: fee.policy?.labelFa ?? 'کارمزد تبدیل به فیزیکی',
+        mode: fee.mode,
+        rateValue: fee.rateValue,
+        calculationBase: fee.calculationBase,
+        baseAmountRial: fee.baseAmountRial,
+        amountRial: fee.amountRial,
+        goldPricePerGramRial: fee.goldPricePerGramRial,
+        status: hasFee ? 'RESERVED' : 'NONE',
+        walletAvailableAfterRial: null,
+      },
+    });
+    if (preInvoice) {
+      await this.repo.setPreInvoiceInTx(this.prisma, pickup.id, {
+        key: preInvoice.key,
+        mimeType: preInvoice.mimeType,
+        generatedAt: preInvoice.generatedAt,
+      });
+    }
 
     await this.audit.log({
       actorId: actorUserId,
@@ -90,6 +179,7 @@ export class PickupService {
         status: pickup.status,
         weightGrams: pickup.weightGrams.toFixed(6),
         purityRatio: pickup.purityRatio.toFixed(6),
+        feeRial: fee.amountRial.toFixed(2),
       },
     });
 
@@ -115,6 +205,33 @@ export class PickupService {
     return PickupResponseDto.from(pickup);
   }
 
+  async feePreview(actorUserId: string, weightGrams: Decimal, priceSnapshotId?: string) {
+    const { customer } = await this.resolveCustomerAndAccount(actorUserId);
+    const fee = await this.feeService.compute(
+      customer.type as CustomerType | null,
+      weightGrams,
+      priceSnapshotId,
+    );
+    const account = await this.accountRepo.findByCustomerId(customer.id);
+    const availableRial = account?.availableRial ?? new Decimal(0);
+    const shortfall = fee.amountRial.gt(availableRial)
+      ? fee.amountRial.minus(availableRial)
+      : new Decimal(0);
+    return {
+      labelFa: fee.policy?.labelFa ?? 'کارمزد تبدیل به فیزیکی',
+      mode: fee.mode,
+      rateValue: fee.rateValue.toFixed(6),
+      calculationBase: fee.calculationBase,
+      baseAmountRial: fee.baseAmountRial.toFixed(2),
+      amountRial: fee.amountRial.toFixed(2),
+      goldPricePerGramRial: fee.goldPricePerGramRial?.toFixed(2) ?? null,
+      priceSnapshotId: fee.priceSnapshotId,
+      availableRial: availableRial.toFixed(2),
+      canAfford: fee.amountRial.lte(availableRial),
+      shortfallRial: shortfall.toFixed(2),
+    };
+  }
+
   async listMine(
     actorUserId: string,
     opts?: { status?: PhysicalGoldPickupStatus; limit?: number; offset?: number },
@@ -132,6 +249,43 @@ export class PickupService {
     const pickup = await this.repo.findByIdForCustomer(pickupId, customer.id);
     if (!pickup) throw new PickupNotFoundException(pickupId);
     return PickupResponseDto.from(pickup);
+  }
+
+  async downloadDocumentForCustomer(
+    actorUserId: string,
+    pickupId: string,
+    kind: 'PRE_INVOICE' | 'INVOICE',
+  ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
+    const { customer } = await this.resolveCustomerAndAccount(actorUserId);
+    const pickup = await this.repo.findByIdForCustomer(pickupId, customer.id);
+    if (!pickup) throw new PickupNotFoundException(pickupId);
+    return this.readPickupDocument(pickup, kind);
+  }
+
+  async downloadDocumentForStaff(
+    pickupId: string,
+    kind: 'PRE_INVOICE' | 'INVOICE',
+  ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
+    const pickup = await this.repo.findById(pickupId);
+    if (!pickup) throw new PickupNotFoundException(pickupId);
+    return this.readPickupDocument(pickup, kind);
+  }
+
+  private async readPickupDocument(
+    pickup: PhysicalGoldPickupEntity,
+    kind: 'PRE_INVOICE' | 'INVOICE',
+  ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
+    const isPreInvoice = kind === 'PRE_INVOICE';
+    const key = isPreInvoice ? pickup.preInvoiceKey : pickup.invoiceKey;
+    const mimeType = (isPreInvoice ? pickup.preInvoiceMimeType : pickup.invoiceMimeType) ?? 'application/json';
+    if (!key) {
+      throw new NotFoundException(
+        isPreInvoice ? 'پیش‌فاکتور برای این درخواست موجود نیست.' : 'فاکتور برای این درخواست موجود نیست.',
+      );
+    }
+    const buffer = await this.documentService.read(key);
+    const fileName = `${pickup.pickupNumber}-${isPreInvoice ? 'pre-invoice' : 'invoice'}.json`;
+    return { buffer, mimeType, fileName };
   }
 
   async cancelMine(
@@ -250,8 +404,79 @@ export class PickupService {
         ],
       });
 
+      // Settle the reserved conversion fee (if any): consume credit + FA-16 income.
+      if (existing.charge && existing.charge.status === 'RESERVED' && existing.charge.amountRial.gt(0)) {
+        const feeAmount = existing.charge.amountRial;
+        await this.accountRepo.consumeCredit({
+          tx,
+          customerId: updated.customerId,
+          amount: feeAmount,
+          tradeId: pickupId,
+          orderId: pickupId,
+          actorId: actorUserId,
+          sourceType: 'PICKUP',
+          sourceId: pickupId,
+        });
+
+        await this.financialLedger.postJournalInTx(tx, {
+          idempotencyKey: `PICKUP_FEE_${pickupId}`,
+          sourceType: 'PICKUP_FEE',
+          sourceId: pickupId,
+          description: `Pickup ${updated.pickupNumber} conversion fee`,
+          postedByUserId: actorUserId,
+          entries: [
+            { accountCode: 'FA-02', debit: feeAmount, credit: new Decimal(0) },
+            { accountCode: 'FA-16', debit: new Decimal(0), credit: feeAmount },
+          ],
+        });
+
+        await this.repo.updateChargeInTx(tx, pickupId, {
+          status: 'SETTLED',
+          settledAt: new Date(),
+        });
+      }
+
       return updated;
     });
+
+    // Non-destructive: store the immutable invoice JSON (best effort).
+    const existingCharge = existing.charge;
+    const invoice = await this.documentService.generate({
+      documentType: 'INVOICE',
+      pickupNumber: pickup.pickupNumber,
+      generatedAt: new Date(),
+      customer: {
+        id: existing.customer?.id ?? pickup.customerId,
+        customerNumber: existing.customer?.customerNumber ?? '',
+        name: existing.customer ? `${existing.customer.firstName} ${existing.customer.lastName}`.trim() : '',
+        mobile: existing.customer?.mobile ?? '',
+        customerType: existing.customer?.type ?? null,
+      },
+      weightGrams: pickup.weightGrams,
+      purityRatio: pickup.purityRatio,
+      status: pickup.status,
+      fee: existingCharge
+        ? {
+            code: existingCharge.code,
+            labelFa: existingCharge.labelFa,
+            mode: existingCharge.mode,
+            rateValue: existingCharge.rateValue,
+            calculationBase: existingCharge.calculationBase,
+            baseAmountRial: existingCharge.baseAmountRial,
+            amountRial: existingCharge.amountRial,
+            goldPricePerGramRial: existingCharge.goldPricePerGramRial,
+            status: 'SETTLED',
+            walletAvailableAfterRial: existingCharge.walletAvailableAfterRial,
+          }
+        : null,
+    });
+    if (invoice) {
+      await this.repo.setInvoiceInTx(this.prisma, pickup.id, {
+        key: invoice.key,
+        mimeType: invoice.mimeType,
+        generatedAt: invoice.generatedAt,
+      });
+    }
 
     await this.audit.log({
       actorId: actorUserId,
@@ -306,12 +531,34 @@ export class PickupService {
     if (!existing) throw new PickupNotFoundException(pickupId);
 
     const cancelledByKind = byCustomer ? 'CUSTOMER' : 'STAFF';
-    const pickup = await this.repo.transitionInTx(this.prisma, {
-      id: pickupId,
-      toStatus: PhysicalGoldPickupStatus.CANCELLED,
-      actorId: actorUserId,
-      cancelReason: reason,
-      cancelledByKind,
+    const pickup = await this.prisma.$transaction(async (tx) => {
+      const updated = await this.repo.transitionInTx(tx, {
+        id: pickupId,
+        toStatus: PhysicalGoldPickupStatus.CANCELLED,
+        actorId: actorUserId,
+        cancelReason: reason,
+        cancelledByKind,
+      });
+
+      // Release the reserved conversion fee back to the rial wallet.
+      if (existing.charge && existing.charge.status === 'RESERVED' && existing.charge.amountRial.gt(0)) {
+        await this.accountRepo.releaseCredit({
+          tx,
+          customerId: updated.customerId,
+          amount: existing.charge.amountRial,
+          orderId: pickupId,
+          actorId: actorUserId,
+          reason: `Pickup ${updated.pickupNumber} cancelled — conversion fee released`,
+          sourceType: 'PICKUP',
+          sourceId: pickupId,
+        });
+        await this.repo.updateChargeInTx(tx, pickupId, {
+          status: 'RELEASED',
+          releasedAt: new Date(),
+        });
+      }
+
+      return updated;
     });
 
     await this.audit.log({
@@ -404,6 +651,10 @@ export class PickupService {
       select: {
         id: true,
         mobile: true,
+        firstName: true,
+        lastName: true,
+        customerNumber: true,
+        type: true,
         status: true,
         accountStatus: true,
         account: { select: { id: true, status: true } },

@@ -1,21 +1,22 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { SmsProvider, SmsDeliveryResult } from './sms-provider.interface';
+import { SmsProvider, SmsDeliveryResult, SmsRuntimeConfig } from './sms-provider.interface';
 
 /**
  * SMS.ir Provider Adapter
  *
  * docs/21-business-decisions.md §10.1 — one of the two candidate providers.
- * open-questions.md #31 — final selection TBD.
  *
- * Selected when SMS_PROVIDER=smsir.
+ * Selected by the `provider` value of the resolved SMS settings
+ * (admin panel → settings → SMS, or SMS_PROVIDER in .env).
  *
  * Uses SMS.ir REST API v1.
- * Credentials via env: SMS_API_KEY, SMS_SENDER_LINE.
+ * Credentials come from the resolved config; the env config is the fallback
+ * for callers that inject this provider directly.
  * Base URL override: SMSIR_BASE_URL (default: https://api.sms.ir/v1).
  *
  * SECURITY:
- * - API key comes from environment/config — NEVER hard-coded.
+ * - API key comes from configuration — NEVER hard-coded.
  * - Error responses do NOT include the API key.
  */
 @Injectable()
@@ -25,14 +26,15 @@ export class SmsSirProvider implements SmsProvider {
 
   constructor(private readonly configService: ConfigService) {}
 
-  async send(to: string, message: string): Promise<SmsDeliveryResult> {
-    const smsConfig = this.configService.get('sms');
-    const apiKey = smsConfig.apiKey as string;
-    const senderLine = smsConfig.senderLine as string;
-    const baseUrl = smsConfig.smsirBaseUrl as string;
+  async send(to: string, message: string, config?: SmsRuntimeConfig): Promise<SmsDeliveryResult> {
+    const resolved = config ?? this.envConfig();
+    const { apiKey, senderLine, smsirBaseUrl: baseUrl } = resolved;
 
     if (!apiKey) {
       return { success: false, error: 'SMS_API_KEY not configured' };
+    }
+    if (!senderLine) {
+      return { success: false, error: 'SMS_SENDER_LINE not configured' };
     }
 
     try {
@@ -43,7 +45,8 @@ export class SmsSirProvider implements SmsProvider {
           'X-API-KEY': apiKey,
         },
         body: JSON.stringify({
-          lineNumber: senderLine,
+          // SMS.ir expects a numeric line number; keep the string only as a last resort.
+          lineNumber: /^\d+$/.test(senderLine) ? Number(senderLine) : senderLine,
           messageText: message,
           mobiles: [to],
         }),
@@ -58,14 +61,17 @@ export class SmsSirProvider implements SmsProvider {
 
       const data = (await response.json()) as {
         status?: number;
-        messageId?: number;
         message?: string;
+        /** /send/bulk returns an array of message ids; other endpoints return a scalar. */
+        data?: number | number[] | { messageId?: number };
+        messageId?: number;
       };
 
       if (data.status === 1) {
+        const reference = data.messageId ?? data.data;
         return {
           success: true,
-          providerReference: String(data.messageId ?? ''),
+          providerReference: reference == null ? '' : String(reference),
         };
       }
 
@@ -76,5 +82,18 @@ export class SmsSirProvider implements SmsProvider {
       this.logger.error(`[SMS.ir] Network/timeout error: ${message_}`);
       return { success: false, error: `NETWORK_ERROR: ${message_}` };
     }
+  }
+
+  private envConfig(): SmsRuntimeConfig {
+    const smsConfig = this.configService.get('sms');
+    return {
+      provider: 'smsir',
+      apiKey: (smsConfig?.apiKey as string) ?? '',
+      senderLine: (smsConfig?.senderLine as string) ?? '',
+      smsirBaseUrl: (smsConfig?.smsirBaseUrl as string) ?? 'https://api.sms.ir/v1',
+      melipayamakBaseUrl:
+        (smsConfig?.melipayamakBaseUrl as string) ?? 'https://rest.payamak-panel.com/api/SendSMS',
+      melipayamakPassword: (smsConfig?.melipayamakPassword as string) ?? '',
+    };
   }
 }

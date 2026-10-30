@@ -8,6 +8,7 @@ import {
   ArrowUpRight,
   ClipboardList,
   Coins,
+  CreditCard,
   FileText,
   Scale,
   ShieldCheck,
@@ -59,7 +60,7 @@ export function OverviewDashboard({ data }: { data: DashboardSummary }) {
       </header>
 
       <section>
-        <div className="grid gap-4 lg:grid-cols-3">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <UrgentCard
             href="/dashboard/orders?view=review"
             tone="amber"
@@ -83,6 +84,15 @@ export function OverviewDashboard({ data }: { data: DashboardSummary }) {
             value={count(data.unsettledTrades)}
             label="معاملات تسویه‌نشده"
             hint={`${count(data.totalPaymentsRecorded)} پرداخت ثبت‌شده`}
+          />
+          <UrgentCard
+            href="/dashboard/payments?statusGroup=submitted"
+            tone="sky"
+            icon={CreditCard}
+            value={count(data.paymentsAwaitingReview)}
+            label="پرداخت منتظر بررسی"
+            hint={`${formatMoney(data.paymentsAwaitingReviewValueRial)} در انتظار تأیید`}
+            action="بررسی پرداخت‌ها"
           />
         </div>
       </section>
@@ -217,6 +227,13 @@ const URGENT_TONE = {
     value: 'text-rose-950',
     label: 'text-rose-900',
     action: 'text-rose-800',
+  },
+  sky: {
+    shell: 'border-sky-200/80 bg-sky-50',
+    icon: 'bg-sky-100 text-sky-700',
+    value: 'text-sky-950',
+    label: 'text-sky-900',
+    action: 'text-sky-800',
   },
   slate: {
     shell: 'border-slate-200/80 bg-slate-50',

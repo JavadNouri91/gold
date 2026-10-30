@@ -111,6 +111,8 @@ const mockCustomerRepo = {
   findByIds: jest.fn(),
   findAll: jest.fn(),
   findByUserId: jest.fn(),
+  updateStatus: jest.fn(),
+  updateAccountStatus: jest.fn(),
 };
 
 const mockCustomersService = {
@@ -617,6 +619,98 @@ describe('KycService', () => {
     });
   });
 
+  describe('getPendingReviewCount', () => {
+    it('counts only customers whose required documents await review', async () => {
+      mockDocRepo.findLatestPerCustomerAndType.mockResolvedValue([
+        makeDocument({
+          id: 'pending-front',
+          documentType: 'national_id_front',
+          status: VerificationStatus.PENDING,
+        }),
+      ]);
+      mockCustomerRepo.findAll.mockResolvedValue([makeCustomer(CustomerStatus.ACTIVE)]);
+      mockKycRepo.findLatestPerCustomer.mockResolvedValue([]);
+
+      const result = await service.getPendingReviewCount();
+
+      expect(result).toEqual({ awaiting: 1 });
+      expect(mockAudit.log).not.toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'KYC_REVIEW_QUEUE_ACCESSED' }),
+      );
+    });
+  });
+
+  describe('activateCustomer', () => {
+    it('rejects activation while a required document is not approved', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.UNDER_REVIEW));
+      mockDocRepo.findByCustomerId.mockResolvedValue([
+        makeDocument({ status: VerificationStatus.APPROVED }),
+        ...makeRequiredDocuments(VerificationStatus.PENDING).slice(1),
+      ]);
+
+      await expect(service.activateCustomer('cust-1', 'reviewer-1')).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'KYC_DOCUMENTS_NOT_APPROVED' }),
+      });
+      expect(mockCustomerRepo.updateStatus).not.toHaveBeenCalled();
+    });
+
+    it('rejects activation for an already active customer', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.ACTIVE));
+
+      await expect(service.activateCustomer('cust-1', 'reviewer-1')).rejects.toMatchObject({
+        response: expect.objectContaining({ code: 'CUSTOMER_ALREADY_ACTIVE' }),
+      });
+    });
+
+    it('approves the KYC case and activates the customer when all documents are approved', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.UNDER_REVIEW));
+      mockDocRepo.findByCustomerId.mockResolvedValue(
+        makeRequiredDocuments(VerificationStatus.APPROVED),
+      );
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(makeVerification());
+      mockKycRepo.updateStatus.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.APPROVED }),
+      );
+      mockCustomersService.approve.mockResolvedValue(makeCustomer(CustomerStatus.APPROVED));
+      mockCustomerRepo.updateStatus.mockResolvedValue(makeCustomer(CustomerStatus.ACTIVE));
+
+      const result = await service.activateCustomer('cust-1', 'reviewer-1');
+
+      expect(result.status).toBe(CustomerStatus.ACTIVE);
+      expect(mockKycRepo.updateStatus).toHaveBeenCalledWith(
+        expect.any(String),
+        VerificationStatus.APPROVED,
+        'reviewer-1',
+      );
+      expect(mockCustomersService.approve).toHaveBeenCalledWith('cust-1', 'reviewer-1', undefined);
+      expect(mockCustomerRepo.updateStatus).toHaveBeenCalledWith('cust-1', CustomerStatus.ACTIVE);
+      expect(mockAudit.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'CUSTOMER_ACTIVATED' }),
+      );
+    });
+
+    it('repairs a pending customer whose verification is already approved', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.PENDING));
+      mockDocRepo.findByCustomerId.mockResolvedValue(
+        makeRequiredDocuments(VerificationStatus.APPROVED),
+      );
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.APPROVED }),
+      );
+      mockCustomersService.markUnderReview.mockResolvedValue(
+        makeCustomer(CustomerStatus.UNDER_REVIEW),
+      );
+      mockCustomersService.approve.mockResolvedValue(makeCustomer(CustomerStatus.APPROVED));
+      mockCustomerRepo.updateStatus.mockResolvedValue(makeCustomer(CustomerStatus.ACTIVE));
+
+      const result = await service.activateCustomer('cust-1', 'reviewer-1');
+
+      expect(result.status).toBe(CustomerStatus.ACTIVE);
+      expect(mockCustomersService.markUnderReview).toHaveBeenCalledWith('cust-1', 'reviewer-1');
+      expect(mockCustomersService.approve).toHaveBeenCalled();
+    });
+  });
+
   describe('decideDocument', () => {
     it('approves one document and audits the decision', async () => {
       mockCustomerRepo.findById.mockResolvedValue(makeCustomer());
@@ -687,6 +781,43 @@ describe('KycService', () => {
       expect(mockAudit.log).toHaveBeenCalledWith(
         expect.objectContaining({ action: 'KYC_APPROVED' }),
       );
+    });
+
+    it('approves the KYC case for a still-PENDING customer whose documents are approved', async () => {
+      mockCustomerRepo.findById.mockResolvedValue(makeCustomer(CustomerStatus.PENDING));
+      mockDocRepo.findById.mockResolvedValue(
+        makeDocument({ id: 'doc-4', documentType: 'personal_photo' }),
+      );
+      mockDocRepo.updateStatus.mockResolvedValue(
+        makeDocument({
+          id: 'doc-4',
+          documentType: 'personal_photo',
+          status: VerificationStatus.APPROVED,
+        }),
+      );
+      mockDocRepo.findByCustomerId.mockResolvedValue(
+        makeRequiredDocuments(VerificationStatus.APPROVED),
+      );
+      mockKycRepo.findLatestByCustomerId.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.UNDER_REVIEW }),
+      );
+      mockKycRepo.updateStatus.mockResolvedValue(
+        makeVerification({ status: VerificationStatus.APPROVED, reviewerId: 'reviewer-1' }),
+      );
+      mockCustomersService.markUnderReview.mockResolvedValue(
+        makeCustomer(CustomerStatus.UNDER_REVIEW),
+      );
+      mockCustomersService.approve.mockResolvedValue(makeCustomer(CustomerStatus.APPROVED));
+
+      await service.decideDocument(
+        'cust-1',
+        'doc-4',
+        { decision: KycDecision.APPROVE },
+        'reviewer-1',
+      );
+
+      expect(mockCustomersService.markUnderReview).toHaveBeenCalledWith('cust-1', 'reviewer-1');
+      expect(mockCustomersService.approve).toHaveBeenCalledWith('cust-1', 'reviewer-1', undefined);
     });
 
     it('rejects a document only when a reason is present', async () => {

@@ -50,9 +50,16 @@ import {
   MissingPaymentReferenceException,
   PaymentNotValidatedException,
   DepositCannotBeAllocatedException,
+  WithdrawalBankAccountNotFoundException,
+  WithdrawalCannotBeAllocatedException,
 } from './domain/exceptions/payment.exceptions';
 import { PaymentEntity } from './domain/entities/payment.entity';
-import { PaymentMethod, PaymentStatus, SettlementStatus } from './domain/constants/payment-methods';
+import {
+  PaymentDirection,
+  PaymentMethod,
+  PaymentStatus,
+  SettlementStatus,
+} from './domain/constants/payment-methods';
 import { SettlementEntity } from '../settlements/domain/entities/settlement.entity';
 
 // ─── Test helpers ────────────────────────────────────────────────────────────
@@ -65,6 +72,7 @@ const makePaymentEntity = (
     tradeId: string | null;
     customerId: string;
     method: PaymentMethod;
+    direction: PaymentDirection;
   }> = {},
 ): PaymentEntity =>
   new PaymentEntity({
@@ -73,6 +81,7 @@ const makePaymentEntity = (
     tradeId: overrides.tradeId === undefined ? 'trade-1' : overrides.tradeId,
     customerId: overrides.customerId ?? 'cust-1',
     method: overrides.method ?? PaymentMethod.BANK_TRANSFER,
+    direction: overrides.direction,
     amount: overrides.amount ?? new Decimal('100000000'),
     currency: 'IRR',
     status: overrides.status ?? PaymentStatus.PENDING,
@@ -154,7 +163,12 @@ describe('PaymentService', () => {
   let auditService: MockAudit;
   let prismaService: jest.Mocked<PrismaService>;
   let storage: { upload: jest.Mock; delete: jest.Mock; getObject: jest.Mock };
-  let customerAccounts: { grantCreditInTx: jest.Mock };
+  let customerAccounts: {
+    grantCreditInTx: jest.Mock;
+    reserveWithdrawalInTx: jest.Mock;
+    releaseWithdrawalInTx: jest.Mock;
+    settleWithdrawalInTx: jest.Mock;
+  };
   let fakeTx: ReturnType<typeof buildMockTx>;
 
   beforeEach(async () => {
@@ -212,6 +226,7 @@ describe('PaymentService', () => {
               findMany: jest.fn().mockResolvedValue([]),
             },
             customer: { findUnique: jest.fn().mockResolvedValue({ id: 'cust-1' }) },
+            customerBankAccount: { findFirst: jest.fn().mockResolvedValue(null) },
             $transaction: jest
               .fn()
               .mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx)),
@@ -235,6 +250,9 @@ describe('PaymentService', () => {
           provide: CustomerAccountRepository,
           useValue: {
             grantCreditInTx: jest.fn().mockResolvedValue({ id: 'acc-1' }),
+            reserveWithdrawalInTx: jest.fn().mockResolvedValue(new Decimal(0)),
+            releaseWithdrawalInTx: jest.fn().mockResolvedValue(undefined),
+            settleWithdrawalInTx: jest.fn().mockResolvedValue(undefined),
           },
         },
       ],
@@ -535,21 +553,197 @@ describe('PaymentService', () => {
   });
 
   describe('staffSummary', () => {
-    it('returns pending count and successful amount totals', async () => {
-      paymentRepo.count.mockResolvedValue(7);
-      paymentRepo.sumAmount
-        .mockResolvedValueOnce('250000.00')
-        .mockResolvedValueOnce('9000000.00');
+    it('splits summary into deposits and withdrawals with pending counts and totals', async () => {
+      paymentRepo.count.mockImplementation((where) => {
+        const w = where as { direction?: string; status?: string };
+        const isWithdrawal = w.direction === PaymentDirection.WITHDRAWAL;
+        const isPending = w.status === PaymentStatus.PENDING;
+        if (isWithdrawal) return Promise.resolve(isPending ? 2 : 3);
+        return Promise.resolve(isPending ? 7 : 9);
+      });
+      paymentRepo.sumAmount.mockImplementation((where) => {
+        const w = where as { direction?: string };
+        return Promise.resolve(w.direction === PaymentDirection.WITHDRAWAL ? '500.00' : '1000.00');
+      });
 
       const summary = await service.staffSummary();
 
-      expect(summary).toEqual({
-        pendingCount: 7,
-        todayValidatedAmountRial: '250000.00',
-        totalSuccessfulAmountRial: '9000000.00',
+      expect(summary.deposits.pendingCount).toBe(7);
+      expect(summary.deposits.totalCount).toBe(9);
+      expect(summary.deposits.pendingAmountRial).toBe('1000.00');
+      expect(summary.withdrawals.pendingCount).toBe(2);
+      expect(summary.withdrawals.totalCount).toBe(3);
+      expect(summary.withdrawals.pendingAmountRial).toBe('500.00');
+      expect(paymentRepo.count).toHaveBeenCalledWith({ direction: 'DEPOSIT', status: PaymentStatus.PENDING });
+      expect(paymentRepo.count).toHaveBeenCalledWith({ direction: 'WITHDRAWAL', status: PaymentStatus.PENDING });
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // Withdrawal request flow — §9
+  // ─────────────────────────────────────────────────────────────────────────
+
+  describe('submitOwnWithdrawal', () => {
+    const verifiedBankAccount = {
+      id: 'bank-1',
+      customerId: 'cust-1',
+      iban: 'IR000000000000000000000001',
+      bankName: 'بانک ملت',
+      accountHolder: 'علی علوی',
+      status: 'VERIFIED',
+    };
+
+    it('reserves the amount and creates a WITHDRAWAL payment for a verified IBAN', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-1' });
+      (prismaService.customerBankAccount.findFirst as jest.Mock).mockResolvedValue(verifiedBankAccount);
+      const created = makePaymentEntity({
+        status: PaymentStatus.PENDING,
+        tradeId: null,
+        amount: new Decimal('50000000'),
+        direction: PaymentDirection.WITHDRAWAL,
       });
-      expect(paymentRepo.count).toHaveBeenCalledWith({ status: PaymentStatus.PENDING });
-      expect(paymentRepo.sumAmount).toHaveBeenCalledTimes(2);
+      paymentRepo.createPaymentInTx.mockResolvedValue(created);
+
+      const result = await service.submitOwnWithdrawal('user-1', {
+        amount: '50000000',
+        bankAccountId: 'bank-1',
+      });
+
+      expect(result.direction).toBe(PaymentDirection.WITHDRAWAL);
+      expect(result.status).toBe(PaymentStatus.PENDING);
+
+      expect(paymentRepo.createPaymentInTx).toHaveBeenCalledWith(
+        fakeTx,
+        expect.objectContaining({
+          tradeId: null,
+          customerId: 'cust-1',
+          direction: PaymentDirection.WITHDRAWAL,
+          method: PaymentMethod.BANK_TRANSFER,
+          customerBankAccountId: 'bank-1',
+          destinationIban: verifiedBankAccount.iban,
+          destinationBankName: verifiedBankAccount.bankName,
+          destinationAccountHolder: verifiedBankAccount.accountHolder,
+        }),
+      );
+
+      expect(customerAccounts.reserveWithdrawalInTx).toHaveBeenCalledTimes(1);
+      const [, reserveArgs] = customerAccounts.reserveWithdrawalInTx.mock.calls[0];
+      expect(reserveArgs.customerId).toBe('cust-1');
+      expect(reserveArgs.paymentId).toBe('pay-1');
+      expect(reserveArgs.amount.toFixed(2)).toBe('50000000.00');
+      expect(reserveArgs.actorId).toBe('user-1');
+
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'WITHDRAWAL_REQUESTED', entityType: 'Payment' }),
+      );
+    });
+
+    it('rejects when the actor has no customer profile', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.submitOwnWithdrawal('user-1', { amount: '1000', bankAccountId: 'bank-1' }),
+      ).rejects.toBeInstanceOf(ForbiddenException);
+
+      expect(paymentRepo.createPaymentInTx).not.toHaveBeenCalled();
+      expect(customerAccounts.reserveWithdrawalInTx).not.toHaveBeenCalled();
+    });
+
+    it('rejects a non-positive amount', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-1' });
+
+      await expect(
+        service.submitOwnWithdrawal('user-1', { amount: '0', bankAccountId: 'bank-1' }),
+      ).rejects.toBeInstanceOf(InvalidPaymentAmountException);
+    });
+
+    it('rejects a destination IBAN that is not a verified account of the customer', async () => {
+      (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-1' });
+      (prismaService.customerBankAccount.findFirst as jest.Mock).mockResolvedValue(null);
+
+      await expect(
+        service.submitOwnWithdrawal('user-1', { amount: '1000', bankAccountId: 'bank-other' }),
+      ).rejects.toBeInstanceOf(WithdrawalBankAccountNotFoundException);
+
+      expect(paymentRepo.createPaymentInTx).not.toHaveBeenCalled();
+      expect(customerAccounts.reserveWithdrawalInTx).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('validatePayment — withdrawal settlement', () => {
+    it('settles the reservation (debiting the wallet) instead of granting credit', async () => {
+      const pending = makePaymentEntity({
+        status: PaymentStatus.PENDING,
+        tradeId: null,
+        amount: new Decimal('50000000'),
+        direction: PaymentDirection.WITHDRAWAL,
+      });
+      const validated = makePaymentEntity({
+        status: PaymentStatus.VALIDATED,
+        tradeId: null,
+        amount: new Decimal('50000000'),
+        direction: PaymentDirection.WITHDRAWAL,
+      });
+      paymentRepo.findById.mockResolvedValue(pending);
+      paymentRepo.updateStatusInTx.mockResolvedValue(validated);
+
+      const result = await service.validatePayment('pay-1', 'user-1');
+
+      expect(result.status).toBe(PaymentStatus.VALIDATED);
+      expect(customerAccounts.settleWithdrawalInTx).toHaveBeenCalledTimes(1);
+      const [, settleArgs] = customerAccounts.settleWithdrawalInTx.mock.calls[0];
+      expect(settleArgs.customerId).toBe('cust-1');
+      expect(settleArgs.paymentId).toBe('pay-1');
+      expect(settleArgs.amount.toFixed(2)).toBe('50000000.00');
+      expect(customerAccounts.grantCreditInTx).not.toHaveBeenCalled();
+      expect(auditService.log).toHaveBeenCalledWith(
+        expect.objectContaining({ action: 'PAYMENT_VALIDATED' }),
+      );
+    });
+  });
+
+  describe('failPayment — withdrawal release', () => {
+    it('releases the reserved amount when a withdrawal is rejected', async () => {
+      const pending = makePaymentEntity({
+        status: PaymentStatus.PENDING,
+        tradeId: null,
+        amount: new Decimal('50000000'),
+        direction: PaymentDirection.WITHDRAWAL,
+      });
+      const failed = makePaymentEntity({
+        status: PaymentStatus.FAILED,
+        tradeId: null,
+        amount: new Decimal('50000000'),
+        direction: PaymentDirection.WITHDRAWAL,
+      });
+      paymentRepo.findById.mockResolvedValue(pending);
+      paymentRepo.updateStatusInTx.mockResolvedValue(failed);
+
+      const result = await service.failPayment('pay-1', 'user-1');
+
+      expect(result.status).toBe(PaymentStatus.FAILED);
+      expect(customerAccounts.releaseWithdrawalInTx).toHaveBeenCalledTimes(1);
+      const [, releaseArgs] = customerAccounts.releaseWithdrawalInTx.mock.calls[0];
+      expect(releaseArgs.customerId).toBe('cust-1');
+      expect(releaseArgs.paymentId).toBe('pay-1');
+      expect(releaseArgs.amount.toFixed(2)).toBe('50000000.00');
+      expect(customerAccounts.grantCreditInTx).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('allocatePayment — withdrawal guard', () => {
+    it('prevents allocating a withdrawal payment to a trade', async () => {
+      paymentRepo.findById.mockResolvedValue(
+        makePaymentEntity({
+          status: PaymentStatus.VALIDATED,
+          tradeId: null,
+          direction: PaymentDirection.WITHDRAWAL,
+        }),
+      );
+
+      await expect(
+        service.allocatePayment('pay-1', { tradeId: 'trade-1', amount: '1000' }, 'user-1'),
+      ).rejects.toBeInstanceOf(WithdrawalCannotBeAllocatedException);
     });
   });
 
@@ -1150,10 +1344,10 @@ describe('PaymentService', () => {
     it('folds summary amounts with Decimal and includes pending as submitted', async () => {
       (prismaService.customer.findUnique as jest.Mock).mockResolvedValue({ id: 'cust-real' });
       paymentRepo.summarizeLedger.mockResolvedValue([
-        { status: 'COMPLETED', count: 2, amount: '100.10' },
-        { status: 'FAILED', count: 1, amount: '0.20' },
-        { status: 'REVERSED', count: 1, amount: '50.00' },
-        { status: 'PENDING', count: 9, amount: '999.00' },
+        { status: 'COMPLETED', direction: 'DEPOSIT', count: 2, amount: '100.10' },
+        { status: 'FAILED', direction: 'DEPOSIT', count: 1, amount: '0.20' },
+        { status: 'REVERSED', direction: 'DEPOSIT', count: 1, amount: '50.00' },
+        { status: 'PENDING', direction: 'DEPOSIT', count: 9, amount: '999.00' },
       ]);
       paymentRepo.count.mockResolvedValue(4);
 

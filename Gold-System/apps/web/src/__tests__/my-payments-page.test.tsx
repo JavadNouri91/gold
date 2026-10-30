@@ -41,6 +41,8 @@ const summary: PaymentSummary = {
   failed: { count: 1, amountRial: '10000000.00' },
   reversed: { count: 1, amountRial: '5000000.00' },
   submitted: { count: 1, amountRial: '1000000000.00' },
+  withdrawn: { count: 3, amountRial: '12000000.00' },
+  pendingWithdrawal: { count: 2, amountRial: '8000000.00' },
   hasAny: true,
 };
 
@@ -57,6 +59,8 @@ function renderPage(overrides: Partial<React.ComponentProps<typeof MyPaymentsPag
       onStatusGroup={() => undefined}
       type=""
       onType={() => undefined}
+      direction=""
+      onDirection={() => undefined}
       search=""
       onSearch={() => undefined}
       page={1}
@@ -91,24 +95,34 @@ describe('MyPaymentsPage cash management', () => {
   it('filters the list when a status summary card is clicked', async () => {
     const user = userEvent.setup();
     const onStatusGroup = jest.fn();
-    renderPage({ onStatusGroup });
+    const onDirection = jest.fn();
+    renderPage({ onStatusGroup, onDirection });
 
-    await user.click(screen.getByRole('button', { name: 'فیلتر در انتظار تأیید حسابداری' }));
+    await user.click(screen.getByRole('button', { name: 'فیلتر در انتظار تأیید واریز' }));
+    expect(onDirection).toHaveBeenCalledWith('DEPOSIT');
     expect(onStatusGroup).toHaveBeenCalledWith('submitted');
 
     await user.click(screen.getByRole('button', { name: 'فیلتر مجموع واریزهای موفق' }));
+    expect(onDirection).toHaveBeenCalledWith('DEPOSIT');
     expect(onStatusGroup).toHaveBeenCalledWith('successful');
 
-    await user.click(screen.getByRole('button', { name: 'فیلتر تراکنش‌های ناموفق / مسترد شده' }));
-    expect(onStatusGroup).toHaveBeenCalledWith('failed');
+    await user.click(screen.getByRole('button', { name: 'فیلتر مجموع برداشت‌های موفق' }));
+    expect(onDirection).toHaveBeenCalledWith('WITHDRAWAL');
+    expect(onStatusGroup).toHaveBeenCalledWith('successful');
+
+    await user.click(screen.getByRole('button', { name: 'فیلتر در انتظار تأیید برداشت' }));
+    expect(onDirection).toHaveBeenCalledWith('WITHDRAWAL');
+    expect(onStatusGroup).toHaveBeenCalledWith('submitted');
   });
 
   it('clears the status filter when the active card is clicked again', async () => {
     const user = userEvent.setup();
     const onStatusGroup = jest.fn();
-    renderPage({ statusGroup: 'successful', onStatusGroup });
+    const onDirection = jest.fn();
+    renderPage({ direction: 'DEPOSIT', statusGroup: 'successful', onStatusGroup, onDirection });
 
     await user.click(screen.getByRole('button', { name: 'فیلتر مجموع واریزهای موفق' }));
+    expect(onDirection).toHaveBeenCalledWith('DEPOSIT');
     expect(onStatusGroup).toHaveBeenCalledWith('');
   });
 
@@ -125,5 +139,13 @@ describe('MyPaymentsPage cash management', () => {
       'aria-pressed',
       'true',
     );
+  });
+
+  it('shows the withdrawable rial balance as whole Toman without fractional digits', () => {
+    renderPage({ availableRial: '1929664858.55' });
+
+    const card = screen.getByRole('button', { name: 'برداشت از موجودی ریالی کیف پول' });
+    expect(card).toHaveTextContent('۱۹۲,۹۶۶,۴۸۵ تومان');
+    expect(card.textContent).not.toMatch(/[٫.]/);
   });
 });

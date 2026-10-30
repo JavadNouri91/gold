@@ -13,7 +13,7 @@ import {
 } from '@/lib/order-period';
 import type { DemoOrderRow, DemoSide } from '@/lib/portal-demo';
 
-export type ActiveOrderRow = (Order & { side?: DemoSide; unitPriceRial?: string; statusLabel?: string; demo?: boolean }) | DemoOrderRow;
+export type ActiveOrderRow = (Order & { side?: DemoSide | null; unitPriceRial?: string | null; statusLabel?: string; demo?: boolean }) | DemoOrderRow;
 
 function rowPrice(order: ActiveOrderRow): string {
   if ('totalAmountRial' in order) return order.totalAmountRial;

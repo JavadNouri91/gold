@@ -1,4 +1,14 @@
-import { IsOptional, IsInt, Min, Max, IsEnum } from 'class-validator';
+import {
+  IsOptional,
+  IsInt,
+  Min,
+  Max,
+  IsEnum,
+  IsIn,
+  IsDateString,
+  IsString,
+  MaxLength,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { TradeStatus } from '@gold/shared-types';
 
@@ -22,4 +32,25 @@ export class ListTradesDto {
   @IsOptional()
   @IsEnum(TradeStatus)
   status?: TradeStatus;
+
+  /** Transaction side filter (staff only). */
+  @IsOptional()
+  @IsIn(['BUY', 'SELL'])
+  side?: 'BUY' | 'SELL';
+
+  /** Inclusive start date (ISO Gregorian) on confirmedAt. */
+  @IsOptional()
+  @IsDateString()
+  from?: string;
+
+  /** Inclusive end date (ISO Gregorian) on confirmedAt. */
+  @IsOptional()
+  @IsDateString()
+  to?: string;
+
+  /** Customer / trade search: name, customer number, mobile or trade number. */
+  @IsOptional()
+  @IsString()
+  @MaxLength(80)
+  q?: string;
 }

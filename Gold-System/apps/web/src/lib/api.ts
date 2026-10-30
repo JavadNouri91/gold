@@ -642,7 +642,7 @@ export interface PricingCalculationResult {
 export interface FeePolicy {
   id: string;
   customerType: string | null;
-  side: 'BUY' | 'SELL';
+  side: 'BUY' | 'SELL' | 'PICKUP';
   code: string;
   labelFa: string;
   mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
@@ -683,7 +683,8 @@ export const pricingApi = {
 
   createFeePolicy(body: {
     customerType?: string | null;
-    side: 'BUY' | 'SELL';
+    side: 'BUY' | 'SELL' | 'PICKUP';
+    code?: string;
     labelFa?: string;
     mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
     value: string;
@@ -703,7 +704,7 @@ export const pricingApi = {
     id: string,
     body: Partial<{
       customerType: string | null;
-      side: 'BUY' | 'SELL';
+      side: 'BUY' | 'SELL' | 'PICKUP';
       labelFa: string;
       mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
       value: string;
@@ -781,6 +782,22 @@ export interface PhysicalGoldPickupCustomer {
   mobile: string;
 }
 
+export interface PickupFee {
+  code: string;
+  labelFa: string;
+  mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
+  rateValue: string;
+  calculationBase: string | null;
+  baseAmountRial: string;
+  amountRial: string;
+  goldPricePerGramRial: string | null;
+  status: 'NONE' | 'RESERVED' | 'SETTLED' | 'RELEASED';
+  walletAvailableAfterRial: string | null;
+  reservedAt: string | null;
+  settledAt: string | null;
+  releasedAt: string | null;
+}
+
 export interface PhysicalGoldPickup {
   id: string;
   pickupNumber: string;
@@ -799,10 +816,23 @@ export interface PhysicalGoldPickup {
   readyAt: string | null;
   deliveredAt: string | null;
   cancelledAt: string | null;
+  /** Staff actor ids (server-side identifiers; not rendered directly). */
+  preparingById?: string | null;
+  readyById?: string | null;
+  deliveredById?: string | null;
+  cancelledById?: string | null;
+  /** Optional actor display names, populated if the API ever enriches them. */
+  preparingByName?: string | null;
+  readyByName?: string | null;
+  deliveredByName?: string | null;
+  cancelledByName?: string | null;
   createdAt: string;
   updatedAt: string;
   events: PhysicalGoldPickupEvent[];
   customer: PhysicalGoldPickupCustomer | null;
+  fee: PickupFee | null;
+  goldPricePerGramRial: string | null;
+  documents: { preInvoiceAvailable: boolean; invoiceAvailable: boolean };
 }
 
 export interface ListPickupsResponse {
@@ -977,6 +1007,20 @@ export const ordersApi = {
 
 // ─── Physical gold pickup ─────────────────────────────────────────────────────
 
+export interface PickupFeePreview {
+  labelFa: string;
+  mode: 'NONE' | 'FIXED' | 'PERCENTAGE';
+  rateValue: string;
+  calculationBase: string | null;
+  baseAmountRial: string;
+  amountRial: string;
+  goldPricePerGramRial: string | null;
+  priceSnapshotId: string | null;
+  availableRial: string;
+  canAfford: boolean;
+  shortfallRial: string;
+}
+
 export const pickupsApi = {
   list(params?: {
     status?: PhysicalGoldPickupStatus;
@@ -995,10 +1039,18 @@ export const pickupsApi = {
     return request(`/pickups/${id}`);
   },
 
+  feePreview(input: { weightGrams: string; priceSnapshotId?: string }): Promise<PickupFeePreview> {
+    const query = new URLSearchParams();
+    query.set('weightGrams', input.weightGrams);
+    if (input.priceSnapshotId) query.set('priceSnapshotId', input.priceSnapshotId);
+    return request(`/pickups/fee-preview?${query.toString()}`);
+  },
+
   create(input: {
     weightGrams: string;
     purityRatio?: string;
     customerNote?: string;
+    priceSnapshotId?: string;
   }): Promise<PhysicalGoldPickup> {
     return request('/pickups', { method: 'POST', body: JSON.stringify(input) });
   },
@@ -1008,6 +1060,14 @@ export const pickupsApi = {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });
+  },
+
+  downloadPreInvoice(id: string): Promise<Blob> {
+    return fetchBlob(`/pickups/${id}/pre-invoice`);
+  },
+
+  downloadInvoice(id: string): Promise<Blob> {
+    return fetchBlob(`/pickups/${id}/invoice`);
   },
 };
 
@@ -1105,6 +1165,7 @@ export interface Payment {
   id: string;
   tradeId: string | null;
   customerId: string;
+  direction?: 'DEPOSIT' | 'WITHDRAWAL';
   method: string;
   amount: string;
   status: string;
@@ -1117,6 +1178,10 @@ export interface Payment {
   tradeNumber?: string | null;
   relatedSide?: 'BUY' | 'SELL' | null;
   hasReceipt?: boolean;
+  customerBankAccountId?: string | null;
+  destinationIban?: string | null;
+  destinationBankName?: string | null;
+  destinationAccountHolder?: string | null;
 }
 
 export interface PaymentAmountCount {
@@ -1131,11 +1196,16 @@ export interface PaymentSummary {
   reversed: PaymentAmountCount;
   /** Receipts waiting for accountant review (PENDING). */
   submitted: PaymentAmountCount;
+  /** Successful withdrawals (VALIDATED). */
+  withdrawn: PaymentAmountCount;
+  /** Withdrawals waiting for accountant approval (PENDING). */
+  pendingWithdrawal: PaymentAmountCount;
   hasAny: boolean;
 }
 
 export type PaymentStatusGroup = 'successful' | 'failed' | 'reversed' | 'submitted';
 export type PaymentLedgerType = 'BUY' | 'SELL' | 'OTHER';
+export type PaymentDirection = 'DEPOSIT' | 'WITHDRAWAL';
 
 export interface ListPaymentsResponse {
   data: Payment[];
@@ -1149,6 +1219,7 @@ export interface ListOwnPaymentsParams {
   limit?: number;
   statusGroup?: PaymentStatusGroup;
   type?: PaymentLedgerType;
+  direction?: PaymentDirection;
   q?: string;
 }
 
@@ -1160,6 +1231,7 @@ function paymentQuery(params: ListOwnPaymentsParams): string {
   if (params.limit) query.set('limit', String(params.limit));
   if (params.statusGroup) query.set('statusGroup', params.statusGroup);
   if (params.type) query.set('type', params.type);
+  if (params.direction) query.set('direction', params.direction);
   if (params.q) query.set('q', params.q);
   return query.toString();
 }
@@ -1175,6 +1247,13 @@ export const paymentsApi = {
 
   getById(id: string): Promise<Payment> {
     return request(`/payments/${id}`);
+  },
+
+  requestWithdrawal(input: { amount: string; bankAccountId: string }): Promise<Payment> {
+    return request('/payments/withdrawals', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
   },
 
   submitReceipt(input: { method: string; amount: string; referenceNumber?: string; file: File }): Promise<Payment> {

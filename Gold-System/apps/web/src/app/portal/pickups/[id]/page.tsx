@@ -16,6 +16,7 @@ import {
   pickupStepTimestamps,
 } from '@/components/portal/pickups/pickup-status-stepper';
 import { pickupCancelActorName } from '@/lib/pickup-cancel-label';
+import { PickupFeeSheet } from '@/components/pickups/pickup-fee-sheet';
 import {
   formatDate,
   formatDateTime,
@@ -132,6 +133,12 @@ export default function PortalPickupDetailPage() {
           ) : null}
         </CardContent>
       </Card>
+
+      <PickupFeeSheet
+        pickup={data}
+        downloadPreInvoice={() => pickupsApi.downloadPreInvoice(data.id)}
+        downloadInvoice={() => pickupsApi.downloadInvoice(data.id)}
+      />
 
       <Card>
         <CardHeader>

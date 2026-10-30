@@ -7,7 +7,10 @@ import { AuditService } from '../../audit/application/audit.service';
 import { OrderRepository } from '../../orders/infrastructure/repositories/order.repository';
 import { QuotationRepository } from '../../quotations/infrastructure/repositories/quotation.repository';
 import { CustomerAccountRepository } from '../../customer-accounts/infrastructure/repositories/customer-account.repository';
-import { TradeRepository } from '../infrastructure/repositories/trade.repository';
+import {
+  TradeRepository,
+  type TradeSideAggRow,
+} from '../infrastructure/repositories/trade.repository';
 import { TradeLedgerPostingService } from '../../financial-ledger/application/trade-ledger-posting.service';
 import { NotificationService } from '../../notifications/application/notification.service';
 import { NotificationType } from '../../notifications/domain/constants/notification-types';
@@ -16,7 +19,9 @@ import { TradingPolicyService } from '../../trading-policy/application/trading-p
 import { ConfirmTradeDto } from './dto/confirm-trade.dto';
 import { ReverseTradeDto } from './dto/reverse-trade.dto';
 import { ListTradesDto } from './dto/list-trades.dto';
-import { TradeResponseDto, TradeListResponseDto } from './dto/trade-response.dto';
+import { TradeSummaryDto } from './dto/trade-summary.dto';
+import { TradeResponseDto, TradeListResponseDto, TradeEnrichment } from './dto/trade-response.dto';
+import type { TradeEntity } from '../domain/entities/trade.entity';
 
 import {
   TradeNotFoundException,
@@ -507,11 +512,127 @@ export class TradesService {
       throw new TradeNotFoundException(tradeId);
     }
 
-    return TradeResponseDto.fromEntity(trade);
+    // Staff detail view shows whose trade it is, which order it came from and
+    // who confirmed/reversed it. Customers only see their own commercial terms.
+    if (!isStaff) {
+      return TradeResponseDto.fromEntity(trade);
+    }
+
+    const extras = await this.loadStaffEnrichment(trade);
+    return TradeResponseDto.fromEntity(trade, extras);
+  }
+
+  /**
+   * Resolves display data for the staff Trade detail view.
+   * Never called for customer-facing responses.
+   */
+  private async loadStaffEnrichment(trade: TradeEntity): Promise<TradeEnrichment> {
+    const actorIds = [trade.confirmedByUserId];
+    if (trade.reversedByUserId) actorIds.push(trade.reversedByUserId);
+
+    const [customer, order, actors] = await Promise.all([
+      this.prisma.customer.findUnique({
+        where: { id: trade.customerId },
+        select: { customerNumber: true, firstName: true, lastName: true, mobile: true },
+      }),
+      this.prisma.order.findUnique({
+        where: { id: trade.orderId },
+        select: { orderNumber: true, status: true, createdAt: true },
+      }),
+      this.prisma.user.findMany({
+        where: { id: { in: actorIds } },
+        select: { id: true, name: true },
+      }),
+    ]);
+
+    const actorNames = new Map(actors.map((actor) => [actor.id, actor.name]));
+
+    return {
+      customerName: customer ? `${customer.firstName} ${customer.lastName}`.trim() : null,
+      customerNumber: customer?.customerNumber ?? null,
+      customerMobile: customer?.mobile ?? null,
+      orderNumber: order?.orderNumber ?? null,
+      orderStatus: order?.status ?? null,
+      orderCreatedAt: order?.createdAt ?? null,
+      confirmedByName: actorNames.get(trade.confirmedByUserId) ?? null,
+      reversedByName: trade.reversedByUserId
+        ? (actorNames.get(trade.reversedByUserId) ?? null)
+        : null,
+    };
+  }
+
+  /**
+   * Batch-enriches staff Trade list rows with customer display data and the
+   * trade side (BUY/SELL). Trades confirmed before the snapshot carried a side
+   * fall back to the source Order item metadata.
+   */
+  private async applyStaffListEnrichment(
+    entities: TradeEntity[],
+    dtos: TradeResponseDto[],
+  ): Promise<void> {
+    if (entities.length === 0) return;
+
+    const customerIds = [...new Set(entities.map((t) => t.customerId).filter(Boolean))];
+    const orderIds = [...new Set(entities.map((t) => t.orderId).filter(Boolean))];
+
+    const [customers, orders] = await Promise.all([
+      this.prisma.customer.findMany({
+        where: { id: { in: customerIds } },
+        select: { id: true, customerNumber: true, firstName: true, lastName: true, mobile: true },
+      }),
+      this.prisma.order.findMany({
+        where: { id: { in: orderIds } },
+        select: {
+          id: true,
+          orderNumber: true,
+          status: true,
+          createdAt: true,
+          items: {
+            orderBy: { createdAt: 'asc' },
+            take: 1,
+            select: { metadata: true },
+          },
+        },
+      }),
+    ]);
+
+    const customerById = new Map(customers.map((c) => [c.id, c]));
+    const orderById = new Map(orders.map((o) => [o.id, o]));
+    const sideByOrderId = new Map<string, 'BUY' | 'SELL'>();
+    for (const order of orders) {
+      const side = this.sideFromMetadata(order.items?.[0]?.metadata ?? null);
+      if (side) sideByOrderId.set(order.id, side);
+    }
+
+    entities.forEach((entity, index) => {
+      const dto = dtos[index];
+      if (!dto) return;
+
+      const customer = customerById.get(entity.customerId);
+      if (customer) {
+        dto.customerName = `${customer.firstName} ${customer.lastName}`.trim() || null;
+        dto.customerNumber = customer.customerNumber ?? null;
+        dto.customerMobile = customer.mobile ?? null;
+      }
+
+      const order = orderById.get(entity.orderId);
+      if (order) {
+        dto.orderNumber = order.orderNumber;
+        dto.orderStatus = order.status;
+        dto.orderCreatedAt = order.createdAt;
+      }
+
+      dto.side = dto.side ?? sideByOrderId.get(entity.orderId) ?? null;
+    });
+  }
+
+  private sideFromMetadata(metadata: unknown): 'BUY' | 'SELL' | null {
+    if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) return null;
+    const side = (metadata as { side?: unknown }).side;
+    return side === 'BUY' || side === 'SELL' ? side : null;
   }
 
   // ─── List Trades ─────────────────────────────────────────────────────────
-
   /**
    * Lists Trades with pagination.
    *
@@ -537,6 +658,10 @@ export class TradesService {
         page,
         limit,
         status: dto.status,
+        side: dto.side,
+        from: dto.from,
+        to: dto.to,
+        q: dto.q,
       });
     } else {
       const customerId = await this.resolveCustomerId(actorUserId);
@@ -551,7 +676,64 @@ export class TradesService {
     response.total = result.total;
     response.page = page;
     response.limit = limit;
+
+    // Staff list shows the customer name and the trade side per row.
+    // Customers already know their own name, so nothing is added for them.
+    if (isStaff) {
+      await this.applyStaffListEnrichment(result.trades, response.trades);
+    }
+
     return response;
+  }
+
+  // ─── Summary ─────────────────────────────────────────────────────────────
+
+  /**
+   * All-time trade summary for the hero cards (staff only).
+   *
+   * Totals and the BUY/SELL split exclude REVERSED trades. The BUY weight
+   * share drives the ratio percentage; it is null when there is no weight.
+   */
+  async getSummary(): Promise<TradeSummaryDto> {
+    const { byStatus, sides } = await this.tradeRepo.summary();
+
+    const countFor = (status: string): number =>
+      byStatus.find((row) => row.status === status)?.count ?? 0;
+
+    const rowFor = (side: string): TradeSideAggRow | undefined =>
+      sides.find((row) => row.side === side);
+
+    const buy = rowFor('BUY');
+    const sell = rowFor('SELL');
+
+    const buyWeight = new Decimal(buy?.weight ?? '0');
+    const sellWeight = new Decimal(sell?.weight ?? '0');
+    const totalWeight = buyWeight.plus(sellWeight);
+
+    const buyTurnover = new Decimal(buy?.amount ?? '0');
+    const sellTurnover = new Decimal(sell?.amount ?? '0');
+
+    const summary = new TradeSummaryDto();
+    summary.totalTrades = byStatus.reduce((acc, row) => acc + row.count, 0);
+    summary.confirmedTrades = countFor(TradeStatus.CONFIRMED);
+    summary.reversedTrades = countFor(TradeStatus.REVERSED);
+    summary.totalWeightGrams = totalWeight.toFixed(6);
+    summary.totalTurnoverRial = buyTurnover.plus(sellTurnover).toFixed(2);
+    summary.buy = {
+      count: buy?.count ?? 0,
+      weightGrams: buyWeight.toFixed(6),
+      turnoverRial: buyTurnover.toFixed(2),
+    };
+    summary.sell = {
+      count: sell?.count ?? 0,
+      weightGrams: sellWeight.toFixed(6),
+      turnoverRial: sellTurnover.toFixed(2),
+    };
+    summary.buyRatioPercent = totalWeight.gt(0)
+      ? buyWeight.div(totalWeight).mul(100).toDecimalPlaces(1).toNumber()
+      : null;
+
+    return summary;
   }
 
   // ─── Helpers ─────────────────────────────────────────────────────────────

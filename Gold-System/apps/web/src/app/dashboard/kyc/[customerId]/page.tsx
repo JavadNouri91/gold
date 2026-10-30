@@ -18,6 +18,7 @@ import {
   computeKycDocumentStats,
 } from '@/components/dashboard/kyc-panel';
 import { StatusBadge } from '@/components/portal/status-badge';
+import { KycAccountControls } from '@/components/dashboard/kyc-account-controls';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PERSONAL_PHOTO_TYPE } from '@/lib/kyc-portrait-matte';
 import {
@@ -239,6 +240,22 @@ export default function KycDetailPage({ params }: { params: { customerId: string
             </CardContent>
           </Card>
         </div>
+      ) : null}
+
+      {customer.data ? (
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle>مدیریت حساب مشتری</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <KycAccountControls
+              customerId={params.customerId}
+              customer={customer.data}
+              documentsApproved={stats.allRequiredApproved}
+              onChanged={refresh}
+            />
+          </CardContent>
+        </Card>
       ) : null}
 
       <Card>

@@ -544,7 +544,7 @@ export function RegisterCustomerButton({
               <p className="text-lg font-semibold text-emerald-700">مشتری با موفقیت ثبت شد.</p>
               <p className="mt-1 text-sm text-muted-foreground">
                 کد مشتری:{' '}
-                <span dir="ltr" className="font-mono font-bold">
+                <span dir="ltr" className="font-sans font-bold">
                   {toPersianDigits(successCustomer.customerNumber)}
                 </span>
               </p>

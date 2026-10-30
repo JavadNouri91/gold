@@ -17,6 +17,13 @@ export class OrderResponseDto {
   customerId: string;
   customerAccountId: string;
   pricingCalculationId: string | null;
+
+  /** Enrichment for staff list/detail — customer display name (first + last). */
+  customerName: string | null;
+  /** Enrichment for staff list/detail — customer file number (CUST-…). */
+  customerNumber: string | null;
+  /** Enrichment for staff list/detail — customer mobile (Latin digits). */
+  customerMobile: string | null;
   status: OrderStatus;
 
   /** Customer-facing net (BUY payable / SELL receivable) */

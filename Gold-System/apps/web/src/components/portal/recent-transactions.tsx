@@ -12,7 +12,7 @@ import {
 } from '@/lib/order-period';
 import type { DemoSide, DemoTradeRow } from '@/lib/portal-demo';
 
-export type RecentTradeRow = (Trade & { side?: DemoSide; statusLabel?: string; demo?: boolean }) | DemoTradeRow;
+export type RecentTradeRow = (Trade & { side?: DemoSide | null; statusLabel?: string; demo?: boolean }) | DemoTradeRow;
 
 function sideMeta(side?: DemoSide | null) {
   if (side === 'SELL') return { label: 'فروش', className: 'text-red-700' };

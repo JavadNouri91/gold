@@ -1,4 +1,4 @@
-import type { PaymentLedgerType, PaymentStatusGroup } from './api';
+import type { PaymentDirection, PaymentLedgerType, PaymentStatusGroup } from './api';
 
 const SUCCESSFUL = new Set(['VALIDATED', 'ALLOCATED', 'COMPLETED']);
 
@@ -22,7 +22,11 @@ export function paymentStatusLabel(status: string): string {
   return 'ثبت‌شده';
 }
 
-export function paymentTypeLabel(side: 'BUY' | 'SELL' | null | undefined): string {
+export function paymentTypeLabel(
+  side: 'BUY' | 'SELL' | null | undefined,
+  direction?: PaymentDirection | null,
+): string {
+  if (direction === 'WITHDRAWAL') return 'برداشت وجه';
   if (side === 'BUY') return 'پرداخت سفارش خرید';
   if (side === 'SELL') return 'پرداخت سفارش فروش';
   return 'افزایش اعتبار';
@@ -58,6 +62,27 @@ export const PAYMENT_STATUS_FILTERS_COMPACT: { id: '' | PaymentStatusGroup; labe
   { id: 'failed', label: 'ناموفق' },
 ];
 
+export const PAYMENT_DIRECTION_FILTERS: { id: '' | PaymentDirection; label: string }[] = [
+  { id: '', label: 'همه' },
+  { id: 'DEPOSIT', label: 'واریز' },
+  { id: 'WITHDRAWAL', label: 'برداشت' },
+];
+
+export function isWithdrawal(
+  payment?: { direction?: PaymentDirection | null } | null,
+): boolean {
+  return payment?.direction === 'WITHDRAWAL';
+}
+
+/** CTA label for a payment row: withdrawals have no receipt to edit/view. */
+export function paymentRowCtaLabel(payment: {
+  direction?: PaymentDirection | null;
+  status: string;
+}): string {
+  if (isWithdrawal(payment)) return 'مشاهده جزئیات';
+  return payment.status === 'PENDING' ? 'ویرایش فیش' : 'مشاهده رسید';
+}
+
 /** Short tracking / reference shown in the ledger table. */
 export function paymentTrackingCode(payment: {
   id: string;
@@ -71,11 +96,16 @@ export function paymentTrackingCode(payment: {
 
 /** Type + method in one cell, e.g. «افزایش اعتبار / فیش بانکی». */
 export function paymentTypeMethodLabel(
-  payment: { relatedSide?: 'BUY' | 'SELL' | null; method: string },
+  payment: {
+    relatedSide?: 'BUY' | 'SELL' | null;
+    direction?: PaymentDirection | null;
+    method: string;
+  },
   methodLabels: Record<string, string>,
 ): string {
-  const type = paymentTypeLabel(payment.relatedSide);
-  const method = methodLabels[payment.method] ?? payment.method;
+  const type = paymentTypeLabel(payment.relatedSide, payment.direction);
+  const method =
+    payment.direction === 'WITHDRAWAL' ? 'انتقال بانکی' : methodLabels[payment.method] ?? payment.method;
   return `${type} / ${method}`;
 }
 

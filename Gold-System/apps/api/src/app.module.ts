@@ -58,6 +58,7 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 // ─── Phase 8 — Reports + Dashboard ────────────────────────
 import { ReportsModule } from './modules/reports/reports.module';
 import { TradingPolicyModule } from './modules/trading-policy/trading-policy.module';
+import { SmsModule } from './modules/sms/sms.module';
 
 @Module({
   imports: [
@@ -137,6 +138,8 @@ import { TradingPolicyModule } from './modules/trading-policy/trading-policy.mod
     // TradesModule, PaymentsModule, OrdersModule (for event dispatch).
     // This top-level import makes the notification API endpoints available.
     NotificationsModule,
+    // SMS provider adapters + the admin-panel configuration endpoints.
+    SmsModule,
 
     // ─── Phase 8 — Reports + Dashboard ──────────────────────────────────────────
     ReportsModule,

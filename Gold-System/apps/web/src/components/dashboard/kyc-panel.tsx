@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import useSWR from 'swr';
+import useSWR, { useSWRConfig } from 'swr';
 import { CheckCircle2, Clock, Expand, Pencil, XCircle } from 'lucide-react';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
@@ -115,6 +115,8 @@ export function KycDocumentList({
     ['kyc-docs', customerId],
     () => internalKycApi.getDocuments(customerId, true),
   );
+  const { mutate: mutateGlobal } = useSWRConfig();
+  const refreshPendingBadge = () => void mutateGlobal(['kyc-pending-count']);
   const [action, setAction] = useState<{
     documentId: string;
     decision: 'APPROVE' | 'REJECT';
@@ -157,6 +159,7 @@ export function KycDocumentList({
       );
       setAction(null);
       await mutate();
+      refreshPendingBadge();
       onDecision?.();
     } catch (err) {
       setActionError(err instanceof ApiClientError ? err.message : 'تصمیم مدرک ثبت نشد.');
@@ -186,7 +189,10 @@ export function KycDocumentList({
             label={item.label}
             required
             document={latestByType.get(item.value)}
-            onChanged={() => void mutate()}
+            onChanged={() => {
+              void mutate();
+              refreshPendingBadge();
+            }}
             onDecide={(decision) =>
               setAction({
                 documentId: latestByType.get(item.value)!.id,
@@ -203,7 +209,10 @@ export function KycDocumentList({
             documentType={doc.documentType}
             label={kycDocumentLabel(doc.documentType)}
             document={doc}
-            onChanged={() => void mutate()}
+            onChanged={() => {
+              void mutate();
+              refreshPendingBadge();
+            }}
             onDecide={(decision) =>
               setAction({
                 documentId: doc.id,
@@ -656,7 +665,6 @@ function DocumentPreview({
   const [showOriginal, setShowOriginal] = useState(false);
   const [showProcessed, setShowProcessed] = useState(Boolean(document.hasProcessedFile));
   const mime = document.fileMimeType ?? '';
-  const isImage = mime.startsWith('image/');
   const previewProcessed =
     isPersonalPhoto && showProcessed && Boolean(document.hasProcessedFile) && !showOriginal;
 

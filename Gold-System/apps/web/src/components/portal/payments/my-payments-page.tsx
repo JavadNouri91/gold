@@ -18,10 +18,17 @@ import {
   WalletCards,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import type { Payment, PaymentLedgerType, PaymentStatusGroup, PaymentSummary } from '@/lib/api';
+import type {
+  Payment,
+  PaymentDirection,
+  PaymentLedgerType,
+  PaymentStatusGroup,
+  PaymentSummary,
+} from '@/lib/api';
 import type { PaginationMeta } from '@gold/shared-types';
 import { PAYMENT_RANGE_OPTIONS, type ActivityRangePreset } from '@/lib/activity-range';
 import {
+  PAYMENT_DIRECTION_FILTERS,
   PAYMENT_STATUS_CHIPS,
   PAYMENT_STATUS_FILTERS,
   PAYMENT_STATUS_FILTERS_COMPACT,
@@ -31,6 +38,7 @@ import {
   paymentTone,
   paymentTrackingCode,
   paymentTypeMethodLabel,
+  paymentRowCtaLabel,
   relatedPaymentLabel,
   type PaymentTone,
 } from '@/lib/payment-display';
@@ -38,7 +46,7 @@ import { DatePickerJalali } from '@/components/ui/date-picker-jalali';
 import { InboxSheet } from '@/components/portal/notifications/inbox-sheet';
 import { SubmitReceiptButton } from '@/components/portal/payments/submit-receipt-sheet';
 import { WithdrawRequestButton } from '@/components/portal/payments/withdraw-request-sheet';
-import { PAYMENT_METHOD_LABELS, cn, formatMoney, toPersianDigits } from '@/lib/utils';
+import { PAYMENT_METHOD_LABELS, cn, formatMoney, formatWholeMoney, toPersianDigits } from '@/lib/utils';
 
 const selectClass =
   'min-h-11 w-full rounded-xl border border-gray-300 bg-white px-3 text-sm text-gray-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600';
@@ -80,12 +88,6 @@ function readSubmitted(summary: PaymentSummary) {
   return summary.submitted ?? emptyBucket();
 }
 
-function addAmounts(a: string, b: string): string {
-  const sum = Number(a) + Number(b);
-  if (!Number.isFinite(sum)) return '0';
-  return sum.toFixed(2);
-}
-
 export function MyPaymentsPage({
   preset,
   onPreset,
@@ -97,6 +99,8 @@ export function MyPaymentsPage({
   onStatusGroup,
   type,
   onType,
+  direction,
+  onDirection,
   search,
   onSearch,
   page,
@@ -126,6 +130,8 @@ export function MyPaymentsPage({
   onStatusGroup: (status: '' | PaymentStatusGroup) => void;
   type: '' | PaymentLedgerType;
   onType: (type: '' | PaymentLedgerType) => void;
+  direction: '' | PaymentDirection;
+  onDirection: (direction: '' | PaymentDirection) => void;
   search: string;
   onSearch: (value: string) => void;
   page: number;
@@ -146,7 +152,7 @@ export function MyPaymentsPage({
   availableRial?: string | null;
 }) {
   const [withdrawOpen, setWithdrawOpen] = useState(false);
-  const filtersActive = Boolean(statusGroup || type || search.trim());
+  const filtersActive = Boolean(statusGroup || type || direction || search.trim());
   const rows = payments;
   const showOnboarding = Boolean(summary && !summary.hasAny && !filtersActive && (meta?.total ?? 0) === 0);
 
@@ -186,6 +192,8 @@ export function MyPaymentsPage({
           availableRial={availableRial}
           statusGroup={statusGroup}
           onStatusGroup={onStatusGroup}
+          direction={direction}
+          onDirection={onDirection}
           withdrawSelected={withdrawOpen}
           onSelectWithdraw={() => setWithdrawOpen(true)}
         />
@@ -202,6 +210,8 @@ export function MyPaymentsPage({
         onStatusGroup={onStatusGroup}
         type={type}
         onType={onType}
+        direction={direction}
+        onDirection={onDirection}
         search={search}
         onSearch={onSearch}
         rows={rows}
@@ -236,15 +246,13 @@ export function MyPaymentsPage({
   );
 }
 
-function toggleStatusGroup(current: '' | PaymentStatusGroup, next: PaymentStatusGroup): '' | PaymentStatusGroup {
-  return current === next ? '' : next;
-}
-
 function SummaryCards({
   summary,
   availableRial,
   statusGroup,
   onStatusGroup,
+  direction,
+  onDirection,
   withdrawSelected,
   onSelectWithdraw,
 }: {
@@ -252,16 +260,36 @@ function SummaryCards({
   availableRial?: string | null;
   statusGroup: '' | PaymentStatusGroup;
   onStatusGroup: (status: '' | PaymentStatusGroup) => void;
+  direction: '' | PaymentDirection;
+  onDirection: (direction: '' | PaymentDirection) => void;
   withdrawSelected: boolean;
   onSelectWithdraw: () => void;
 }) {
   const submitted = readSubmitted(summary);
-  const unsuccessfulAmount = addAmounts(summary.failed.amountRial, summary.reversed.amountRial);
-  const unsuccessfulCount = summary.failed.count + summary.reversed.count;
-  const unsuccessfulSelected = statusGroup === 'failed' || statusGroup === 'reversed';
+  const pendingWithdrawalSelected = direction === 'WITHDRAWAL' && statusGroup === 'submitted';
+  const pendingDepositSelected = direction === 'DEPOSIT' && statusGroup === 'submitted';
+  const withdrawnSelected = direction === 'WITHDRAWAL' && statusGroup === 'successful';
+  const depositSelected = direction === 'DEPOSIT' && statusGroup === 'successful';
+
+  const selectPendingDeposit = () => {
+    onDirection('DEPOSIT');
+    onStatusGroup(pendingDepositSelected ? '' : 'submitted');
+  };
+  const selectPendingWithdrawal = () => {
+    onDirection('WITHDRAWAL');
+    onStatusGroup(pendingWithdrawalSelected ? '' : 'submitted');
+  };
+  const selectSuccessfulDeposit = () => {
+    onDirection('DEPOSIT');
+    onStatusGroup(depositSelected ? '' : 'successful');
+  };
+  const selectWithdrawn = () => {
+    onDirection('WITHDRAWAL');
+    onStatusGroup(withdrawnSelected ? '' : 'successful');
+  };
 
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-5">
       <button
         type="button"
         aria-pressed={withdrawSelected}
@@ -274,35 +302,44 @@ function SummaryCards({
       >
         <p className="text-sm font-semibold text-emerald-800">موجودی ریالی کیف پول (قابل برداشت)</p>
         <p className="mt-3 text-lg font-bold text-emerald-950 lg:text-xl">
-          {availableRial != null ? formatMoney(availableRial) : '—'}
+          {availableRial != null ? formatWholeMoney(availableRial) : '—'}
         </p>
         <p className="mt-1 text-xs text-emerald-700/80">موجودی آزاد حساب شما</p>
       </button>
 
       <SummaryFilterCard
-        title="در انتظار تأیید حسابداری"
-        amount={submitted.amountRial}
-        count={submitted.count}
-        selected={statusGroup === 'submitted'}
-        onSelect={() => onStatusGroup(toggleStatusGroup(statusGroup, 'submitted'))}
-        tone="amber"
-      />
-
-      <SummaryFilterCard
         title="مجموع واریزهای موفق"
         amount={summary.successful.amountRial}
         count={summary.successful.count}
-        selected={statusGroup === 'successful'}
-        onSelect={() => onStatusGroup(toggleStatusGroup(statusGroup, 'successful'))}
+        selected={depositSelected}
+        onSelect={selectSuccessfulDeposit}
         tone="green"
       />
 
       <SummaryFilterCard
-        title="تراکنش‌های ناموفق / مسترد شده"
-        amount={unsuccessfulAmount}
-        count={unsuccessfulCount}
-        selected={unsuccessfulSelected}
-        onSelect={() => onStatusGroup(unsuccessfulSelected ? '' : 'failed')}
+        title="مجموع برداشت‌های موفق"
+        amount={summary.withdrawn?.amountRial ?? '0'}
+        count={summary.withdrawn?.count ?? 0}
+        selected={withdrawnSelected}
+        onSelect={selectWithdrawn}
+        tone="blue"
+      />
+
+      <SummaryFilterCard
+        title="در انتظار تأیید واریز"
+        amount={submitted.amountRial}
+        count={submitted.count}
+        selected={pendingDepositSelected}
+        onSelect={selectPendingDeposit}
+        tone="amber"
+      />
+
+      <SummaryFilterCard
+        title="در انتظار تأیید برداشت"
+        amount={summary.pendingWithdrawal?.amountRial ?? '0'}
+        count={summary.pendingWithdrawal?.count ?? 0}
+        selected={pendingWithdrawalSelected}
+        onSelect={selectPendingWithdrawal}
         tone="rose"
       />
     </div>
@@ -322,16 +359,24 @@ function SummaryFilterCard({
   count: number;
   selected: boolean;
   onSelect: () => void;
-  tone: 'amber' | 'green' | 'rose';
+  tone: 'amber' | 'green' | 'rose' | 'blue';
 }) {
   const shell =
     tone === 'amber'
       ? 'border-amber-200 bg-amber-50/90 text-amber-900'
       : tone === 'green'
         ? 'border-emerald-200 bg-emerald-50/70 text-emerald-900'
-        : 'border-rose-200 bg-rose-50/80 text-rose-900';
+        : tone === 'blue'
+          ? 'border-blue-200 bg-blue-50/70 text-blue-900'
+          : 'border-rose-200 bg-rose-50/80 text-rose-900';
   const hint =
-    tone === 'amber' ? 'text-amber-700/80' : tone === 'green' ? 'text-emerald-700/80' : 'text-rose-700/80';
+    tone === 'amber'
+      ? 'text-amber-700/80'
+      : tone === 'green'
+        ? 'text-emerald-700/80'
+        : tone === 'blue'
+          ? 'text-blue-700/80'
+          : 'text-rose-700/80';
 
   return (
     <button
@@ -363,6 +408,8 @@ function Filters(props: {
   onStatusGroup: (status: '' | PaymentStatusGroup) => void;
   type: '' | PaymentLedgerType;
   onType: (type: '' | PaymentLedgerType) => void;
+  direction: '' | PaymentDirection;
+  onDirection: (direction: '' | PaymentDirection) => void;
   search: string;
   onSearch: (value: string) => void;
   rows: Payment[];
@@ -370,11 +417,13 @@ function Filters(props: {
   const [open, setOpen] = useState(false);
   const [draftStatus, setDraftStatus] = useState(props.statusGroup);
   const [draftType, setDraftType] = useState(props.type);
+  const [draftDirection, setDraftDirection] = useState(props.direction);
   const [draftPreset, setDraftPreset] = useState(props.preset);
 
   const openSheet = () => {
     setDraftStatus(props.statusGroup);
     setDraftType(props.type);
+    setDraftDirection(props.direction);
     setDraftPreset(props.preset);
     setOpen(true);
   };
@@ -423,7 +472,7 @@ function Filters(props: {
         })}
       </div>
 
-      <div className="hidden items-end gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm lg:grid lg:grid-cols-[minmax(0,1.4fr)_repeat(3,minmax(0,1fr))_auto]">
+      <div className="hidden items-end gap-3 rounded-2xl border border-gray-200 bg-white p-3 shadow-sm lg:grid lg:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))_auto]">
         <Field label="جستجو">
           <label className="relative block">
             <span className="sr-only">جستجو</span>
@@ -435,6 +484,20 @@ function Filters(props: {
               className={`${selectClass} pr-9`}
             />
           </label>
+        </Field>
+        <Field label="جهت تراکنش">
+          <select
+            aria-label="جهت تراکنش"
+            className={selectClass}
+            value={props.direction}
+            onChange={(event) => props.onDirection(event.target.value as '' | PaymentDirection)}
+          >
+            {PAYMENT_DIRECTION_FILTERS.map((option) => (
+              <option key={option.id || 'all'} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </Field>
         <Field label="نوع تراکنش">
           <select
@@ -492,7 +555,7 @@ function Filters(props: {
 
       <InboxSheet
         open={open}
-        title="فیلتر پرداخت‌ها"
+        title="فیلتر تراکنش‌ها"
         onClose={() => setOpen(false)}
         footer={
           <button
@@ -501,6 +564,7 @@ function Filters(props: {
             onClick={() => {
               props.onStatusGroup(draftStatus);
               props.onType(draftType);
+              props.onDirection(draftDirection);
               props.onPreset(draftPreset);
               setOpen(false);
             }}
@@ -509,6 +573,7 @@ function Filters(props: {
           </button>
         }
       >
+        <RadioGroup legend="جهت تراکنش" name="payment-direction" value={draftDirection} options={PAYMENT_DIRECTION_FILTERS} onChange={setDraftDirection} />
         <RadioGroup legend="وضعیت" name="payment-status" value={draftStatus} options={PAYMENT_STATUS_FILTERS} onChange={setDraftStatus} />
         <RadioGroup legend="نوع تراکنش" name="payment-type" value={draftType} options={PAYMENT_TYPE_FILTERS} onChange={setDraftType} />
         <RadioGroup legend="بازه زمانی" name="payment-range" value={draftPreset} options={PAYMENT_RANGE_OPTIONS} onChange={setDraftPreset} />
@@ -608,7 +673,6 @@ function PaymentCards({ rows }: { rows: Payment[] }) {
   return (
     <ul className="space-y-3 lg:hidden">
       {rows.map((payment) => {
-        const pending = payment.status === 'PENDING';
         return (
           <li key={payment.id} className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-start justify-between gap-3">
@@ -616,7 +680,10 @@ function PaymentCards({ rows }: { rows: Payment[] }) {
               <PaymentStatusBadge status={payment.status} />
             </div>
             <p className="mt-3 text-sm text-gray-600">{paymentTypeMethodLabel(payment, PAYMENT_METHOD_LABELS)}</p>
-            <p className="mt-2 text-base font-bold text-gray-900">{formatMoney(payment.amount)}</p>
+            <p className={cn('mt-2 text-base font-bold', payment.direction === 'WITHDRAWAL' ? 'text-rose-600' : 'text-gray-900')}>
+              {payment.direction === 'WITHDRAWAL' ? '−' : ''}
+              {formatMoney(payment.amount)}
+            </p>
             <p className="mt-1 text-xs text-gray-500">{paymentStamp(payment.createdAt)}</p>
             {payment.orderId && payment.orderNumber ? (
               <Link
@@ -633,7 +700,7 @@ function PaymentCards({ rows }: { rows: Payment[] }) {
                 href={`/portal/payments/${payment.id}`}
                 className="inline-flex min-h-11 items-center gap-1 rounded-xl px-2 text-sm font-semibold text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
               >
-                {pending ? 'ویرایش فیش' : 'مشاهده رسید'}
+                {paymentRowCtaLabel(payment)}
                 <ChevronLeft className="h-4 w-4" aria-hidden />
               </Link>
             </div>
@@ -661,7 +728,6 @@ function PaymentTable({ rows }: { rows: Payment[] }) {
         </thead>
         <tbody>
           {rows.map((payment) => {
-            const pending = payment.status === 'PENDING';
             return (
               <tr key={payment.id} className="border-t border-gray-100">
                 <td className="px-3 py-4">
@@ -683,7 +749,10 @@ function PaymentTable({ rows }: { rows: Payment[] }) {
                     <span className="text-gray-400">—</span>
                   )}
                 </td>
-                <td className="px-3 py-4 text-sm font-bold text-gray-900">{formatMoney(payment.amount)}</td>
+                <td className={cn('px-3 py-4 text-sm font-bold', payment.direction === 'WITHDRAWAL' ? 'text-rose-600' : 'text-gray-900')}>
+                  {payment.direction === 'WITHDRAWAL' ? '−' : ''}
+                  {formatMoney(payment.amount)}
+                </td>
                 <td className="px-3 py-4">
                   <PaymentStatusBadge status={payment.status} />
                 </td>
@@ -692,7 +761,7 @@ function PaymentTable({ rows }: { rows: Payment[] }) {
                     href={`/portal/payments/${payment.id}`}
                     className="inline-flex min-h-11 items-center rounded-xl px-2 text-sm font-semibold text-emerald-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                   >
-                    {pending ? 'ویرایش فیش' : 'مشاهده رسید'}
+                    {paymentRowCtaLabel(payment)}
                   </Link>
                 </td>
               </tr>

@@ -2,21 +2,28 @@ import {
   Body,
   Controller,
   Get,
+  Header,
+  HttpCode,
+  HttpStatus,
   Param,
   Post,
   Query,
+  StreamableFile,
   UseGuards,
 } from '@nestjs/common';
+import Decimal from 'decimal.js';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../../common/decorators/permissions.decorator';
 import { CurrentUser, CurrentUserData } from '../../../../common/decorators/current-user.decorator';
 import { requireActorId } from '../../../../common/auth/require-actor-id';
+import { attachmentDisposition } from '../../../../common/storage/file-disposition';
 import { PickupService } from '../../application/pickup.service';
 import { PhysicalGoldPickupStatus } from '../../domain/constants/pickup-states';
 import {
   CancelPickupDto,
   CreatePickupDto,
+  PickupFeePreviewQueryDto,
   StaffMarkPreparingDto,
   StaffPickupNoteDto,
 } from '../../application/dto/create-pickup.dto';
@@ -47,10 +54,52 @@ export class PickupsController {
     });
   }
 
+  @Get('fee-preview')
+  @RequirePermissions('customer.pickup.create')
+  feePreview(@Query() query: PickupFeePreviewQueryDto, @CurrentUser() user: CurrentUserData) {
+    return this.pickupService.feePreview(
+      user.userId,
+      new Decimal(query.weightGrams),
+      query.priceSnapshotId,
+    );
+  }
+
   @Get(':id')
   @RequirePermissions('customer.pickup.read_own')
   getMine(@Param('id') id: string, @CurrentUser() user: CurrentUserData) {
     return this.pickupService.getMine(user.userId, id);
+  }
+
+  @Get(':id/pre-invoice')
+  @RequirePermissions('customer.pickup.read_own')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async downloadPreInvoice(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<StreamableFile> {
+    const file = await this.pickupService.downloadDocumentForCustomer(user.userId, id, 'PRE_INVOICE');
+    return new StreamableFile(file.buffer, {
+      type: file.mimeType,
+      disposition: attachmentDisposition(file.fileName),
+    });
+  }
+
+  @Get(':id/invoice')
+  @RequirePermissions('customer.pickup.read_own')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async downloadInvoice(
+    @Param('id') id: string,
+    @CurrentUser() user: CurrentUserData,
+  ): Promise<StreamableFile> {
+    const file = await this.pickupService.downloadDocumentForCustomer(user.userId, id, 'INVOICE');
+    return new StreamableFile(file.buffer, {
+      type: file.mimeType,
+      disposition: attachmentDisposition(file.fileName),
+    });
   }
 
   @Post(':id/cancel')
@@ -89,6 +138,32 @@ export class StaffPickupsController {
   @RequirePermissions('pickup.read')
   getOne(@Param('id') id: string) {
     return this.pickupService.getStaff(id);
+  }
+
+  @Get(':id/pre-invoice')
+  @RequirePermissions('pickup.read')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async downloadPreInvoice(@Param('id') id: string): Promise<StreamableFile> {
+    const file = await this.pickupService.downloadDocumentForStaff(id, 'PRE_INVOICE');
+    return new StreamableFile(file.buffer, {
+      type: file.mimeType,
+      disposition: attachmentDisposition(file.fileName),
+    });
+  }
+
+  @Get(':id/invoice')
+  @RequirePermissions('pickup.read')
+  @HttpCode(HttpStatus.OK)
+  @Header('Cache-Control', 'private, no-store')
+  @Header('X-Content-Type-Options', 'nosniff')
+  async downloadInvoice(@Param('id') id: string): Promise<StreamableFile> {
+    const file = await this.pickupService.downloadDocumentForStaff(id, 'INVOICE');
+    return new StreamableFile(file.buffer, {
+      type: file.mimeType,
+      disposition: attachmentDisposition(file.fileName),
+    });
   }
 
   @Post(':id/preparing')

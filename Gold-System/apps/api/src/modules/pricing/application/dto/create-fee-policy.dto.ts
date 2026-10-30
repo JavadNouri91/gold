@@ -14,8 +14,8 @@ import {
   CustomerType,
   FeeCalculationBase,
   FeeChargeCode,
+  FeeChargeSide,
   FeeMode,
-  TradeSide,
 } from '@gold/shared-types';
 
 export class CreateFeePolicyDto {
@@ -28,9 +28,9 @@ export class CreateFeePolicyDto {
   @IsEnum(CustomerType)
   customerType?: CustomerType | null;
 
-  @ApiProperty({ enum: TradeSide })
-  @IsEnum(TradeSide)
-  side: TradeSide;
+  @ApiProperty({ enum: FeeChargeSide })
+  @IsEnum(FeeChargeSide)
+  side: FeeChargeSide;
 
   @ApiPropertyOptional({ enum: FeeChargeCode, default: FeeChargeCode.TRANSACTION_FEE })
   @IsOptional()
@@ -86,10 +86,10 @@ export class UpdateFeePolicyDto {
   @IsEnum(CustomerType)
   customerType?: CustomerType | null;
 
-  @ApiPropertyOptional({ enum: TradeSide })
+  @ApiPropertyOptional({ enum: FeeChargeSide })
   @IsOptional()
-  @IsEnum(TradeSide)
-  side?: TradeSide;
+  @IsEnum(FeeChargeSide)
+  side?: FeeChargeSide;
 
   @ApiPropertyOptional()
   @IsOptional()

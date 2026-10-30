@@ -17,7 +17,7 @@ function isNotFound(error: unknown): boolean {
 }
 
 export default function DashboardPage() {
-  const { data: customer, error: customerError, isLoading: customerLoading } =
+  const { error: customerError, isLoading: customerLoading } =
     useSWR('customer/me', () => customerApi.getMe());
 
   const { data: price, isValidating: priceRefreshing, mutate: refreshPrice } =

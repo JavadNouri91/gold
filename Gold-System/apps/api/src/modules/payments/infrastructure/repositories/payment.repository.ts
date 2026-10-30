@@ -4,7 +4,7 @@ import Decimal from 'decimal.js';
 
 import { PrismaService } from '../../../../database/prisma.service';
 import { PaymentEntity, PaymentAllocationEntity } from '../../domain/entities/payment.entity';
-import { PaymentMethod, PaymentStatus } from '../../domain/constants/payment-methods';
+import { PaymentDirection, PaymentMethod, PaymentStatus } from '../../domain/constants/payment-methods';
 import { readPaymentSide } from '../../application/payment-ledger';
 
 /**
@@ -43,6 +43,7 @@ export interface StaffPaymentListOpts {
   customerId?: string;
   status?: PaymentStatus;
   statusGroup?: 'successful' | 'failed' | 'reversed' | 'submitted';
+  direction?: PaymentDirection;
   method?: PaymentMethod;
   from?: Date;
   to?: Date;
@@ -136,15 +137,16 @@ export class PaymentRepository {
 
   async summarizeLedger(
     where: Prisma.PaymentWhereInput,
-  ): Promise<Array<{ status: string; count: number; amount: string | null }>> {
+  ): Promise<Array<{ status: string; direction: string; count: number; amount: string | null }>> {
     const groups = await this.prisma.payment.groupBy({
-      by: ['status'],
+      by: ['status', 'direction'],
       where,
       _count: { _all: true },
       _sum: { amount: true },
     });
     return groups.map((group) => ({
       status: group.status,
+      direction: group.direction,
       count: group._count._all,
       amount: group._sum.amount == null ? null : group._sum.amount.toString(),
     }));
@@ -162,6 +164,7 @@ export class PaymentRepository {
     const filters: Prisma.PaymentWhereInput[] = [];
     if (opts.tradeId) filters.push({ tradeId: opts.tradeId });
     if (opts.customerId) filters.push({ customerId: opts.customerId });
+    if (opts.direction) filters.push({ direction: opts.direction });
     if (opts.method) filters.push({ method: opts.method });
     if (opts.from || opts.to) {
       filters.push({
@@ -270,6 +273,7 @@ export class PaymentRepository {
       idempotencyKey: string;
       tradeId: string | null;
       customerId: string;
+      direction?: PaymentDirection;
       method: PaymentMethod;
       amount: Decimal;
       currency: string;
@@ -277,6 +281,10 @@ export class PaymentRepository {
       receiptKey?: string | null;
       receiptMimeType?: string | null;
       receiptFileName?: string | null;
+      customerBankAccountId?: string | null;
+      destinationIban?: string | null;
+      destinationBankName?: string | null;
+      destinationAccountHolder?: string | null;
       notes: string | null;
       receivedAt: Date | null;
       recordedByUserId: string | null;
@@ -287,6 +295,7 @@ export class PaymentRepository {
         idempotencyKey: input.idempotencyKey,
         tradeId: input.tradeId,
         customerId: input.customerId,
+        direction: input.direction ?? PaymentDirection.DEPOSIT,
         method: input.method,
         amount: input.amount.toFixed(2),
         currency: input.currency,
@@ -294,6 +303,10 @@ export class PaymentRepository {
         receiptKey: input.receiptKey ?? null,
         receiptMimeType: input.receiptMimeType ?? null,
         receiptFileName: input.receiptFileName ?? null,
+        customerBankAccountId: input.customerBankAccountId ?? null,
+        destinationIban: input.destinationIban ?? null,
+        destinationBankName: input.destinationBankName ?? null,
+        destinationAccountHolder: input.destinationAccountHolder ?? null,
         notes: input.notes,
         receivedAt: input.receivedAt,
         recordedByUserId: input.recordedByUserId,
@@ -383,11 +396,16 @@ export class PaymentRepository {
     idempotencyKey: string;
     tradeId: string | null;
     customerId: string;
+    direction?: string;
     method: string;
     amount: Decimal | string | number | { toString(): string };
     currency: string;
     status: string;
     referenceNumber: string | null;
+    customerBankAccountId?: string | null;
+    destinationIban?: string | null;
+    destinationBankName?: string | null;
+    destinationAccountHolder?: string | null;
     notes: string | null;
     receivedAt: Date | null;
     recordedByUserId: string | null;
@@ -425,6 +443,7 @@ export class PaymentRepository {
     idempotencyKey: string;
     tradeId: string | null;
     customerId: string;
+    direction?: string;
     method: string;
     amount: Decimal | string | number | { toString(): string };
     currency: string;
@@ -433,6 +452,10 @@ export class PaymentRepository {
     receiptKey?: string | null;
     receiptMimeType?: string | null;
     receiptFileName?: string | null;
+    customerBankAccountId?: string | null;
+    destinationIban?: string | null;
+    destinationBankName?: string | null;
+    destinationAccountHolder?: string | null;
     notes: string | null;
     receivedAt: Date | null;
     recordedByUserId: string | null;
@@ -446,6 +469,7 @@ export class PaymentRepository {
       idempotencyKey: row.idempotencyKey,
       tradeId: row.tradeId,
       customerId: row.customerId,
+      direction: row.direction as PaymentDirection | undefined,
       method: row.method as PaymentMethod,
       amount: new Decimal(row.amount.toString()),
       currency: row.currency,
@@ -454,6 +478,10 @@ export class PaymentRepository {
       receiptKey: row.receiptKey ?? null,
       receiptMimeType: row.receiptMimeType ?? null,
       receiptFileName: row.receiptFileName ?? null,
+      customerBankAccountId: row.customerBankAccountId ?? null,
+      destinationIban: row.destinationIban ?? null,
+      destinationBankName: row.destinationBankName ?? null,
+      destinationAccountHolder: row.destinationAccountHolder ?? null,
       notes: row.notes,
       receivedAt: row.receivedAt,
       recordedByUserId: row.recordedByUserId,

@@ -6,34 +6,10 @@ import { FormEvent, useState } from 'react';
 import { Bell, Menu, Search } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
+import { buildBreadcrumbs } from '@/lib/breadcrumbs';
 import { Button } from '@/components/ui/button';
 import { MobileNumber } from '@/components/ui/mobile-input';
 import { ThemeCycleButton } from '@/components/theme-toggle';
-
-const LABELS: Record<string, string> = {
-  dashboard: 'داشبورد',
-  overview: 'نمای کلی',
-  customers: 'مشتریان',
-  kyc: 'احراز هویت',
-  orders: 'سفارش‌ها',
-  assignments: 'صف بررسی',
-  quotation: 'پیش‌فاکتور',
-  quotations: 'پیش‌فاکتور',
-  trades: 'معاملات',
-  payments: 'پرداخت‌ها',
-  settlements: 'تسویه',
-  ledger: 'دفاتر',
-  financial: 'دفتر مالی',
-  gold: 'دفتر طلا',
-  suppliers: 'تأمین‌کنندگان',
-  purchases: 'خریدها',
-  reports: 'گزارش‌ها',
-  audit: 'ممیزی',
-  notifications: 'اعلان‌ها',
-  pricing: 'قیمت‌گذاری',
-  admin: 'مدیریت',
-  'trading-management': 'برنامه معاملات',
-};
 
 export function DashboardTopbar({ onMenu }: { onMenu: () => void }) {
   const pathname = usePathname();
@@ -41,7 +17,7 @@ export function DashboardTopbar({ onMenu }: { onMenu: () => void }) {
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const canSearchCustomers = hasPermission(user?.permissions, 'customer.read');
-  const crumbs = pathname.split('/').filter(Boolean);
+  const crumbs = buildBreadcrumbs(pathname);
 
   const onSearch = (event: FormEvent) => {
     event.preventDefault();
@@ -58,17 +34,15 @@ export function DashboardTopbar({ onMenu }: { onMenu: () => void }) {
         </Button>
         <nav aria-label="مسیر" className="hidden min-w-0 flex-1 text-sm text-muted-foreground md:block">
           {crumbs.map((crumb, index) => {
-            const href = `/${crumbs.slice(0, index + 1).join('/')}`;
-            const label = LABELS[crumb] ?? crumb;
             const last = index === crumbs.length - 1;
             return (
-              <span key={href}>
+              <span key={crumb.href}>
                 {index > 0 ? <span className="px-1">/</span> : null}
                 {last ? (
-                  <span className="font-medium text-foreground">{label}</span>
+                  <span className="font-medium text-foreground">{crumb.label}</span>
                 ) : (
-                  <Link href={href} className="hover:text-foreground">
-                    {label}
+                  <Link href={crumb.href} className="hover:text-foreground">
+                    {crumb.label}
                   </Link>
                 )}
               </span>

@@ -36,12 +36,12 @@ describe('role-based navigation', () => {
     expect(hrefs).toEqual(
       expect.arrayContaining([
         '/dashboard/payments',
-        '/dashboard/settlements',
         '/dashboard/ledger/financial',
         '/dashboard/audit',
       ]),
     );
     expect(hrefs).not.toContain('/dashboard/suppliers');
+    expect(hrefs).not.toContain('/dashboard/settlements');
   });
 
   it('lands an operator on the first permitted page', () => {

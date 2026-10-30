@@ -29,7 +29,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { NotificationService } from './application/notification.service';
 import { NotificationRepository } from './infrastructure/repositories/notification.repository';
 import { AuditService } from '../audit/application/audit.service';
-import { SMS_PROVIDER_TOKEN } from './infrastructure/providers/sms-provider.interface';
+import { SMS_PROVIDER_TOKEN } from '../sms/infrastructure/providers/sms-provider.interface';
 import { NotificationEntity } from './domain/entities/notification.entity';
 import {
   NotificationChannel,

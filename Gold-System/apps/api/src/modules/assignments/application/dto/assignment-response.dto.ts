@@ -20,6 +20,25 @@ export class AssignmentResponseDto {
   completedAt!: Date | null;
   createdAt!: Date;
   updatedAt!: Date;
+
+  // ─── Enrichment for the staff assignment list ───────────────────
+  // Populated by listAssignments (joined reads). Null on write responses.
+
+  /** Display name of the reviewer the order is assigned to. */
+  assignedToName?: string | null;
+  /** Display name of the operator who created the assignment. */
+  assignedByName?: string | null;
+
+  orderNumber?: string | null;
+  orderStatus?: string | null;
+  /** BUY/SELL as stored on the order item at creation time. */
+  side?: 'BUY' | 'SELL' | null;
+  weightGrams?: string | null;
+  totalAmountRial?: string | null;
+
+  customerId?: string | null;
+  customerName?: string | null;
+  customerNumber?: string | null;
 }
 
 /**
@@ -43,6 +62,8 @@ export class ReviewContextDto {
     weightGrams: string;
     purityRatio: string;
     customerType: string | null;
+    /** BUY/SELL as stored on the order item at creation time. */
+    side?: 'BUY' | 'SELL' | null;
     submittedAt: Date | null;
     createdAt: Date;
   };

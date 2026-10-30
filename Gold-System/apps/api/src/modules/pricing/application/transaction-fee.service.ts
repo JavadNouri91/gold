@@ -4,6 +4,7 @@ import {
   CustomerType,
   FeeCalculationBase,
   FeeChargeCode,
+  FeeChargeSide,
   FeeMode,
   TradeSide,
 } from '@gold/shared-types';
@@ -53,7 +54,12 @@ export class TransactionFeeService {
     side: TradeSide,
     bases: PricingBases,
   ): Promise<FeeBreakdown> {
-    const policy = await this.feeRepo.findActiveForType(customerType ?? null, side);
+    // BUY/SELL only — the PICKUP conversion fee is a separate charge (see PickupFeeService).
+    const policy = await this.feeRepo.findActiveForType(
+      customerType ?? null,
+      side as unknown as FeeChargeSide,
+      FeeChargeCode.TRANSACTION_FEE,
+    );
     const charges: ChargeLine[] = [];
 
     if (policy && policy.mode !== FeeMode.NONE && policy.enabled) {

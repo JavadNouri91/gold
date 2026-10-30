@@ -341,7 +341,15 @@ describe('TradesService', () => {
             $transaction: jest
               .fn()
               .mockImplementation((cb: (tx: unknown) => Promise<unknown>) => cb(fakeTx)),
-            customer: { findUnique: jest.fn().mockResolvedValue(null) },
+            customer: {
+              findUnique: jest.fn().mockResolvedValue(null),
+              findMany: jest.fn().mockResolvedValue([]),
+            },
+            order: {
+              findUnique: jest.fn().mockResolvedValue(null),
+              findMany: jest.fn().mockResolvedValue([]),
+            },
+            user: { findMany: jest.fn().mockResolvedValue([]) },
           },
         },
         {
@@ -354,6 +362,7 @@ describe('TradesService', () => {
             findByCustomerId: jest.fn(),
             nextTradeNumber: jest.fn(),
             createInTx: jest.fn(),
+            summary: jest.fn(),
           },
         },
         {
@@ -829,6 +838,52 @@ describe('TradesService', () => {
       expect(result.id).toBe(TRADE_ID);
     });
 
+    it('23b. staff getTrade enriches customer, order and confirmer name', async () => {
+      (tradeRepo.findById as jest.Mock).mockResolvedValue(makeTrade());
+      const prismaMock = prisma as unknown as {
+        customer: { findUnique: jest.Mock };
+        order: { findUnique: jest.Mock };
+        user: { findMany: jest.Mock };
+      };
+      prismaMock.customer.findUnique.mockResolvedValue({
+        customerNumber: 'CUST-000001',
+        firstName: 'Ali',
+        lastName: 'Hosseini',
+        mobile: '09121234567',
+      });
+      const orderCreatedAt = new Date('2026-10-01T10:00:00.000Z');
+      prismaMock.order.findUnique.mockResolvedValue({
+        orderNumber: ORDER_NUMBER,
+        status: 'COMPLETED',
+        createdAt: orderCreatedAt,
+      });
+      prismaMock.user.findMany.mockResolvedValue([{ id: ACTOR_USER_ID, name: 'Maryam Rezaei' }]);
+
+      const result = await service.getTrade(ACTOR_USER_ID, TRADE_ID, true);
+
+      expect(result.customerName).toBe('Ali Hosseini');
+      expect(result.customerNumber).toBe('CUST-000001');
+      expect(result.customerMobile).toBe('09121234567');
+      expect(result.orderNumber).toBe(ORDER_NUMBER);
+      expect(result.orderStatus).toBe('COMPLETED');
+      expect(result.orderCreatedAt).toEqual(orderCreatedAt);
+      expect(result.confirmedByName).toBe('Maryam Rezaei');
+      expect(result.reversedByName).toBeNull();
+    });
+
+    it('23c. customer getTrade does not leak staff enrichment', async () => {
+      (prisma.customer as unknown as { findUnique: jest.Mock }).findUnique = jest
+        .fn()
+        .mockResolvedValue({ id: CUSTOMER_ID });
+      (tradeRepo.findByIdForCustomer as jest.Mock).mockResolvedValue(makeTrade());
+
+      const result = await service.getTrade(CUSTOMER_USER_ID, TRADE_ID, false);
+
+      expect(result.confirmedByName).toBeNull();
+      expect(result.customerName).toBeNull();
+      expect(result.orderNumber).toBeNull();
+    });
+
     it('24. customer getTrade returns only own Trade', async () => {
       (prisma.customer as unknown as { findUnique: jest.Mock }).findUnique = jest
         .fn()
@@ -858,8 +913,98 @@ describe('TradesService', () => {
 
       const result = await service.listTrades(ACTOR_USER_ID, listDto, true);
 
-      expect(tradeRepo.findAll).toHaveBeenCalledWith({ page: 1, limit: 20, status: undefined });
+      expect(tradeRepo.findAll).toHaveBeenCalledWith({
+        page: 1,
+        limit: 20,
+        status: undefined,
+        side: undefined,
+        from: undefined,
+        to: undefined,
+        q: undefined,
+      });
       expect(result.total).toBe(1);
+    });
+
+    it('26c. staff listTrades forwards side, date range and search filters to findAll', async () => {
+      (tradeRepo.findAll as jest.Mock).mockResolvedValue({ trades: [makeTrade()], total: 1 });
+
+      const dto: ListTradesDto = {
+        page: 1,
+        limit: 20,
+        status: TradeStatus.CONFIRMED,
+        side: 'SELL',
+        from: '2026-10-01',
+        to: '2026-10-31',
+        q: 'Ali',
+      };
+
+      await service.listTrades(ACTOR_USER_ID, dto, true);
+
+      expect(tradeRepo.findAll).toHaveBeenCalledWith({
+        page: 1,
+        limit: 20,
+        status: TradeStatus.CONFIRMED,
+        side: 'SELL',
+        from: '2026-10-01',
+        to: '2026-10-31',
+        q: 'Ali',
+      });
+    });
+
+    it('26d. customer listTrades never forwards staff-only filters', async () => {
+      (prisma.customer as unknown as { findUnique: jest.Mock }).findUnique = jest
+        .fn()
+        .mockResolvedValue({ id: CUSTOMER_ID });
+      (tradeRepo.findByCustomerId as jest.Mock).mockResolvedValue({
+        trades: [makeTrade()],
+        total: 1,
+      });
+
+      const dto: ListTradesDto = {
+        page: 1,
+        limit: 20,
+        side: 'SELL',
+        from: '2026-10-01',
+        to: '2026-10-31',
+        q: 'Ali',
+      };
+
+      await service.listTrades(CUSTOMER_USER_ID, dto, false);
+
+      expect(tradeRepo.findByCustomerId).toHaveBeenCalledWith(CUSTOMER_ID, { page: 1, limit: 20 });
+      expect(tradeRepo.findAll).not.toHaveBeenCalled();
+    });
+
+    it('26b. staff listTrades enriches customer name and side per row', async () => {
+      (tradeRepo.findAll as jest.Mock).mockResolvedValue({ trades: [makeTrade()], total: 1 });
+      const prismaMock = prisma as unknown as {
+        customer: { findMany: jest.Mock };
+        order: { findMany: jest.Mock };
+      };
+      prismaMock.customer.findMany.mockResolvedValue([
+        {
+          id: CUSTOMER_ID,
+          customerNumber: 'CUST-000001',
+          firstName: 'Ali',
+          lastName: 'Hosseini',
+          mobile: '09121234567',
+        },
+      ]);
+      prismaMock.order.findMany.mockResolvedValue([
+        {
+          id: ORDER_ID,
+          orderNumber: ORDER_NUMBER,
+          status: 'COMPLETED',
+          createdAt: new Date('2026-10-01T10:00:00.000Z'),
+          items: [{ metadata: { side: 'SELL' } }],
+        },
+      ]);
+
+      const result = await service.listTrades(ACTOR_USER_ID, listDto, true);
+
+      expect(result.trades[0]!.customerName).toBe('Ali Hosseini');
+      expect(result.trades[0]!.orderNumber).toBe(ORDER_NUMBER);
+      expect(result.trades[0]!.side).toBe('SELL');
     });
 
     it('27. customer listTrades calls findByCustomerId with resolved customerId', async () => {
@@ -875,6 +1020,80 @@ describe('TradesService', () => {
 
       expect(tradeRepo.findByCustomerId).toHaveBeenCalledWith(CUSTOMER_ID, { page: 1, limit: 20 });
       expect(result.total).toBe(1);
+    });
+  });
+
+  describe('getSummary', () => {
+    const sideRow = (side: string, count: number, weight: string, amount: string) => ({
+      side,
+      count,
+      weight,
+      amount,
+    });
+
+    it('aggregates counts, totals and side split with a BUY ratio', async () => {
+      (tradeRepo.summary as jest.Mock).mockResolvedValue({
+        byStatus: [
+          { status: 'CONFIRMED', count: 3 },
+          { status: 'REVERSED', count: 1 },
+        ],
+        sides: [
+          sideRow('BUY', 2, '20.000000', '200.00'),
+          sideRow('SELL', 1, '10.000000', '100.00'),
+        ],
+      });
+
+      const result = await service.getSummary();
+
+      expect(result.totalTrades).toBe(4);
+      expect(result.confirmedTrades).toBe(3);
+      expect(result.reversedTrades).toBe(1);
+      expect(result.totalWeightGrams).toBe('30.000000');
+      expect(result.totalTurnoverRial).toBe('300.00');
+      expect(result.buy).toEqual({ count: 2, weightGrams: '20.000000', turnoverRial: '200.00' });
+      expect(result.sell).toEqual({ count: 1, weightGrams: '10.000000', turnoverRial: '100.00' });
+      expect(result.buyRatioPercent).toBe(66.7);
+    });
+
+    it('rounds the BUY ratio to one decimal place (2 of 3)', async () => {
+      (tradeRepo.summary as jest.Mock).mockResolvedValue({
+        byStatus: [],
+        sides: [sideRow('BUY', 2, '2.000000', '20.00'), sideRow('SELL', 1, '1.000000', '10.00')],
+      });
+
+      const result = await service.getSummary();
+
+      expect(result.buyRatioPercent).toBe(66.7);
+    });
+
+    it('returns a null ratio when total weight is 0', async () => {
+      (tradeRepo.summary as jest.Mock).mockResolvedValue({
+        byStatus: [],
+        sides: [],
+      });
+
+      const result = await service.getSummary();
+
+      expect(result.totalWeightGrams).toBe('0.000000');
+      expect(result.totalTurnoverRial).toBe('0.00');
+      expect(result.buyRatioPercent).toBeNull();
+      expect(result.buy).toEqual({ count: 0, weightGrams: '0.000000', turnoverRial: '0.00' });
+      expect(result.sell).toEqual({ count: 0, weightGrams: '0.000000', turnoverRial: '0.00' });
+    });
+
+    it('derives totals from the non-REVERSED side rows only', async () => {
+      (tradeRepo.summary as jest.Mock).mockResolvedValue({
+        byStatus: [{ status: 'REVERSED', count: 5 }],
+        sides: [sideRow('BUY', 1, '7.500000', '75.00'), sideRow('SELL', 3, '2.500000', '25.00')],
+      });
+
+      const result = await service.getSummary();
+
+      expect(result.totalTrades).toBe(5);
+      expect(result.reversedTrades).toBe(5);
+      expect(result.confirmedTrades).toBe(0);
+      expect(result.totalWeightGrams).toBe('10.000000');
+      expect(result.totalTurnoverRial).toBe('100.00');
     });
   });
 

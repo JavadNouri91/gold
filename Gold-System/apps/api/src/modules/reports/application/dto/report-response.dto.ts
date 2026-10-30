@@ -18,6 +18,7 @@ export class DashboardSummaryDto {
   // ── Customers ──────────────────────────────────────────────────────────────
   totalCustomers: number;
   customersByType: Record<string, number>;
+  /** Customers whose latest required documents are waiting for a reviewer (KYC queue). */
   pendingKyc: number;
   activeCustomers: number;
   suspendedCustomers: number;
@@ -40,6 +41,10 @@ export class DashboardSummaryDto {
   // ── Payments / Settlement ───────────────────────────────────────────────────
   totalPaymentsRecorded: number;
   totalPaymentsValueRial: string | null;
+  /** PENDING payments awaiting accountant receipt validation. */
+  paymentsAwaitingReview: number;
+  /** Total value (Rial) of PENDING payments awaiting validation. */
+  paymentsAwaitingReviewValueRial: string | null;
   settledTrades: number;
   unsettledTrades: number;
 

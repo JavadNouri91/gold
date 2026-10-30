@@ -1,8 +1,12 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
+import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
 import { visibleNav } from '@/lib/nav';
+import { hasPermission } from '@/lib/permissions';
+import { internalKycApi } from '@/lib/internal-api';
+import { toPersianDigits } from '@/lib/utils';
 import { MobileNumber } from '@/components/ui/mobile-input';
 import { SidebarShell } from '@/components/navigation/sidebar-shell';
 import { SidebarBrand } from '@/components/navigation/sidebar-brand';
@@ -21,6 +25,17 @@ export function DashboardSidebar({
   const items = visibleNav(user?.permissions);
   const groups = Array.from(new Set(items.map((item) => item.group)));
 
+  const canReviewKyc =
+    hasPermission(user?.permissions, 'kyc.review') &&
+    hasPermission(user?.permissions, 'customer.read');
+  const { data: kycPending } = useSWR(
+    canReviewKyc ? ['kyc-pending-count'] : null,
+    () => internalKycApi.pendingCount(),
+    { refreshInterval: 60_000 },
+  );
+  const kycPendingCount = kycPending?.awaiting ?? 0;
+  const kycPendingLabel = kycPendingCount > 99 ? '۹۹+' : toPersianDigits(String(kycPendingCount));
+
   return (
     <SidebarShell open={open} onClose={onClose}>
       <SidebarBrand subtitle="داشبورد داخلی" onClose={onClose} />
@@ -33,6 +48,7 @@ export function DashboardSidebar({
               .filter((item) => item.group === group)
               .map((item, itemIndex) => {
                 const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+                const isKyc = item.href === '/dashboard/kyc';
                 return (
                   <SidebarNavItem
                     key={item.href}
@@ -42,6 +58,17 @@ export function DashboardSidebar({
                     iconClassName={staffIconTint(groupIndex * 3 + itemIndex)}
                     active={active}
                     onNavigate={onClose}
+                    trailing={
+                      isKyc && kycPendingCount > 0 ? (
+                        <span
+                          className="inline-flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full bg-rose-500 px-2 text-[11px] font-bold leading-none text-white"
+                          title={`${kycPendingLabel} پرونده در انتظار بررسی`}
+                          aria-label={`${kycPendingLabel} پرونده در انتظار بررسی`}
+                        >
+                          {kycPendingLabel}
+                        </span>
+                      ) : null
+                    }
                   />
                 );
               })}

@@ -5,8 +5,8 @@ import {
   CustomerType,
   FeeCalculationBase,
   FeeChargeCode,
+  FeeChargeSide,
   FeeMode,
-  TradeSide,
 } from '@gold/shared-types';
 import { PrismaService } from '../../../../database/prisma.service';
 import { FeePolicyEntity } from '../../domain/entities/fee-policy.entity';
@@ -28,7 +28,7 @@ export class FeePolicyRepository {
    */
   async findActiveForType(
     customerType: CustomerType | null | undefined,
-    side: TradeSide,
+    side: FeeChargeSide,
     code: FeeChargeCode = FeeChargeCode.TRANSACTION_FEE,
     now = new Date(),
   ): Promise<FeePolicyEntity | null> {
@@ -65,7 +65,7 @@ export class FeePolicyRepository {
 
   async list(params: {
     customerType?: CustomerType | null;
-    side?: TradeSide;
+    side?: FeeChargeSide;
     activeOnly?: boolean;
   } = {}): Promise<FeePolicyEntity[]> {
     const rows = await this.prisma.customerTypeFeePolicy.findMany({
@@ -81,7 +81,7 @@ export class FeePolicyRepository {
 
   async create(data: {
     customerType: CustomerType | null;
-    side: TradeSide;
+    side: FeeChargeSide;
     code: FeeChargeCode;
     labelFa: string;
     mode: FeeMode;
@@ -125,7 +125,7 @@ export class FeePolicyRepository {
       activeTo: Date | null;
       status: string;
       customerType: CustomerType | null;
-      side: TradeSide;
+      side: FeeChargeSide;
     }>,
   ): Promise<FeePolicyEntity> {
     const row = await this.prisma.customerTypeFeePolicy.update({
@@ -151,7 +151,7 @@ export class FeePolicyRepository {
     return new FeePolicyEntity({
       id: row.id,
       customerType: row.customerType as CustomerType | null,
-      side: row.side as TradeSide,
+      side: row.side as FeeChargeSide,
       code: row.code as FeeChargeCode,
       labelFa: row.labelFa,
       mode: row.mode as FeeMode,

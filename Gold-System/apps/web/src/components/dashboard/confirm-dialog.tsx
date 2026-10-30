@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Alert } from '@/components/ui/alert';
 import { formatFaNumber } from '@/lib/utils';
 
 export function ConfirmDialog({
@@ -17,6 +18,7 @@ export function ConfirmDialog({
   minReason = 5,
   initialReason = '',
   isLoading = false,
+  error = null,
   onClose,
   onConfirm,
 }: {
@@ -30,6 +32,8 @@ export function ConfirmDialog({
   minReason?: number;
   initialReason?: string;
   isLoading?: boolean;
+  /** Optional failure message rendered inside the still-open dialog. */
+  error?: string | null;
   onClose: () => void;
   onConfirm: (reason?: string) => void;
 }) {
@@ -60,6 +64,11 @@ export function ConfirmDialog({
             hint={`حداقل ${formatFaNumber(minReason)} نویسه`}
           />
         </div>
+      ) : null}
+      {error ? (
+        <Alert variant="error" className="mb-4">
+          {error}
+        </Alert>
       ) : null}
       <div className="flex justify-end gap-3">
         <Button variant="outline" onClick={onClose} disabled={isLoading}>

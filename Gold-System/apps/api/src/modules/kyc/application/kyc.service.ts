@@ -9,6 +9,7 @@ import {
 import { AuditService } from '../../audit/application/audit.service';
 import { CustomersService } from '../../customers/application/customers.service';
 import { CustomerRepository } from '../../customers/infrastructure/repositories/customer.repository';
+import { CustomerEntity } from '../../customers/domain/entities/customer.entity';
 import { NotificationService } from '../../notifications/application/notification.service';
 import { NotificationType } from '../../notifications/domain/constants/notification-types';
 import { BusinessRuleException } from '../../../common/exceptions/business-rule.exception';
@@ -16,7 +17,12 @@ import { toLatinDigits } from '../../../common/digits';
 import { KYCVerificationEntity } from '../domain/entities/kyc-verification.entity';
 import { CustomerDocumentEntity } from '../domain/entities/customer-document.entity';
 import { KycDecisionDto, KycDecision } from './dto/kyc-decision.dto';
-import { CustomerStatus, CustomerType, VerificationStatus } from '@gold/shared-types';
+import {
+  CustomerStatus,
+  CustomerAccountStatus,
+  CustomerType,
+  VerificationStatus,
+} from '@gold/shared-types';
 import {
   buildOwnKycView,
   deleteBlockReason,
@@ -316,6 +322,113 @@ export class KycService {
     return responses;
   }
 
+  /** Loads the customer/document/verification snapshot shared by the queue views. */
+  private async loadReviewSnapshot(): Promise<{
+    customers: CustomerEntity[];
+    latestByCustomer: Map<string, CustomerDocumentEntity[]>;
+    verificationByCustomer: Map<string, VerificationStatus>;
+  }> {
+    const [customers, latestDocuments, latestVerifications] = await Promise.all([
+      this.customerRepo.findAll(),
+      this.documentRepo.findLatestPerCustomerAndType(),
+      this.kycRepo.findLatestPerCustomer(),
+    ]);
+
+    const latestByCustomer = new Map<string, CustomerDocumentEntity[]>();
+    for (const document of latestDocuments) {
+      const current = latestByCustomer.get(document.customerId) ?? [];
+      current.push(document);
+      latestByCustomer.set(document.customerId, current);
+    }
+    const verificationByCustomer = new Map(
+      latestVerifications.map((verification) => [verification.customerId, verification.status]),
+    );
+
+    return { customers, latestByCustomer, verificationByCustomer };
+  }
+
+  /**
+   * Staff action: APPROVED → ACTIVE for a fully verified customer.
+   * Guarded by the documents themselves, so the button can never activate a
+   * customer whose required documents are still pending or rejected.
+   */
+  async activateCustomer(
+    customerId: string,
+    actorId: string,
+    ipAddress?: string,
+  ): Promise<{ id: string; status: CustomerStatus; accountStatus: CustomerAccountStatus }> {
+    const customer = await this.customerRepo.findById(customerId);
+    if (!customer) {
+      throw new NotFoundException(`Customer ${customerId} not found`);
+    }
+    if (customer.status === CustomerStatus.ACTIVE) {
+      throw new BusinessRuleException('CUSTOMER_ALREADY_ACTIVE', 'حساب این مشتری از قبل فعال است.');
+    }
+    if (
+      customer.status === CustomerStatus.SUSPENDED ||
+      customer.status === CustomerStatus.BLOCKED
+    ) {
+      throw new BusinessRuleException(
+        'CUSTOMER_ACTIVATION_NOT_ALLOWED',
+        'حساب این مشتری معلق یا مسدود است و فعال‌سازی آن از این مسیر مجاز نیست.',
+      );
+    }
+
+    const documents = await this.documentRepo.findByCustomerId(customerId);
+    if (!this.allRequiredDocumentsApproved(customer.type, documents)) {
+      throw new BusinessRuleException(
+        'KYC_DOCUMENTS_NOT_APPROVED',
+        'تا زمانی که همه مدارک الزامی تأیید نشوند، فعال‌سازی حساب ممکن نیست.',
+      );
+    }
+
+    // Repair the KYC case and customer status when documents were approved but
+    // the case never moved to APPROVED (legacy rows).
+    await this.verifyCustomerIfDocumentsComplete(customer, actorId, ipAddress);
+
+    const updated = await this.customerRepo.updateStatus(customerId, CustomerStatus.ACTIVE);
+    await this.customerRepo.updateAccountStatus(customerId, CustomerAccountStatus.ACTIVE);
+
+    await this.audit.log({
+      actorId,
+      action: 'CUSTOMER_ACTIVATED',
+      entityType: 'Customer',
+      entityId: customerId,
+      before: { status: customer.status },
+      after: { status: updated.status, type: updated.type, source: 'kyc_activation' },
+      reason: 'Activated after all required KYC documents were approved',
+      ipAddress,
+    });
+
+    return {
+      id: updated.id,
+      status: CustomerStatus.ACTIVE,
+      accountStatus: CustomerAccountStatus.ACTIVE,
+    };
+  }
+
+  /**
+   * Lightweight count for the dashboard sidebar badge.
+   * Mirrors the `awaiting` bucket of the review queue without paging or auditing.
+   */
+  async getPendingReviewCount(): Promise<{ awaiting: number }> {
+    const { customers, latestByCustomer, verificationByCustomer } = await this.loadReviewSnapshot();
+
+    let awaiting = 0;
+    for (const customer of customers) {
+      const requiredTypes = requiredKycTypes(customer.type).map((item) => item.type);
+      const latest = latestDocumentStatusByType(latestByCustomer.get(customer.id) ?? []);
+      const bucket = kycStaffBucket({
+        verificationStatus: verificationByCustomer.get(customer.id) ?? null,
+        requiredTypes,
+        latestStatusByType: latest,
+      });
+      if (bucket === 'awaiting') awaiting += 1;
+    }
+
+    return { awaiting };
+  }
+
   async getReviewQueue(
     params: {
       page?: number;
@@ -336,21 +449,7 @@ export class KycService {
     const limit = Number.isFinite(params.limit)
       ? Math.min(100, Math.max(1, params.limit ?? 20))
       : 20;
-    const [customers, latestDocuments, latestVerifications] = await Promise.all([
-      this.customerRepo.findAll(),
-      this.documentRepo.findLatestPerCustomerAndType(),
-      this.kycRepo.findLatestPerCustomer(),
-    ]);
-
-    const latestByCustomer = new Map<string, CustomerDocumentEntity[]>();
-    for (const document of latestDocuments) {
-      const current = latestByCustomer.get(document.customerId) ?? [];
-      current.push(document);
-      latestByCustomer.set(document.customerId, current);
-    }
-    const verificationByCustomer = new Map(
-      latestVerifications.map((verification) => [verification.customerId, verification.status]),
-    );
+    const { customers, latestByCustomer, verificationByCustomer } = await this.loadReviewSnapshot();
 
     const summary: KycReviewQueueSummary = { verified: 0, unverified: 0, awaiting: 0 };
     const search = toLatinDigits(params.search?.trim() ?? '').toLocaleLowerCase('fa-IR');
@@ -675,6 +774,23 @@ export class KycService {
     );
   }
 
+  /**
+   * Align the customer record with an approved KYC case.
+   * PENDING/REJECTED customers walk the normal state machine
+   * (→ UNDER_REVIEW → APPROVED); already-approved accounts are left alone.
+   */
+  private async ensureCustomerApproved(
+    customer: { id: string; status: CustomerStatus },
+    actorId: string,
+    ipAddress?: string,
+  ): Promise<void> {
+    if (PRESERVED_REVIEW_CUSTOMER_STATUSES.has(customer.status)) return;
+    if (customer.status !== CustomerStatus.UNDER_REVIEW) {
+      await this.customersService.markUnderReview(customer.id, actorId);
+    }
+    await this.customersService.approve(customer.id, actorId, ipAddress);
+  }
+
   /** When every required document is approved, persist the KYC case as verified. */
   private async verifyCustomerIfDocumentsComplete(
     customer: { id: string; type: string | null; status: CustomerStatus },
@@ -686,9 +802,7 @@ export class KycService {
 
     let verification = await this.kycRepo.findLatestByCustomerId(customer.id);
     if (verification?.status === VerificationStatus.APPROVED) {
-      if (!PRESERVED_REVIEW_CUSTOMER_STATUSES.has(customer.status)) {
-        await this.customersService.approve(customer.id, actorId, ipAddress);
-      }
+      await this.ensureCustomerApproved(customer, actorId, ipAddress);
       return verification;
     }
 
@@ -703,9 +817,7 @@ export class KycService {
       actorId,
     );
 
-    if (!PRESERVED_REVIEW_CUSTOMER_STATUSES.has(customer.status)) {
-      await this.customersService.approve(customer.id, actorId, ipAddress);
-    }
+    await this.ensureCustomerApproved(customer, actorId, ipAddress);
 
     await this.audit.log({
       actorId,

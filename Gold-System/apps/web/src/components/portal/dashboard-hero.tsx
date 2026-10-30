@@ -11,7 +11,7 @@ export function netWorthRial(
   position?: PortfolioPosition | null,
 ): string | null {
   const cash = account ? readAvailableCredit(account) : null;
-  const gold = isRegisteredHolding(position ?? null) ? position.marketValueRial : null;
+  const gold = position != null && isRegisteredHolding(position) ? position.marketValueRial : null;
   if (cash && gold) return addDecimal(cash, gold);
   return cash ?? gold ?? null;
 }
@@ -24,7 +24,7 @@ export function DashboardHero({
   position?: PortfolioPosition | null;
 }) {
   const total = netWorthRial(account, position);
-  const change = isRegisteredHolding(position ?? null) ? position.changePercent : null;
+  const change = position != null && isRegisteredHolding(position) ? position.changePercent : null;
   const pnl = parsePnl(change);
 
   return (

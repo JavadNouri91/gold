@@ -31,6 +31,7 @@ const { internalKycApi } = jest.requireMock('@/lib/internal-api') as {
     decideDocument: jest.Mock;
     reopenDocument: jest.Mock;
     decide: jest.Mock;
+    deleteDocument: jest.Mock;
   };
 };
 

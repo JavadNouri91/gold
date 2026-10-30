@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import {
   ArrowUpRight,
   CheckCircle2,
@@ -9,23 +10,27 @@ import {
   Wallet,
   X,
 } from 'lucide-react';
-import { Modal } from '@/components/ui/modal';
 import { nextPayaCycleLabel } from '@/lib/paya-cycle';
 import { tomanAmountWordsLabel } from '@/lib/toman-words';
-import {
-  DAILY_PAYA_LIMIT_RIAL,
-  DEMO_VERIFIED_BANK_ACCOUNTS,
-  type VerifiedBankAccount,
-} from '@/lib/verified-bank-accounts';
+import { DAILY_PAYA_LIMIT_RIAL } from '@/lib/verified-bank-accounts';
 import {
   exceedsAvailableBalance,
   percentOfAvailableToman,
   remainingAfterWithdrawRial,
 } from '@/lib/withdraw-amount';
 import {
+  ApiClientError,
+  customerApi,
+  paymentsApi,
+  type CustomerBankAccount,
+} from '@/lib/api';
+import { formatIbanDisplay } from '@/lib/iban-bank';
+import { BankLogo } from '@/components/portal/profile/bank-logo';
+import {
   cn,
   formatGroupedPersianInteger,
   formatMoney,
+  formatWholeMoney,
   toLatinDigits,
   tomanToRial,
   toPersianDigits,
@@ -35,6 +40,13 @@ const fieldClass =
   'mt-1 min-h-12 w-full rounded-xl border border-gray-300 bg-white px-3 text-base font-semibold text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600';
 
 type Step = 'form' | 'otp' | 'done';
+
+/**
+ * کلید موقت: ارسال واقعی پیامک کد امنیتی (SMS) غیرفعال است، ولی روند درخواست برداشت
+ * کامل کار می‌کند و کاربر بدون دریافت پیامک می‌تواند مرحله کد امنیتی را تأیید کند.
+ * برای فعال‌سازی ارسال پیامک، مقدار را true کنید.
+ */
+const SMS_DELIVERY_ENABLED = false;
 
 export function WithdrawRequestButton({
   availableRial,
@@ -92,12 +104,13 @@ export function WithdrawRequestModal({
   onRequested?: () => void;
 }) {
   const [step, setStep] = useState<Step>('form');
-  const [accountId, setAccountId] = useState(DEMO_VERIFIED_BANK_ACCOUNTS[0]?.id ?? '');
+  const [accounts, setAccounts] = useState<CustomerBankAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountId, setAccountId] = useState('');
   const [amount, setAmount] = useState('');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [addBankOpen, setAddBankOpen] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
 
@@ -108,7 +121,27 @@ export function WithdrawRequestModal({
     setOtp('');
     setError(null);
     setBusy(false);
-    setAccountId(DEMO_VERIFIED_BANK_ACCOUNTS[0]?.id ?? '');
+    setAccounts([]);
+    setAccountId('');
+
+    let cancelled = false;
+    setAccountsLoading(true);
+    void customerApi
+      .listMyBankAccounts()
+      .then((rows) => {
+        if (cancelled) return;
+        setAccounts(rows);
+        setAccountId(rows[0]?.id ?? '');
+      })
+      .catch(() => {
+        if (!cancelled) setError('دریافت شبای‌های تأییدشده انجام نشد.');
+      })
+      .finally(() => {
+        if (!cancelled) setAccountsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open]);
 
   useEffect(() => {
@@ -127,7 +160,7 @@ export function WithdrawRequestModal({
     availableRial && latinAmount && !exceeds
       ? remainingAfterWithdrawRial(availableRial, latinAmount)
       : null;
-  const selected = DEMO_VERIFIED_BANK_ACCOUNTS.find((account) => account.id === accountId) ?? null;
+  const selected = accounts.find((account) => account.id === accountId) ?? null;
   const canRequestOtp = Boolean(
     selected && latinAmount && !exceeds && Number(latinAmount) > 0 && !busy,
   );
@@ -161,16 +194,34 @@ export function WithdrawRequestModal({
   const confirmOtp = () => {
     setError(null);
     const code = toLatinDigits(otp).replace(/\D/g, '');
-    if (code.length < 5) {
+    // وقتی ارسال پیامک غیرفعال است، کدی به کاربر نمی‌رسد و تأیید بدون کد انجام می‌شود.
+    if (SMS_DELIVERY_ENABLED && code.length < 5) {
       setError('کد امنیتی پیامکی را کامل وارد کنید.');
       return;
     }
+    if (!selected) {
+      setError('حساب مقصد را انتخاب کنید.');
+      return;
+    }
+    const rialAmount = tomanToRial(latinAmount);
+    if (!rialAmount) {
+      setError('مبلغ را بررسی کنید.');
+      return;
+    }
     setBusy(true);
-    window.setTimeout(() => {
-      setBusy(false);
-      setStep('done');
-      onRequested?.();
-    }, 500);
+    void paymentsApi
+      .requestWithdrawal({ amount: rialAmount, bankAccountId: selected.id })
+      .then(() => {
+        setBusy(false);
+        setStep('done');
+        onRequested?.();
+      })
+      .catch((err: unknown) => {
+        setBusy(false);
+        setError(
+          err instanceof ApiClientError || err instanceof Error ? err.message : 'ثبت درخواست برداشت انجام نشد.',
+        );
+      });
   };
 
   if (!open) return null;
@@ -196,7 +247,7 @@ export function WithdrawRequestModal({
                 </h2>
               </div>
               <p className="mt-2 text-sm leading-7 text-gray-500">
-                مبلغ را به شبای تأییدشده بنام خودتان واریز کنید. تأیید نهایی با کد پیامکی انجام می‌شود.
+                مبلغ به شبای تأییدشده بنام خودتان واریز می‌شود. مبلغ درخواستی بلافاصله رزرو و از موجودی قابل برداشت کسر می‌گردد.
               </p>
             </div>
             <button
@@ -213,6 +264,8 @@ export function WithdrawRequestModal({
             {step === 'form' ? (
               <FormStep
                 availableRial={availableRial}
+                accounts={accounts}
+                accountsLoading={accountsLoading}
                 accountId={accountId}
                 onAccountId={setAccountId}
                 amount={amount}
@@ -225,7 +278,6 @@ export function WithdrawRequestModal({
                 remainingRial={remainingRial}
                 latinAmount={latinAmount}
                 onPercent={applyPercent}
-                onAddBank={() => setAddBankOpen(true)}
                 error={error}
               />
             ) : null}
@@ -262,8 +314,13 @@ export function WithdrawRequestModal({
                   className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                 >
                   <ShieldCheck className="h-5 w-5" aria-hidden />
-                  {busy ? 'در حال ارسال…' : 'تأیید و ارسال کد امنیتی پیامکی (OTP)'}
+                  {busy ? (SMS_DELIVERY_ENABLED ? 'در حال ارسال…' : 'در حال آماده‌سازی…') : 'تأیید و ارسال کد امنیتی پیامکی (OTP)'}
                 </button>
+                {SMS_DELIVERY_ENABLED ? null : (
+                  <p className="mt-2 text-xs leading-6 text-amber-700" role="status">
+                    ارسال پیامک موقتاً غیرفعال است؛ درخواست برداشت بدون دریافت پیامک ثبت می‌شود.
+                  </p>
+                )}
               </>
             ) : null}
 
@@ -279,12 +336,12 @@ export function WithdrawRequestModal({
                 </button>
                 <button
                   type="button"
-                  disabled={busy || toLatinDigits(otp).replace(/\D/g, '').length < 5}
+                  disabled={busy || (SMS_DELIVERY_ENABLED && toLatinDigits(otp).replace(/\D/g, '').length < 5)}
                   onClick={confirmOtp}
                   className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-45"
                 >
                   <CheckCircle2 className="h-5 w-5" aria-hidden />
-                  {busy ? 'در حال تأیید…' : 'تأیید نهایی برداشت'}
+                  {busy ? 'در حال ثبت…' : 'تأیید نهایی برداشت'}
                 </button>
               </div>
             ) : null}
@@ -301,27 +358,14 @@ export function WithdrawRequestModal({
           </footer>
         </div>
       </div>
-
-      <Modal open={addBankOpen} onClose={() => setAddBankOpen(false)} title="ثبت شماره شبای جدید">
-        <p className="text-sm leading-7 text-muted-foreground">
-          ثبت شبا از این صفحه هنوز به سرویس بانکی متصل نیست. برای معرفی حساب بنام خودتان با پشتیبانی تماس بگیرید.
-        </p>
-        <div className="mt-5 flex justify-end">
-          <button
-            type="button"
-            onClick={() => setAddBankOpen(false)}
-            className="inline-flex min-h-11 items-center rounded-xl border border-gray-300 px-4 text-sm font-semibold text-gray-700 hover:bg-gray-50"
-          >
-            بستن
-          </button>
-        </div>
-      </Modal>
     </>
   );
 }
 
 function FormStep({
   availableRial,
+  accounts,
+  accountsLoading,
   accountId,
   onAccountId,
   amount,
@@ -331,10 +375,11 @@ function FormStep({
   remainingRial,
   latinAmount,
   onPercent,
-  onAddBank,
   error,
 }: {
   availableRial?: string | null;
+  accounts: CustomerBankAccount[];
+  accountsLoading: boolean;
   accountId: string;
   onAccountId: (id: string) => void;
   amount: string;
@@ -344,7 +389,6 @@ function FormStep({
   remainingRial: string | null;
   latinAmount: string;
   onPercent: (percent: number) => void;
-  onAddBank: () => void;
   error: string | null;
 }) {
   const payaLabel = useMemo(() => nextPayaCycleLabel(), []);
@@ -359,7 +403,7 @@ function FormStep({
           <div className="min-w-0">
             <p className="text-sm font-semibold text-emerald-900">موجودی قابل برداشت کیف پول</p>
             <p className="mt-1 text-xl font-bold text-emerald-950">
-              {availableRial != null ? formatMoney(availableRial) : '—'}
+              {availableRial != null ? formatWholeMoney(availableRial) : '—'}
             </p>
             <p className="mt-2 inline-flex rounded-full bg-white/80 px-2.5 py-1 text-[11px] font-medium text-emerald-800">
               سقف برداشت روزانه پایا: {formatMoney(DAILY_PAYA_LIMIT_RIAL)}
@@ -370,24 +414,37 @@ function FormStep({
 
       <section>
         <h3 className="text-sm font-bold text-gray-900">حساب مقصد (تأییدشده)</h3>
-        <div className="mt-2 space-y-2" role="radiogroup" aria-label="حساب بانکی مقصد">
-          {DEMO_VERIFIED_BANK_ACCOUNTS.map((account) => (
-            <BankAccountOption
-              key={account.id}
-              account={account}
-              selected={accountId === account.id}
-              onSelect={() => onAccountId(account.id)}
-            />
-          ))}
+        <div className="mt-2">
+          {accountsLoading ? (
+            <p className="rounded-2xl border border-gray-200 bg-white px-4 py-6 text-center text-sm text-gray-500">
+              در حال دریافت شبای‌های تأییدشده…
+            </p>
+          ) : accounts.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-white px-4 py-6 text-center">
+              <p className="text-sm leading-7 text-gray-600">
+                هنوز شماره شبای تأییدشده‌ای ثبت نکرده‌اید.
+              </p>
+              <Link
+                href="/portal/profile"
+                className="mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 text-sm font-bold text-white hover:bg-emerald-700"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                ثبت شماره شبا در پروفایل
+              </Link>
+            </div>
+          ) : (
+            <div className="space-y-2" role="radiogroup" aria-label="حساب بانکی مقصد">
+              {accounts.map((account) => (
+                <BankAccountOption
+                  key={account.id}
+                  account={account}
+                  selected={accountId === account.id}
+                  onSelect={() => onAccountId(account.id)}
+                />
+              ))}
+            </div>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={onAddBank}
-          className="mt-2 inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-2xl border border-dashed border-gray-300 bg-white text-sm font-semibold text-gray-700 hover:border-emerald-500 hover:bg-emerald-50/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
-        >
-          <Plus className="h-4 w-4" aria-hidden />
-          ثبت شماره شبای جدید
-        </button>
       </section>
 
       <div>
@@ -455,7 +512,7 @@ function BankAccountOption({
   selected,
   onSelect,
 }: {
-  account: VerifiedBankAccount;
+  account: CustomerBankAccount;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -470,11 +527,11 @@ function BankAccountOption({
         selected ? 'border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500' : 'border-gray-200 bg-white hover:bg-gray-50',
       )}
     >
-      <BankLogo code={account.bankCode} />
+      <BankLogo iban={account.iban} />
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-bold text-gray-900">{account.bankName}</p>
+        <p className="text-sm font-bold text-gray-900">{account.bankName ?? 'حساب بانکی'}</p>
         <p className="mt-0.5 font-mono text-xs text-gray-500" dir="ltr">
-          {account.ibanMasked}
+          {formatIbanDisplay(account.iban)}
         </p>
         <p className="mt-0.5 text-xs text-gray-600">صاحب حساب: {account.accountHolder}</p>
       </div>
@@ -488,28 +545,6 @@ function BankAccountOption({
         {selected ? <span className="h-2 w-2 rounded-full bg-white" /> : null}
       </span>
     </button>
-  );
-}
-
-function BankLogo({ code }: { code: VerifiedBankAccount['bankCode'] }) {
-  if (code === 'SAMAN') {
-    return (
-      <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-blue-600 text-[10px] font-bold text-white">
-        سامان
-      </span>
-    );
-  }
-  if (code === 'MELLAT') {
-    return (
-      <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-rose-700 text-[10px] font-bold text-white">
-        ملت
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-600 text-[10px] font-bold text-white">
-      بانک
-    </span>
   );
 }
 
@@ -535,7 +570,7 @@ function InvoicePreview({
         </div>
         <Row
           label="باقیمانده کیف پول پس از برداشت"
-          value={remainingRial != null ? formatMoney(remainingRial) : '—'}
+          value={remainingRial != null ? formatWholeMoney(remainingRial) : '—'}
         />
       </dl>
     </section>
@@ -568,7 +603,7 @@ function OtpStep({
   onOtp,
   error,
 }: {
-  selected: VerifiedBankAccount | null;
+  selected: CustomerBankAccount | null;
   amountLabel: string;
   otp: string;
   onOtp: (value: string) => void;
@@ -577,7 +612,9 @@ function OtpStep({
   return (
     <div className="space-y-4">
       <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 px-4 py-3 text-sm leading-7 text-emerald-900">
-        کد امنیتی به شماره موبایل ثبت‌شده شما ارسال شد. برای تکمیل برداشت، کد را وارد کنید.
+        {SMS_DELIVERY_ENABLED
+          ? 'کد امنیتی به شماره موبایل ثبت‌شده شما ارسال شد. برای تکمیل برداشت، کد را وارد کنید.'
+          : 'ارسال پیامک موقتاً غیرفعال است؛ برای تکمیل درخواست برداشت، نیازی به وارد کردن کد نیست و می‌توانید مستقیم تأیید کنید.'}
       </div>
       <div className="rounded-2xl border border-gray-200 bg-white p-4 text-sm">
         <p className="text-gray-500">مبلغ</p>
@@ -586,13 +623,13 @@ function OtpStep({
           <>
             <p className="mt-3 text-gray-500">مقصد</p>
             <p className="mt-1 font-semibold text-gray-900">
-              {selected.bankName} — {selected.ibanMasked}
+              {selected.bankName ?? 'حساب بانکی'} — {formatIbanDisplay(selected.iban)}
             </p>
           </>
         ) : null}
       </div>
       <label className="block text-sm font-medium text-gray-600">
-        کد امنیتی پیامکی
+        {SMS_DELIVERY_ENABLED ? 'کد امنیتی پیامکی' : 'کد امنیتی پیامکی (اختیاری)'}
         <input
           className={cn(fieldClass, 'tracking-[0.35em]')}
           dir="ltr"
@@ -619,7 +656,7 @@ function DoneStep({
   selected,
 }: {
   amountLabel: string;
-  selected: VerifiedBankAccount | null;
+  selected: CustomerBankAccount | null;
 }) {
   return (
     <div className="py-6 text-center">
@@ -629,8 +666,8 @@ function DoneStep({
       <h3 className="mt-4 text-base font-bold text-gray-900">درخواست برداشت ثبت شد</h3>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-7 text-gray-500">
         مبلغ {amountLabel}
-        {selected ? ` به ${selected.bankName} (${selected.ibanMasked})` : ''} در صف سیکل پایا قرار گرفت و پس از
-        تأیید مالی واریز می‌شود.
+        {selected ? ` به ${selected.bankName ?? 'حساب بانکی'} (${formatIbanDisplay(selected.iban)})` : ''} رزرو شد و
+        پس از تأیید مالی در سیکل پایا واریز می‌شود.
       </p>
     </div>
   );

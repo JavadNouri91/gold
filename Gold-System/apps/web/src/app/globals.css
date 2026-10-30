@@ -238,3 +238,213 @@ html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
     box-shadow: none !important;
   }
 }
+
+/* ─── Printable receipt sheet (A5) ─────────────────────────────────────────
+   Shared by the trade receipt and the in-person gold pickup receipt. Printing
+   must reproduce the on-screen layout: only the document is printed, on an A5
+   sheet, with colours and the 5-up KPI row preserved. The named page keeps
+   other printouts (quotation, portal) on their default sheet size.
+   ───────────────────────────────────────────────────────────────────────── */
+@page receipt {
+  size: A5 portrait;
+  margin: 8mm;
+}
+
+/* KPI strips are 5-up by default; receipts with fewer metrics opt in. */
+.print-doc-metrics[data-kpi='3'] {
+  --print-kpi: 3;
+}
+.print-doc-metrics[data-kpi='4'] {
+  --print-kpi: 4;
+}
+
+@media print {
+  /* Modal print isolation: only the modal dialog reaches the paper. */
+  body[data-print-doc] > *:not(.print-doc-host) {
+    display: none !important;
+  }
+
+  body[data-print-doc] .print-doc-host {
+    position: static !important;
+    inset: auto !important;
+    display: block !important;
+    padding: 0 !important;
+    background: transparent !important;
+  }
+
+  body[data-print-doc] .print-doc-host > [aria-hidden='true'] {
+    display: none !important;
+  }
+
+  /* The receipt sheet itself: modal dialog or full detail page. */
+  .print-doc {
+    page: receipt;
+    width: 100% !important;
+    max-width: none !important;
+    max-height: none !important;
+    overflow: visible !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    color: #111827 !important;
+    font-size: 9pt !important;
+    line-height: 1.6 !important;
+  }
+
+  /* Keep badges, highlights and rules exactly as rendered on screen. */
+  .print-doc,
+  .print-doc * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .print-doc .print-screen-only {
+    display: none !important;
+  }
+
+  .print-doc .print-doc-card {
+    margin: 0 0 3mm !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+
+  /* Same KPI strip as the desktop view (5-up, or 3-up with `--kpi`). */
+  .print-doc .print-doc-metrics {
+    display: grid !important;
+    grid-template-columns: repeat(var(--print-kpi, 5), minmax(0, 1fr)) !important;
+  }
+
+  .print-doc .print-doc-metrics > * {
+    gap: 1.5mm !important;
+    padding: 2mm !important;
+    border: 0 !important;
+    border-inline-start: 1px solid #e5e7eb !important;
+  }
+
+  .print-doc .print-doc-metrics > *:first-child {
+    border-inline-start: 0 !important;
+  }
+
+  .print-doc .print-doc-metrics p {
+    margin: 0 !important;
+    line-height: 1.5 !important;
+  }
+
+  .print-doc .print-doc-metrics p:first-child {
+    font-size: 7pt !important;
+  }
+
+  .print-doc .print-doc-metrics p + p {
+    margin-top: 0.8mm !important;
+    font-size: 9pt !important;
+    font-weight: 700 !important;
+  }
+
+  .print-doc .print-doc-icon {
+    width: 6mm !important;
+    height: 6mm !important;
+  }
+
+  .print-doc .print-doc-icon svg {
+    width: 3.5mm !important;
+    height: 3.5mm !important;
+  }
+
+  .print-doc .print-doc-columns {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 3mm !important;
+  }
+
+  .print-doc .print-doc-card dl > div {
+    padding-block: 1.1mm !important;
+  }
+
+  /* The highlighted total row bleeds outside its card on screen. */
+  .print-doc .print-doc-total {
+    margin-inline: 0 !important;
+    margin-top: 1mm !important;
+    padding: 2mm !important;
+    border-radius: 1mm !important;
+  }
+
+  .print-doc .print-doc-card h3 {
+    padding: 0 0 1.5mm !important;
+    font-size: 10pt !important;
+  }
+
+  .print-doc .sr-only {
+    display: none !important;
+  }
+
+  .print-doc .print-doc-card > div {
+    padding: 0 2mm !important;
+  }
+
+  .print-doc .print-doc-card > div:first-child {
+    padding-top: 1.5mm !important;
+  }
+
+  .print-doc .print-doc-card > div:last-child {
+    padding-bottom: 1.5mm !important;
+  }
+
+  /* In-person pickup receipt: everything must land on a single A5 sheet, so the
+     cards, gaps and type scale down further than a generic document. */
+  .print-doc .pickup-receipt {
+    display: flex !important;
+    flex-direction: column;
+    /* A5 portrait (210mm) minus the 8mm top/bottom print margins. */
+    min-height: 190mm;
+    font-size: 8.5pt !important;
+    line-height: 1.5 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .print-doc .pickup-receipt > * + * {
+    margin-top: 2mm !important;
+  }
+
+  .print-doc .pickup-receipt .print-doc-card {
+    margin-bottom: 0 !important;
+    padding: 1.5mm 1mm !important;
+  }
+
+  .print-doc .pickup-receipt .print-doc-card > div {
+    padding: 0 1.5mm !important;
+  }
+
+  .print-doc .pickup-receipt .print-doc-card > div:first-child {
+    padding-top: 0.5mm !important;
+  }
+
+  .print-doc .pickup-receipt .print-doc-card > div:last-child {
+    padding-bottom: 0.5mm !important;
+  }
+
+  .print-doc .pickup-receipt .print-doc-card dl > div {
+    padding-block: 0.8mm !important;
+  }
+
+  /* Dates sit on one line instead of stacking in a narrow A5 column. */
+  .print-doc .pickup-receipt .pickup-receipt-meta {
+    grid-template-columns: repeat(auto-fit, minmax(28mm, 1fr)) !important;
+  }
+
+  .print-doc .pickup-receipt .pickup-signature {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* Signature area is anchored to the bottom of the single A5 page. */
+  .print-doc .pickup-receipt .pickup-signature-bottom {
+    margin-top: auto !important;
+    break-before: avoid;
+    page-break-before: avoid;
+  }
+}

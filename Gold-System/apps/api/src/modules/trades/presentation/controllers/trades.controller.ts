@@ -89,6 +89,19 @@ export class TradesController {
   }
 
   /**
+   * GET /trades/summary
+   * All-time aggregate for the hero cards (staff only).
+   *
+   * Declared before @Get(':id') so the static path is not swallowed.
+   */
+  @Get('summary')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('trade.read')
+  async getSummary() {
+    return this.tradesService.getSummary();
+  }
+
+  /**
    * GET /trades/:id
    * Get a single Trade by ID.
    *

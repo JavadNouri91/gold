@@ -19,12 +19,14 @@ import { ApiClientError } from '@/lib/api';
 import { PageHeader } from '@/components/dashboard/page-header';
 import { OrderQuotationActions } from '@/components/dashboard/order-quotation-actions';
 import { DataTable, type Column } from '@/components/dashboard/data-table';
+import { SideBadge } from '@/components/ui/side-badge';
 import { FilterBar } from '@/components/dashboard/filter-bar';
 import { ForbiddenNotice } from '@/components/dashboard/permission-gate';
 import { ApiErrorState } from '@/components/dashboard/states';
 import { StatusBadge } from '@/components/portal/status-badge';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
+import { MobileNumber } from '@/components/ui/mobile-input';
 import {
   ASSIGNMENT_STATUS_LABELS,
   ORDER_STATUS_FILTER_OPTIONS,
@@ -70,6 +72,66 @@ const HERO_TONE = {
 
 function isOrdersView(value: string | null): value is OrdersView {
   return value === 'all' || value === 'review' || value === 'assignments';
+}
+
+function CustomerCell({ order }: { order: StaffOrder }) {
+  const name = order.customerName?.trim();
+  return (
+    <div className="min-w-[8rem]">
+      <Link
+        href={`/dashboard/customers/${order.customerId}`}
+        className={cn(
+          'hover:text-gold-800',
+          name ? 'font-medium text-slate-900' : 'text-gold-800',
+        )}
+      >
+        {name || 'پرونده مشتری'}
+      </Link>
+      {order.customerNumber ? (
+        <p className="mt-0.5 text-xs tabular-nums text-muted-foreground" dir="ltr">
+          {toPersianDigits(order.customerNumber)}
+        </p>
+      ) : null}
+      {order.customerMobile ? (
+        <p className="mt-0.5 text-xs text-muted-foreground">
+          <MobileNumber value={order.customerMobile} />
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function AssignmentCustomerCell({ assignment }: { assignment: AssignmentRecord }) {
+  const name = assignment.customerName?.trim();
+  const id = assignment.customerId;
+  if (!id) return <span className="text-muted-foreground">—</span>;
+  return (
+    <div className="min-w-[8rem]">
+      <Link href={`/dashboard/customers/${id}`} className="font-medium text-slate-900 hover:text-gold-800">
+        {name || 'پرونده مشتری'}
+      </Link>
+      {assignment.customerNumber ? (
+        <p className="mt-0.5 text-xs tabular-nums text-muted-foreground" dir="ltr">
+          {toPersianDigits(assignment.customerNumber)}
+        </p>
+      ) : null}
+    </div>
+  );
+}
+
+function ReviewerCell({ assignment }: { assignment: AssignmentRecord }) {
+  const name = assignment.assignedToName?.trim();
+  const assignedBy = assignment.assignedByName?.trim();
+  return (
+    <div className="min-w-[8rem]">
+      <span className={cn('block', name ? 'font-medium text-slate-900' : 'text-muted-foreground')}>
+        {name || 'بدون نام'}
+      </span>
+      {assignedBy ? (
+        <span className="mt-0.5 block text-xs text-muted-foreground">تخصیص توسط {assignedBy}</span>
+      ) : null}
+    </div>
+  );
 }
 
 function RangeFilterFields({
@@ -271,8 +333,9 @@ export default function OrdersPage() {
     {
       key: 'customer',
       header: 'مشتری',
-      render: (row) => <Link href={`/dashboard/customers/${row.customerId}`}>پرونده</Link>,
+      render: (row) => <CustomerCell order={row} />,
     },
+    { key: 'side', header: 'نوع', render: (row) => <SideBadge side={row.side ?? null} /> },
     { key: 'date', header: 'تاریخ', render: (row) => formatDate(row.createdAt) },
     { key: 'weight', header: 'وزن', render: (row) => formatWeight(row.weightGrams) },
     { key: 'amount', header: 'مبلغ', render: (row) => formatMoney(row.totalAmountRial) },
@@ -304,6 +367,12 @@ export default function OrdersPage() {
         </Link>
       ),
     },
+    {
+      key: 'customer',
+      header: 'مشتری',
+      render: (row) => <CustomerCell order={row} />,
+    },
+    { key: 'side', header: 'نوع', render: (row) => <SideBadge side={row.side ?? null} /> },
     { key: 'weight', header: 'وزن', render: (row) => formatWeight(row.weightGrams) },
     { key: 'amount', header: 'مبلغ', render: (row) => formatMoney(row.totalAmountRial) },
     {
@@ -348,12 +417,33 @@ export default function OrdersPage() {
       key: 'order',
       header: 'سفارش',
       render: (row) => (
-        <Link className="text-gold-800" href={`/dashboard/orders/${row.orderId}`}>
-          مشاهده
-        </Link>
+        <div className="min-w-[7rem]">
+          <Link
+            className="font-medium text-gold-800"
+            href={`/dashboard/orders/${row.orderId}`}
+            dir="ltr"
+          >
+            {row.orderNumber ? toPersianDigits(row.orderNumber) : 'مشاهده'}
+          </Link>
+          {row.orderStatus ? (
+            <p className="mt-0.5">
+              <StatusBadge {...orderStatusPresentation(row.orderStatus)} />
+            </p>
+          ) : null}
+        </div>
       ),
     },
-    { key: 'to', header: 'بررسی‌کننده', render: (row) => <span dir="ltr">{toPersianDigits(row.assignedToId)}</span> },
+    {
+      key: 'customer',
+      header: 'مشتری',
+      render: (row) => <AssignmentCustomerCell assignment={row} />,
+    },
+    { key: 'side', header: 'نوع', render: (row) => <SideBadge side={row.side ?? null} /> },
+    {
+      key: 'to',
+      header: 'بررسی‌کننده',
+      render: (row) => <ReviewerCell assignment={row} />,
+    },
     {
       key: 'status',
       header: 'وضعیت',

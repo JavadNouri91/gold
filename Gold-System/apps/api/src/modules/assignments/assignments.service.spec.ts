@@ -690,5 +690,63 @@ describe('AssignmentsService', () => {
       expect(result.meta.limit).toBe(10);
       expect(result.meta.totalPages).toBe(10);
     });
+
+    it('attaches order, customer and reviewer display data to list rows', async () => {
+      const enrichedRow = {
+        ...mockAssignmentRow,
+        assignedTo: { name: 'رضا بررسی‌کننده' },
+        assignedBy: { name: 'مریم اپراتور' },
+        order: {
+          orderNumber: ORDER_NUMBER,
+          status: 'ASSIGNED',
+          weightGrams: new Decimal('2.500000'),
+          totalAmountRial: new Decimal('1500000.00'),
+          customerId: CUSTOMER_ID,
+          customer: {
+            firstName: 'سارا',
+            lastName: 'احمدی',
+            customerNumber: 'CUST-000001',
+          },
+          items: [{ metadata: { side: 'SELL' } }],
+        },
+      };
+      (prisma.$transaction as jest.Mock).mockResolvedValue([[enrichedRow], 1]);
+
+      const result = await service.listAssignments(ASSIGNEE_USER_ID, false, { page: 1, limit: 20 });
+      const row = result.assignments[0];
+
+      expect(row.assignedToName).toBe('رضا بررسی‌کننده');
+      expect(row.assignedByName).toBe('مریم اپراتور');
+      expect(row.orderNumber).toBe(ORDER_NUMBER);
+      expect(row.orderStatus).toBe('ASSIGNED');
+      expect(row.side).toBe('SELL');
+      expect(row.weightGrams).toBe('2.500000');
+      expect(row.totalAmountRial).toBe('1500000.00');
+      expect(row.customerId).toBe(CUSTOMER_ID);
+      expect(row.customerName).toBe('سارا احمدی');
+      expect(row.customerNumber).toBe('CUST-000001');
+    });
+
+    it('leaves side unclassified when the order item has no side', async () => {
+      const enrichedRow = {
+        ...mockAssignmentRow,
+        assignedTo: { name: 'رضا' },
+        assignedBy: { name: 'مریم' },
+        order: {
+          orderNumber: ORDER_NUMBER,
+          status: 'ASSIGNED',
+          weightGrams: new Decimal('1.000000'),
+          totalAmountRial: new Decimal('1000000.00'),
+          customerId: CUSTOMER_ID,
+          customer: { firstName: 'سارا', lastName: 'احمدی', customerNumber: 'CUST-1' },
+          items: [{ metadata: null }],
+        },
+      };
+      (prisma.$transaction as jest.Mock).mockResolvedValue([[enrichedRow], 1]);
+
+      const result = await service.listAssignments(ASSIGNEE_USER_ID, false, { page: 1, limit: 20 });
+
+      expect(result.assignments[0].side).toBeNull();
+    });
   });
 });

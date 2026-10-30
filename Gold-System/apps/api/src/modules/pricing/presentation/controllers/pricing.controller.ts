@@ -22,7 +22,7 @@ import {
 } from '../../application/dto/create-fee-policy.dto';
 import { RequirePermissions } from '../../../../common/decorators/permissions.decorator';
 import { CurrentUser, CurrentUserData } from '../../../../common/decorators/current-user.decorator';
-import { CustomerType, TradeSide } from '@gold/shared-types';
+import { CustomerType, FeeChargeSide } from '@gold/shared-types';
 
 @ApiTags('pricing')
 @ApiBearerAuth()
@@ -120,7 +120,7 @@ export class PricingController {
   @ApiOperation({ summary: 'List customer-type BUY/SELL transaction fee policies' })
   listFeePolicies(
     @Query('customerType') customerType?: CustomerType,
-    @Query('side') side?: TradeSide,
+    @Query('side') side?: FeeChargeSide,
   ) {
     return this.service.listFeePolicies({ customerType, side });
   }

@@ -644,6 +644,32 @@ handover date from the calendar (`scheduledPickupAt`). The customer sees that da
 On `DELIVERED`, post **GA-02 OUT** only (obligation fulfilled by physical handover).
 **GA-01** remains unchanged until open-questions.md #39 is resolved.
 
+### 15.5 Conversion fee (کارمزد تبدیل به فیزیکی) — DECIDED
+
+Converting melted gold into a physical bar is a **new chargeable service**, separate from the
+trade fee already paid when the gold was bought. The customer pays a conversion fee on top.
+
+- Configured in the same fees menu, per `CustomerType` (`HOUSEHOLD` / `PARTNER` / `VIP` /
+  null default) with a new `FeeChargeSide = PICKUP` and `FeeChargeCode = PICKUP_CONVERSION_FEE`.
+- Modes: `NONE`, `FIXED` (Rial), or `PERCENTAGE`. For `PERCENTAGE` the only allowed base is
+  `PICKUP_GOLD_VALUE` = per-gram price × weight at the moment of request.
+- **Reservation**: on `REQUESTED`, the fee is computed and **reserved from the customer's Rial
+  wallet** (`sourceType = PICKUP`); the immutable `PickupChargeSnapshot` records mode, rate,
+  base, amount, per-gram price and wallet balance after reservation.
+- **Release**: cancelling the pickup releases the reservation back to the wallet
+  (`status = RELEASED`).
+- **Settlement**: on `DELIVERED`, the reservation is consumed (`SETTLED`) and a financial
+  journal is posted — **FA-02 DR** (Customer Deposit) and **FA-16 CR** (Transaction Fee
+  Income) — with the idempotency key `PICKUP_FEE_${pickupId}`. This is consistent with §1.8,
+  which already routes fee income to FA-16.
+- **Documents**: an immutable JSON **pre-invoice** is generated at request time and an
+  **invoice** at delivery, stored under `pickups/{pickupNumber}/{pre-invoice|invoice}.json`.
+  They state explicitly: *«بهای طلا در معامله خرید قبلی تسویه شده؛ این سند فقط کارمزد
+  تبدیل/تحویل است.»* Purchase/trade documents are **not** regenerated or modified.
+- **Non-retroactive**: legacy requests carry `fee = 0` and `status = NONE`.
+- A policy change after a request does **not** alter that request's already-snapshotted fee.
+- No policy, a disabled policy, or `NONE` means zero fee and the previous behaviour.
+
 ---
 
 ## 16. DOCUMENT CHANGE LOG
@@ -654,6 +680,7 @@ On `DELIVERED`, post **GA-02 OUT** only (obligation fulfilled by physical handov
 | 2026-10-17 | §15 Physical gold pickup (in-store bar redemption) | Engineering |
 | 2026-10-17 | §15.3 scheduled in-store handover date on PREPARING | Engineering |
 | 2026-10-17 | §15.3 customer cancel only while REQUESTED | Engineering |
+| 2026-10-27 | §15.5 conversion fee: PICKUP side, wallet reserve/settle, FA-16, immutable pre-invoice/invoice | Engineering |
 
 ---
 

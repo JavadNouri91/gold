@@ -43,7 +43,6 @@ export class ReportsRepository {
     const [
       totalCustomers,
       customersByType,
-      pendingKyc,
       activeCustomers,
       suspendedCustomers,
       ordersByStatus,
@@ -51,6 +50,8 @@ export class ReportsRepository {
       tradeAgg,
       paymentAgg,
       paymentCount,
+      paymentsAwaitingReview,
+      paymentAwaitingAgg,
       settledTrades,
       unsettledTrades,
       recentTrades,
@@ -63,8 +64,6 @@ export class ReportsRepository {
       this.prisma.customer.count(),
 
       this.prisma.customer.groupBy({ by: ['type'], _count: { id: true } }),
-
-      this.prisma.kYCVerification.count({ where: { status: 'PENDING' } }),
 
       this.prisma.customer.count({ where: { status: 'ACTIVE' } }),
 
@@ -86,6 +85,15 @@ export class ReportsRepository {
 
       this.prisma.payment.count({
         where: { status: { not: 'REVERSED' } },
+      }),
+
+      this.prisma.payment.count({
+        where: { status: 'PENDING' },
+      }),
+
+      this.prisma.payment.aggregate({
+        where: { status: 'PENDING' },
+        _sum: { amount: true },
       }),
 
       this.prisma.settlement.count({ where: { status: 'SETTLED' } }),
@@ -147,7 +155,6 @@ export class ReportsRepository {
     return {
       totalCustomers,
       customersByType,
-      pendingKyc,
       activeCustomers,
       suspendedCustomers,
       ordersByStatus,
@@ -155,6 +162,8 @@ export class ReportsRepository {
       tradeAgg,
       paymentAgg,
       paymentCount,
+      paymentsAwaitingReview,
+      paymentAwaitingAgg,
       settledTrades,
       unsettledTrades,
       recentTrades,

@@ -191,7 +191,7 @@ export function KycManagementPage() {
         key: 'id',
         header: 'شناسه',
         render: (row) => (
-          <span className="font-mono text-xs font-semibold text-slate-700" dir="ltr">
+          <span className="font-sans text-xs font-semibold text-slate-700" dir="ltr">
             #{toPersianDigits(row.customerNumber)}
           </span>
         ),

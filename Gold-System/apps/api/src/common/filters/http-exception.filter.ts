@@ -9,6 +9,9 @@ import {
 import { Request, Response } from 'express';
 import { ApiResponse } from '@gold/shared-types';
 
+/** Any Persian/Arabic letter — used to pick a localized validation message. */
+const PERSIAN_TEXT = /[\u0600-\u06FF]/;
+
 @Catch()
 export class HttpExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(HttpExceptionFilter.name);
@@ -42,8 +45,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
 
         // Handle class-validator array of messages
         if (Array.isArray(resp['message'])) {
-          message = 'Validation failed';
-          details = { errors: resp['message'] };
+          const messages = resp['message'].map((entry) => String(entry));
+          // Prefer a localized message so the UI never shows the opaque English fallback.
+          message = messages.find((entry) => PERSIAN_TEXT.test(entry)) ?? 'Validation failed';
+          details = { errors: messages };
         }
       }
     } else if (exception instanceof Error) {

@@ -14,6 +14,7 @@ import Decimal from 'decimal.js';
 
 export type PaymentStatusGroup = 'successful' | 'failed' | 'reversed' | 'submitted';
 export type PaymentLedgerType = 'BUY' | 'SELL' | 'OTHER';
+export type PaymentDirection = 'DEPOSIT' | 'WITHDRAWAL';
 
 export const SUCCESSFUL_PAYMENT_STATUSES = ['VALIDATED', 'ALLOCATED', 'COMPLETED'] as const;
 
@@ -24,6 +25,7 @@ export interface LedgerQueryInput {
   to?: string;
   statusGroup?: PaymentStatusGroup;
   type?: PaymentLedgerType;
+  direction?: PaymentDirection;
   q?: string;
 }
 
@@ -32,6 +34,7 @@ export interface LedgerBounds {
   to: Date;
   statusGroup?: PaymentStatusGroup;
   type?: PaymentLedgerType;
+  direction?: PaymentDirection;
   q?: string;
 }
 
@@ -53,6 +56,7 @@ export function parseLedgerBounds(query: LedgerQueryInput): LedgerBounds {
     to,
     statusGroup: query.statusGroup,
     type: query.type,
+    direction: query.direction,
     q: q ? q.slice(0, 80) : undefined,
   };
 }
@@ -100,10 +104,16 @@ export function customerLedgerWhere(
   ];
   if (status) filters.push({ status });
 
+  if (bounds.direction) {
+    filters.push({ direction: bounds.direction });
+  }
+
   if (bounds.type === 'BUY' || bounds.type === 'SELL') {
     filters.push(sideClause(bounds.type));
   } else if (bounds.type === 'OTHER') {
+    // "OTHER" is a deposit category; withdrawals are always excluded here.
     filters.push({
+      direction: 'DEPOSIT',
       OR: [{ tradeId: null }, { NOT: { OR: [sideClause('BUY'), sideClause('SELL')] } }],
     });
   }
@@ -134,6 +144,10 @@ export interface PaymentSummary {
   reversed: AmountCount;
   /** Receipts / payments waiting for accountant review (PENDING). */
   submitted: AmountCount;
+  /** Successful withdrawals (VALIDATED). */
+  withdrawn: AmountCount;
+  /** Withdrawals waiting for accountant approval (PENDING). */
+  pendingWithdrawal: AmountCount;
   hasAny: boolean;
 }
 
@@ -151,25 +165,38 @@ function publishBucket(bucket: SummaryBucket): AmountCount {
 }
 
 export function foldPaymentSummary(
-  groups: Array<{ status: string; count: number; amount: string | null }>,
+  groups: Array<{ status: string; direction: string; count: number; amount: string | null }>,
   hasAny: boolean,
 ): PaymentSummary {
   const successful = emptyBucket();
   const failed = emptyBucket();
   const reversed = emptyBucket();
   const submitted = emptyBucket();
+  const withdrawn = emptyBucket();
+  const pendingWithdrawal = emptyBucket();
 
   for (const group of groups) {
     const amount = new Decimal(group.amount && group.amount !== '' ? group.amount : 0);
-    const target = (SUCCESSFUL_PAYMENT_STATUSES as readonly string[]).includes(group.status)
-      ? successful
-      : group.status === 'FAILED'
-        ? failed
-        : group.status === 'REVERSED'
-          ? reversed
-          : group.status === 'PENDING'
-            ? submitted
-            : null;
+    const isWithdrawal = group.direction === 'WITHDRAWAL';
+
+    let target: SummaryBucket | null = null;
+    if (isWithdrawal) {
+      target = (SUCCESSFUL_PAYMENT_STATUSES as readonly string[]).includes(group.status)
+        ? withdrawn
+        : group.status === 'PENDING'
+          ? pendingWithdrawal
+          : null;
+    } else {
+      target = (SUCCESSFUL_PAYMENT_STATUSES as readonly string[]).includes(group.status)
+        ? successful
+        : group.status === 'FAILED'
+          ? failed
+          : group.status === 'REVERSED'
+            ? reversed
+            : group.status === 'PENDING'
+              ? submitted
+              : null;
+    }
     if (!target) continue;
     target.count += group.count;
     target.amount = target.amount.plus(amount);
@@ -184,6 +211,8 @@ export function foldPaymentSummary(
     failed: publishBucket(failed),
     reversed: publishBucket(reversed),
     submitted: publishBucket(submitted),
+    withdrawn: publishBucket(withdrawn),
+    pendingWithdrawal: publishBucket(pendingWithdrawal),
     hasAny,
   };
 }

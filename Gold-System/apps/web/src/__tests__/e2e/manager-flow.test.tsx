@@ -23,7 +23,7 @@ jest.mock('@/lib/internal-api', () => ({
   reportsApi: { dashboard: jest.fn() },
   internalCustomersApi: { list: jest.fn() },
   internalOrdersApi: { list: jest.fn() },
-  internalTradesApi: { list: jest.fn() },
+  internalTradesApi: { list: jest.fn(), summary: jest.fn() },
   tradesFromList: (result: { trades?: unknown[] } | undefined) => result?.trades ?? [],
 }));
 
@@ -31,7 +31,7 @@ const api = jest.requireMock('@/lib/internal-api') as {
   reportsApi: { dashboard: jest.Mock };
   internalCustomersApi: { list: jest.Mock };
   internalOrdersApi: { list: jest.Mock };
-  internalTradesApi: { list: jest.Mock };
+  internalTradesApi: { list: jest.Mock; summary: jest.Mock };
 };
 
 const MANAGER = [
@@ -65,6 +65,8 @@ describe('manager flow', () => {
       totalTradeWeightGrams: '1.000000',
       totalPaymentsRecorded: 0,
       totalPaymentsValueRial: '0.00',
+      paymentsAwaitingReview: 2,
+      paymentsAwaitingReviewValueRial: '3000000.00',
       settledTrades: 0,
       unsettledTrades: 1,
       supplierPayableRial: '0.00',
@@ -138,6 +140,16 @@ describe('manager flow', () => {
       page: 1,
       limit: 20,
     });
+    api.internalTradesApi.summary.mockResolvedValue({
+      totalTrades: 1,
+      confirmedTrades: 1,
+      reversedTrades: 0,
+      totalWeightGrams: '1.000000',
+      totalTurnoverRial: '10.00',
+      buy: { count: 1, weightGrams: '1.000000', turnoverRial: '10.00' },
+      sell: { count: 0, weightGrams: '0.000000', turnoverRial: '0.00' },
+      buyRatioPercent: 100,
+    });
   });
 
   it('moves from the management home through customer, order, trade and reports', async () => {
@@ -147,6 +159,10 @@ describe('manager flow', () => {
     expect(screen.getByRole('link', { name: /بررسی سفارش‌ها/ })).toHaveAttribute('href', '/dashboard/orders?view=review');
     expect(screen.getByRole('link', { name: /بررسی مدارک/ })).toHaveAttribute('href', '/dashboard/kyc');
     expect(screen.getByRole('link', { name: /معاملات تسویه‌نشده/ })).toHaveAttribute('href', '/dashboard/settlements');
+    expect(screen.getByRole('link', { name: /بررسی پرداخت‌ها/ })).toHaveAttribute(
+      'href',
+      '/dashboard/payments?statusGroup=submitted',
+    );
     expect(screen.getByRole('link', { name: 'همه معاملات' })).toHaveAttribute('href', '/dashboard/trades');
     expect(screen.queryByText(/گزارش تجمیعی سرور/)).not.toBeInTheDocument();
     unmount();
