@@ -16,7 +16,7 @@ import type { ApiResponse, PaginationMeta } from '@gold/shared-types';
 
 function configuredApiOrigin(): string {
   const raw =
-    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'http://localhost:4001';
+    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'https://zargoldonline.ir/api/v1';
   return raw.replace(/\/api\/v1\/?$/, '');
 }
 

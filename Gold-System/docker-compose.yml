@@ -52,12 +52,15 @@ services:
       context: .
       dockerfile: docker/Dockerfile.web
       target: production
+      args:
+        NEXT_PUBLIC_API_URL: https://zargoldonline.ir/api/v1
     container_name: gold_web
     restart: unless-stopped
     env_file:
       - .env
     environment:
       PORT: 4000
+      NEXT_PUBLIC_API_URL: https://zargoldonline.ir/api/v1
     ports:
       - '4000:4000'
     depends_on:
