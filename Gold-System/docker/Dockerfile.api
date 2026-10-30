@@ -1,4 +1,5 @@
 FROM node:20-alpine AS base
+RUN apk add --no-cache openssl libc6-compat
 RUN npm install -g pnpm
 
 WORKDIR /app
@@ -18,14 +19,23 @@ CMD ["pnpm", "--filter", "@gold/api", "dev"]
 # Build stage
 FROM base AS build
 COPY . .
+RUN pnpm --filter @gold/shared-types build
+RUN pnpm prisma generate --schema=./prisma/schema.prisma
 RUN pnpm --filter @gold/api build
 
 # Production stage
 FROM node:20-alpine AS production
+RUN apk add --no-cache openssl libc6-compat
 RUN npm install -g pnpm
 WORKDIR /app
-COPY --from=build /app/apps/api/dist ./apps/api/dist
+
+# Copy root workspace definition files
+COPY --from=build /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml* ./
+COPY --from=build /app/apps/api ./apps/api
+COPY --from=build /app/packages ./packages
+COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/apps/api/package.json ./apps/api/
+
+WORKDIR /app/apps/api
 EXPOSE 3001
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["node", "dist/main.js"]

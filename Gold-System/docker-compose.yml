@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   # ─────────────────────────────────────────
   # PostgreSQL — primary database
@@ -29,24 +27,22 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+      target: production
     container_name: gold_api
     restart: unless-stopped
     env_file:
       - .env
     environment:
-      # Must match the uploads_data volume mount below.
+      PORT: 4001
       STORAGE_LOCAL_ROOT: /opt/gold/data/uploads
+      DATABASE_URL: postgresql://gold_user:gold_pass@postgres:5432/gold_db?schema=public
     ports:
       - '4001:4001'
     depends_on:
       postgres:
         condition: service_healthy
     volumes:
-      - ./apps/api:/app/apps/api
-      - /app/node_modules
-      # Private uploaded files — kept inside the container, never published.
       - uploads_data:/opt/gold/data/uploads
-    command: pnpm --filter @gold/api dev
 
   # ─────────────────────────────────────────
   # Next.js Web
@@ -55,17 +51,17 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.web
+      target: production
     container_name: gold_web
     restart: unless-stopped
     env_file:
       - .env
+    environment:
+      PORT: 4000
     ports:
       - '4000:4000'
     depends_on:
       - api
-    volumes:
-      - ./apps/web:/app/apps/web
-      - /app/node_modules
 
 volumes:
   postgres_data:

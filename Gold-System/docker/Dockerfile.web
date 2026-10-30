@@ -18,15 +18,16 @@ CMD ["pnpm", "--filter", "@gold/web", "dev"]
 # Build stage
 FROM base AS build
 COPY . .
+RUN pnpm --filter @gold/shared-types build
 RUN pnpm --filter @gold/web build
 
 # Production stage
 FROM node:20-alpine AS production
 RUN npm install -g pnpm
 WORKDIR /app
-COPY --from=build /app/apps/web/.next ./.next
-COPY --from=build /app/apps/web/public ./public
-COPY --from=build /app/apps/web/package.json ./
+COPY --from=build /app/package.json /app/pnpm-workspace.yaml /app/pnpm-lock.yaml* ./
+COPY --from=build /app/apps/web ./apps/web
+COPY --from=build /app/packages ./packages
 COPY --from=build /app/node_modules ./node_modules
 EXPOSE 3000
-CMD ["pnpm", "start"]
+CMD ["pnpm", "--filter", "@gold/web", "start"]

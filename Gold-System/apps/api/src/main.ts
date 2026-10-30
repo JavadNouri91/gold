@@ -23,10 +23,17 @@ async function bootstrap(): Promise<void> {
   app.use(compression());
 
   // ─── CORS ────────────────────────────────────────────────────
-  const corsOrigins = config.get<string[]>('app.corsOrigins', [
+  const configuredCors = config.get<string[]>('app.corsOrigins') || [];
+  const corsOrigins = [
     'http://localhost:4000',
     'http://127.0.0.1:4000',
-  ]);
+    'http://zargoldonline.ir',
+    'https://zargoldonline.ir',
+    'http://www.zargoldonline.ir',
+    'https://www.zargoldonline.ir',
+    ...(Array.isArray(configuredCors) ? configuredCors : [configuredCors]),
+  ].filter(Boolean);
+
   app.enableCors({
     origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -64,10 +71,13 @@ async function bootstrap(): Promise<void> {
     SwaggerModule.setup('api/docs', app, document);
   }
 
-  const port = config.get<number>('app.port', 4001);
+  // ─── Port & Host binding ─────────────────────────────────────
+  const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : undefined;
+  const port = envPort || config.get<number>('app.port') || 4001;
+
   await app.listen(port, '0.0.0.0');
-  console.log(`🟡 Gold System API running on http://localhost:${port}/api/v1`);
-  console.log(`📖 Swagger docs: http://localhost:${port}/api/docs`);
+  console.log(`🟡 Gold System API running on http://0.0.0.0:${port}/api/v1`);
+  console.log(`📖 Swagger docs: http://0.0.0.0:${port}/api/docs`);
 }
 
 bootstrap();
