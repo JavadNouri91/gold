@@ -7,7 +7,6 @@ import { visibleNav } from '@/lib/nav';
 import { hasPermission } from '@/lib/permissions';
 import { internalKycApi } from '@/lib/internal-api';
 import { toPersianDigits } from '@/lib/utils';
-import { MobileNumber } from '@/components/ui/mobile-input';
 import { SidebarShell } from '@/components/navigation/sidebar-shell';
 import { SidebarBrand } from '@/components/navigation/sidebar-brand';
 import { SidebarNavItem, staffIconTint } from '@/components/navigation/sidebar-nav-item';
@@ -82,7 +81,6 @@ export function DashboardSidebar({
             window.location.href = '/dashboard/login';
           })
         }
-        footer={user ? <MobileNumber value={user.mobile} /> : null}
       />
     </SidebarShell>
   );

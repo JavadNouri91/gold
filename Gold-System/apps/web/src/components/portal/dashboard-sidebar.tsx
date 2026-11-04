@@ -24,7 +24,6 @@ import { customerApi } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
 import { customerTypeBadgeLabel, CUSTOMER_ACCOUNT_STATUS_LABELS, cn } from '@/lib/utils';
-import { MobileNumber } from '@/components/ui/mobile-input';
 import { Button } from '@/components/ui/button';
 import { SidebarShell } from '@/components/navigation/sidebar-shell';
 import { SidebarBrand } from '@/components/navigation/sidebar-brand';
@@ -314,7 +313,6 @@ export function DashboardSidebar({
 
           <SidebarLogout
             onClick={() => void logout()}
-            footer={user ? <MobileNumber value={user.mobile} /> : null}
           />
         </div>
 
@@ -419,11 +417,6 @@ export function DashboardSidebar({
             </nav>
 
             <div className="mt-auto border-t border-slate-100 px-4 py-4">
-              {user ? (
-                <div className="mb-2 truncate px-1 text-xs text-muted-foreground">
-                  <MobileNumber value={user.mobile} />
-                </div>
-              ) : null}
               <button
                 type="button"
                 onClick={() => {
