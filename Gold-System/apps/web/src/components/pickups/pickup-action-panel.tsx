@@ -1,19 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import {
-  Calendar,
-  CheckCircle2,
-  Clock,
-  Info,
-  Printer,
-  UserRound,
-} from 'lucide-react';
+import { Calendar, CheckCircle2, Clock, Info, Printer, UserRound } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Alert } from '@/components/ui/alert';
 import { DatePickerJalali } from '@/components/ui/date-picker-jalali';
 import { Textarea } from '@/components/ui/textarea';
+import { CancelPickupModal } from '@/components/pickups/CancelPickupModal';
 import { ConfirmDialog } from '@/components/dashboard/confirm-dialog';
 import { PickupReceiptModal } from '@/components/pickups/pickup-receipt-modal';
 import { staffPickupsApi } from '@/lib/internal-api';
@@ -34,12 +28,16 @@ export function PickupActionPanel({
   canDeliver,
   canCancel,
   onChanged,
+  onCancelled,
+  embedded = false,
 }: {
   pickup: PhysicalGoldPickup;
   canPrepare: boolean;
   canDeliver: boolean;
   canCancel: boolean;
+  embedded?: boolean;
   onChanged: () => void;
+  onCancelled?: (pickup: PhysicalGoldPickup) => void;
 }) {
   const [scheduledPickupAt, setScheduledPickupAt] = useState('');
   const [staffNote, setStaffNote] = useState('');
@@ -49,7 +47,6 @@ export function PickupActionPanel({
   const [actionError, setActionError] = useState<string | null>(null);
   const [deliverOpen, setDeliverOpen] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
-  const [cancelError, setCancelError] = useState<string | null>(null);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptPrint, setReceiptPrint] = useState(false);
 
@@ -98,27 +95,17 @@ export function PickupActionPanel({
     );
   }
 
-  async function onCancel(reason?: string) {
-    if (!reason || !reason.trim()) return;
-    setCancelError(null);
-    setBusy('cancel');
-    try {
-      await staffPickupsApi.cancel(pickup.id, reason.trim());
-      setCancelOpen(false);
-      setFeedback('درخواست لغو شد.');
-      onChanged();
-    } catch (err) {
-      setCancelError(err instanceof ApiClientError ? err.message : 'لغو ناموفق بود.');
-    } finally {
-      setBusy(null);
-    }
-  }
-
   // Terminal states have no ordinary operational actions.
   if (pickup.status === 'DELIVERED' || pickup.status === 'CANCELLED') {
     if (pickup.status !== 'DELIVERED') return null;
     return (
-      <Card className="flex h-full flex-col">
+      <Card
+        className={
+          embedded
+            ? 'rounded-none border-0 border-t bg-slate-50/60 shadow-none'
+            : 'flex h-full flex-col'
+        }
+      >
         <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
           <CardTitle className="text-base">تحویل انجام شد</CardTitle>
           <CheckCircle2 className="h-4 w-4 text-emerald-600" aria-hidden />
@@ -137,8 +124,8 @@ export function PickupActionPanel({
             />
           </dl>
           <p className="mt-3 text-sm leading-7 text-muted-foreground">
-            تحویل ثبت شده است و امکان لغو یا تغییر وضعیت وجود ندارد. برای امضای مشتری، رسید
-            تحویل را مشاهده یا چاپ کنید.
+            تحویل ثبت شده است و امکان لغو یا تغییر وضعیت وجود ندارد. برای امضای مشتری، رسید تحویل را
+            مشاهده یا چاپ کنید.
           </p>
           <div className="mt-auto flex flex-wrap gap-2 pt-3">
             <Button
@@ -178,7 +165,13 @@ export function PickupActionPanel({
   }
 
   return (
-    <Card className="flex h-full flex-col">
+    <Card
+      className={
+        embedded
+          ? 'rounded-none border-0 border-t bg-slate-50/60 shadow-none'
+          : 'flex h-full flex-col'
+      }
+    >
       <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-2">
         <CardTitle className="text-base">اقدامات</CardTitle>
         <Info className="h-4 w-4 text-muted-foreground" aria-hidden />
@@ -261,7 +254,11 @@ export function PickupActionPanel({
 
         <div className="flex flex-wrap gap-2">
           {actions.startPreparation ? (
-            <Button disabled={busy !== null} onClick={startPreparation} isLoading={busy === 'prepare'}>
+            <Button
+              disabled={busy !== null}
+              onClick={startPreparation}
+              isLoading={busy === 'prepare'}
+            >
               شروع آماده‌سازی
             </Button>
           ) : null}
@@ -293,14 +290,14 @@ export function PickupActionPanel({
           ) : null}
           {actions.cancel ? (
             <Button
+              className="text-red-700 border-red-200 hover:bg-red-50"
               variant="outline"
               disabled={busy !== null}
               onClick={() => {
-                setCancelError(null);
                 setCancelOpen(true);
               }}
             >
-              لغو درخواست تحویل
+              لغو یا رد درخواست تحویل
             </Button>
           ) : null}
         </div>
@@ -326,33 +323,20 @@ export function PickupActionPanel({
         }}
       />
 
-      <ConfirmDialog
-        open={cancelOpen}
-        title="لغو درخواست تحویل"
-        message="با لغو، درخواست تحویل حضوری متوقف می‌شود و وزن رزرو شده آزاد می‌گردد. معامله طلا و سفارش خرید لغو نمی‌شود."
-        confirmLabel="لغو درخواست"
-        destructive
-        requireReason
-        reasonLabel="دلیل لغو"
-        minReason={5}
-        isLoading={busy === 'cancel'}
-        error={cancelError}
-        onClose={() => setCancelOpen(false)}
-        onConfirm={(reason) => void onCancel(reason)}
-      />
+      {cancelOpen ? (
+        <CancelPickupModal
+          pickup={pickup}
+          onClose={() => setCancelOpen(false)}
+          onSuccess={(cancelled) => {
+            onCancelled?.(cancelled);
+          }}
+        />
+      ) : null}
     </Card>
   );
 }
 
-function Fact({
-  label,
-  value,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  icon: typeof Clock;
-}) {
+function Fact({ label, value, icon: Icon }: { label: string; value: string; icon: typeof Clock }) {
   return (
     <div className="flex items-start gap-2 rounded-lg bg-muted/50 p-3">
       <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />

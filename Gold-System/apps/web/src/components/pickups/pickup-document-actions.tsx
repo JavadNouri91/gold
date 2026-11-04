@@ -21,6 +21,8 @@ export function PickupDocumentActions({
   showPrint = true,
   onPrint,
   size = 'sm',
+  receiptStyle = false,
+  invoiceLabel = 'فاکتور',
   className,
 }: {
   pickupNumber: string;
@@ -30,6 +32,8 @@ export function PickupDocumentActions({
   showPrint?: boolean;
   onPrint?: () => void;
   size?: 'sm' | 'default';
+  receiptStyle?: boolean;
+  invoiceLabel?: string;
   className?: string;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -57,20 +61,20 @@ export function PickupDocumentActions({
 
   return (
     <div className={cn('space-y-2', className)}>
-      <div className="flex flex-wrap items-center gap-2 print:hidden">
-        {documents.preInvoiceAvailable ? (
+      <div
+        className={cn(
+          'gap-2 print:hidden',
+          receiptStyle ? 'grid grid-cols-2' : 'flex flex-wrap items-center',
+        )}
+      >
+        {documents.preInvoiceAvailable || receiptStyle ? (
           <Button
-            variant="outline"
+            variant={receiptStyle ? 'default' : 'outline'}
             size={size}
-            className="gap-2"
+            className={cn('gap-2', receiptStyle && 'w-full')}
+            disabled={busy !== null || !documents.preInvoiceAvailable}
             isLoading={busy === 'pre'}
-            onClick={() =>
-              void run(
-                'pre',
-                downloadPreInvoice,
-                `${pickupNumber}-pre-invoice.json`,
-              )
-            }
+            onClick={() => void run('pre', downloadPreInvoice, `${pickupNumber}-pre-invoice.json`)}
           >
             <FileText className="h-4 w-4" aria-hidden />
             پیش‌فاکتور
@@ -80,21 +84,20 @@ export function PickupDocumentActions({
           <Button
             variant="outline"
             size={size}
-            className="gap-2"
+            className={cn('gap-2', receiptStyle && 'order-3 col-span-2 w-full')}
+            disabled={busy !== null}
             isLoading={busy === 'inv'}
-            onClick={() =>
-              void run('inv', downloadInvoice, `${pickupNumber}-invoice.json`)
-            }
+            onClick={() => void run('inv', downloadInvoice, `${pickupNumber}-invoice.json`)}
           >
             <Receipt className="h-4 w-4" aria-hidden />
-            فاکتور
+            {invoiceLabel}
           </Button>
         ) : null}
         {hasPrint ? (
           <Button
             variant="outline"
             size={size}
-            className="gap-2"
+            className="gap-2 border-gold-300 text-gold-900"
             onClick={onPrint ?? (() => window.print())}
           >
             <Printer className="h-4 w-4" aria-hidden />

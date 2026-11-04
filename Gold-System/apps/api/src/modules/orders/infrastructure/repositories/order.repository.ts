@@ -189,7 +189,7 @@ export class OrderRepository {
     },
   ): Promise<void> {
     await tx.order.update({
-      where: { id: orderId },
+      where: { id: orderId, status: { in: ['SUBMITTED', 'QUOTED', 'ASSIGNED', 'UNDER_REVIEW', 'REVISION_REQUESTED'] } },
       data: {
         status: 'CANCELLED',
         cancellationReason: params.cancellationReason,

@@ -1,92 +1,68 @@
 'use client';
 
-import { useState } from 'react';
 import Link from 'next/link';
 import { ChevronRight } from 'lucide-react';
 import { StatusBadge } from '@/components/portal/status-badge';
-import { PickupDocumentActions } from '@/components/pickups/pickup-document-actions';
-import { PickupReceiptModal } from '@/components/pickups/pickup-receipt-modal';
-import { type PhysicalGoldPickup } from '@/lib/api';
+import type { PhysicalGoldPickup } from '@/lib/api';
 import { pickupStatusHint } from '@/lib/pickup-workflow';
 import { PICKUP_STATUS_LABELS, statusLabel, toPersianDigits } from '@/lib/utils';
 
-/**
- * Header for the staff pickup detail page: back link, title, pickup number,
- * status badge, a one-line contextual description and the document toolbar.
- *
- * "چاپ" in the toolbar behaves exactly like the button in the "تحویل انجام شد"
- * card: it opens the A5 receipt and sends it straight to the printer. Only a
- * delivered pickup gets this receipt — other statuses still print the page.
- */
 export function PickupDetailHeader({
   pickup,
-  downloadPreInvoice,
-  downloadInvoice,
+  backHref = '/dashboard/pickups',
 }: {
   pickup: PhysicalGoldPickup;
-  downloadPreInvoice: () => Promise<Blob>;
-  downloadInvoice: () => Promise<Blob>;
+  backHref?: string;
 }) {
-  const [receiptOpen, setReceiptOpen] = useState(false);
-  const [receiptPrint, setReceiptPrint] = useState(false);
-  const isDelivered = pickup.status === 'DELIVERED';
-
-  function print() {
-    if (!isDelivered) {
-      window.print();
-      return;
-    }
-    setReceiptPrint(true);
-    setReceiptOpen(true);
-  }
-
   return (
-    <header className="space-y-3">
+    <header className="space-y-5 pb-2">
       <Link
-        href="/dashboard/pickups"
-        className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+        href={backHref}
+        className="print-screen-only inline-flex items-center gap-1 text-xs text-slate-500 hover:text-gold-800"
       >
         <ChevronRight className="h-4 w-4" aria-hidden />
         بازگشت به فهرست تحویل‌ها
       </Link>
-
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1.5">
-          <h1 className="text-xl font-bold md:text-2xl">تحویل حضوری</h1>
-          <div className="flex flex-wrap items-center gap-2">
-            <span dir="ltr" className="text-sm font-medium tabular-nums text-muted-foreground">
-              {toPersianDigits(pickup.pickupNumber)}
-            </span>
+      <div className="flex items-start gap-3 sm:gap-4">
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-gold-200 bg-gradient-to-bl from-gold-100 via-gold-300 to-gold-500 text-gold-900 shadow-sm">
+          <svg viewBox="0 0 36 30" className="h-9 w-10" fill="none" aria-hidden="true">
+            <path
+              d="M3 16 10 5h17l6 10-8 10H8Z"
+              fill="currentColor"
+              fillOpacity=".12"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+            <path
+              d="m3 16 21 1 9-2M24 17l1 8M10 5l14 12"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+        <div className="min-w-0 space-y-2">
+          <h1 className="text-lg font-bold leading-relaxed text-slate-950 sm:text-2xl">
+            درخواست تحویل حضوری{' '}
+            <bdi className="inline-block tabular-nums">{toPersianDigits(pickup.pickupNumber)}</bdi>
+          </h1>
+          <p className="text-sm text-slate-600 sm:text-base">
+            {Number(pickup.weightGrams).toLocaleString('fa-IR', { maximumFractionDigits: 6 })} گرم
+            طلای آب‌شده عیار{' '}
+            {(Number(pickup.purityRatio) * 1000).toLocaleString('fa-IR', {
+              maximumFractionDigits: 0,
+            })}
+          </p>
+          <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
             <StatusBadge
               status={pickup.status}
               label={statusLabel(PICKUP_STATUS_LABELS, pickup.status)}
             />
+            <span>{pickupStatusHint(pickup.status)}</span>
           </div>
-          <p className="text-sm text-muted-foreground">{pickupStatusHint(pickup.status)}</p>
-        </div>
-
-        <div className="print-screen-only">
-          <PickupDocumentActions
-            pickupNumber={pickup.pickupNumber}
-            documents={pickup.documents}
-            downloadPreInvoice={downloadPreInvoice}
-            downloadInvoice={downloadInvoice}
-            onPrint={print}
-          />
         </div>
       </div>
-
-      {isDelivered ? (
-        <PickupReceiptModal
-          pickup={pickup}
-          open={receiptOpen}
-          autoPrint={receiptPrint}
-          onClose={() => {
-            setReceiptOpen(false);
-            setReceiptPrint(false);
-          }}
-        />
-      ) : null}
     </header>
   );
 }

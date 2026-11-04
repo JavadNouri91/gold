@@ -99,10 +99,11 @@ export class RegisterCustomerDto {
   @Matches(/^\d{10}$/, { message: 'postalCode must be exactly 10 digits' })
   postalCode?: string;
 
-  @ApiPropertyOptional({ description: 'Landline phone', example: '02112345678' })
+  @ApiPropertyOptional({ description: 'Landline phone — exactly 11 digits', example: '02112345678' })
+  @LatinDigits()
   @IsOptional()
   @IsString()
-  @Length(8, 20)
+  @Matches(/^\d{11}$/, { message: 'phone must be exactly 11 digits' })
   phone?: string;
 
   @ApiPropertyOptional({ description: 'How did you hear about us', enum: ReferenceSource })

@@ -56,12 +56,11 @@ jest.mock('@/components/ui/date-picker-jalali', () => ({
     required?: boolean;
   }) => (
     <div>
-      <label>{label}{required ? ' *' : ''}</label>
-      <input
-        aria-label={label}
-        value={value ?? ''}
-        onChange={(e) => onChange?.(e.target.value)}
-      />
+      <label>
+        {label}
+        {required ? ' *' : ''}
+      </label>
+      <input aria-label={label} value={value ?? ''} onChange={(e) => onChange?.(e.target.value)} />
       {error ? <p role="alert">{error}</p> : hint ? <p>{hint}</p> : null}
     </div>
   ),
@@ -147,12 +146,15 @@ describe('pickup detail page', () => {
   it('renders the requested state with header, summary and start form', async () => {
     renderPage();
 
-    expect(await screen.findByText('تحویل حضوری')).toBeInTheDocument();
-    expect(screen.getByText('مشتری و خلاصه سفارش')).toBeInTheDocument();
-    expect(screen.getByText('مراحل تحویل')).toBeInTheDocument();
+    expect(
+      await screen.findByRole('heading', { level: 1, name: /درخواست تحویل حضوری/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByText('مدیریت تحویل')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'شروع آماده‌سازی' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'لغو درخواست تحویل' })).toBeInTheDocument();
-    expect(screen.getByText('درخواست ثبت شده و در انتظار شروع آماده‌سازی است.')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'لغو درخواست' })).toBeInTheDocument();
+    expect(
+      screen.getByText('درخواست ثبت شده و در انتظار شروع آماده‌سازی است.'),
+    ).toBeInTheDocument();
   });
 
   it('blocks starting preparation without a delivery date', async () => {
@@ -216,36 +218,18 @@ describe('pickup detail page', () => {
     expect(screen.queryByRole('grid')).not.toBeInTheDocument();
   });
 
-  it('shows the status timeline inside the gold card', async () => {
-    api.staffPickupsApi.getById.mockResolvedValue(
-      makePickup('REQUESTED', {
-        events: [
-          {
-            id: 'e1',
-            status: 'REQUESTED',
-            note: null,
-            actorId: null,
-            createdAt: '2026-10-28T12:13:00.000Z',
-          },
-        ],
-      }),
-    );
+  it('shows the stage timeline and the actual fee snapshot in Toman', async () => {
     renderPage();
-
-    const timeline = await screen.findByRole('region', { name: 'زمان‌بندی' });
+    const timeline = await screen.findByRole('region', { name: 'زمان‌بندی مراحل' });
     expect(within(timeline).getByText('ثبت‌شده')).toBeInTheDocument();
-
-    // Timeline lives inside the gold & order card, above the gold facts.
-    const title = screen.getByText('اطلاعات طلا و سفارش');
-    let card: HTMLElement | null = title.parentElement;
-    while (card && !card.className.includes('rounded-xl')) card = card.parentElement;
-    expect(card).not.toBeNull();
-    expect(card).toContainElement(timeline);
-    const weightLabel = within(card as HTMLElement).getByText('وزن طلا');
     expect(
-      timeline.compareDocumentPosition(weightLabel) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
-    expect(within(timeline).getByText(/آبان ۱۴۰۵/)).toBeInTheDocument();
+      screen.getByText(`${new Intl.NumberFormat('fa-IR').format(50000)} تومان`),
+    ).toBeInTheDocument();
+    expect(screen.getByText('مبلغ ثابت')).toBeInTheDocument();
+    expect(screen.queryByText('۶۸۹۴')).not.toBeInTheDocument();
+    expect(
+      screen.queryByLabelText(/\u062f\u0644\u06cc\u0644 \u0644\u063a\u0648/),
+    ).not.toBeInTheDocument();
   });
 
   it('hides the preparation form and offers ready when preparing', async () => {
@@ -285,9 +269,9 @@ describe('pickup detail page', () => {
     renderPage();
 
     expect(await screen.findByText('تحویل انجام شد')).toBeInTheDocument();
-    expect(screen.getByText('فاکتور')).toBeInTheDocument();
+    expect(screen.getByText('فاکتور نهایی')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'شروع آماده‌سازی' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'لغو درخواست تحویل' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'لغو درخواست' })).not.toBeInTheDocument();
   });
 
   it('offers a signable receipt for a delivered pickup', async () => {
@@ -323,12 +307,7 @@ describe('pickup detail page', () => {
     const meta = dialog.querySelector('.pickup-receipt-meta');
     expect(meta).not.toBeNull();
     const labels = Array.from(meta!.querySelectorAll('dt')).map((dt) => dt.textContent?.trim());
-    expect(labels.slice(-4)).toEqual([
-      'ثبت‌شده',
-      'در حال آماده‌سازی',
-      'آماده تحویل',
-      'تحویل‌شده',
-    ]);
+    expect(labels.slice(-4)).toEqual(['ثبت‌شده', 'در حال آماده‌سازی', 'آماده تحویل', 'تحویل‌شده']);
     expect(window.print).not.toHaveBeenCalled();
   });
 
@@ -363,16 +342,36 @@ describe('pickup detail page', () => {
     await waitFor(() => expect(window.print).toHaveBeenCalled(), { timeout: 2000 });
   });
 
-  it('requires a reason of at least five characters to cancel', async () => {
+  it.each(['escape', 'backdrop', 'dismiss'])(
+    'closes cancellation with %s and resets its reason',
+    async (method) => {
+      const user = userEvent.setup();
+      renderPage();
+      const trigger = await screen.findByRole('button', { name: 'لغو درخواست' });
+      await user.click(trigger);
+      const dialog = await screen.findByRole('dialog');
+      await user.type(within(dialog).getByRole('textbox'), 'reason');
+      if (method === 'escape') await user.keyboard('{Escape}');
+      else if (method === 'backdrop')
+        await user.click(dialog.querySelector('[aria-hidden="true"]')!);
+      else await user.click(within(dialog).getByRole('button', { name: 'انصراف' }));
+      await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+      expect(api.staffPickupsApi.cancel).not.toHaveBeenCalled();
+      await user.click(trigger);
+      expect(within(await screen.findByRole('dialog')).getByRole('textbox')).toHaveValue('');
+    },
+  );
+
+  it('requires a non-whitespace reason to cancel', async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'لغو درخواست تحویل' }));
+    await user.click(await screen.findByRole('button', { name: 'لغو درخواست' }));
     const dialog = await screen.findByRole('dialog');
 
     const reasonInput = within(dialog).getByLabelText(/دلیل لغو/);
-    await user.type(reasonInput, 'نه');
-    const confirm = within(dialog).getByRole('button', { name: 'لغو درخواست' });
+    await user.type(reasonInput, '   ');
+    const confirm = within(dialog).getByRole('button', { name: 'تأیید و لغو درخواست' });
     expect(confirm).toBeDisabled();
 
     await user.clear(reasonInput);
@@ -380,7 +379,9 @@ describe('pickup detail page', () => {
     expect(confirm).toBeEnabled();
     await user.click(confirm);
 
-    await waitFor(() => expect(api.staffPickupsApi.cancel).toHaveBeenCalledWith('p1', 'مشتری انصراف داد'));
+    await waitFor(() =>
+      expect(api.staffPickupsApi.cancel).toHaveBeenCalledWith('p1', 'مشتری انصراف داد'),
+    );
   });
 
   it('keeps the dialog open and shows the error when cancellation fails', async () => {
@@ -390,10 +391,10 @@ describe('pickup detail page', () => {
     const user = userEvent.setup();
     renderPage();
 
-    await user.click(await screen.findByRole('button', { name: 'لغو درخواست تحویل' }));
+    await user.click(await screen.findByRole('button', { name: 'لغو درخواست' }));
     const dialog = await screen.findByRole('dialog');
     await user.type(within(dialog).getByLabelText(/دلیل لغو/), 'مشتری انصراف داد');
-    await user.click(within(dialog).getByRole('button', { name: 'لغو درخواست' }));
+    await user.click(within(dialog).getByRole('button', { name: 'تأیید و لغو درخواست' }));
 
     expect(await screen.findByText('لغو در این وضعیت مجاز نیست.')).toBeInTheDocument();
     expect(screen.getByRole('dialog')).toBeInTheDocument();
@@ -411,6 +412,6 @@ describe('pickup detail page', () => {
 
     expect(await screen.findByText('لغو درخواست')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'شروع آماده‌سازی' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'لغو درخواست تحویل' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'لغو درخواست' })).not.toBeInTheDocument();
   });
 });

@@ -4,51 +4,43 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import useSWR, { useSWRConfig } from 'swr';
 import { X } from 'lucide-react';
-import { ApiClientError, ordersApi, pickupsApi, type PhysicalGoldPickup } from '@/lib/api';
+import {
+  ApiClientError,
+  ordersApi,
+  pickupsApi,
+  pricingApi,
+  type PhysicalGoldPickup,
+} from '@/lib/api';
 import { isRegisteredHolding, toPortfolioPosition } from '@/lib/customer-portfolio';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { QuickAmountPills } from './QuickAmountPills';
 import { Alert } from '@/components/ui/alert';
 import { Spinner } from '@/components/ui/spinner';
-import {
-  cn,
-  formatFeeRate,
-  formatWeight,
-  formatWholeMoney,
-  toLatinDigits,
-  toPersianDigits,
-} from '@/lib/utils';
+import { formatFeeRate, toLatinDigits, toPersianDigits } from '@/lib/utils';
 
 /** In-store molten-gold pickup is always millesimal 750. */
 const PICKUP_PURITY_RATIO = '0.750000';
 
-/** Quick-select bar sizes (grams). Only options ≤ available holding are shown. */
-const QUICK_WEIGHTS_GRAMS = [10, 20, 50, 100, 200] as const;
-
-/** Digits only — pickup weight is whole grams, never fractional. */
-function normalizeIntegerGrams(raw: string): string {
-  return toLatinDigits(raw).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+function formatPickupMoney(rial: string | number): string {
+  return `${Math.floor(Number(rial) / 10).toLocaleString('fa-IR')} تومان`;
 }
 
-export function NewPickupModal({
-  open,
-  onClose,
-}: {
-  open: boolean;
-  onClose: () => void;
-}) {
+export function NewPickupModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const router = useRouter();
   const { mutate } = useSWRConfig();
-  const { data: holding, error: holdingError, isLoading } = useSWR(
-    open ? 'orders/portfolio' : null,
-    () => ordersApi.portfolio(),
-  );
+  const {
+    data: holding,
+    error: holdingError,
+    isLoading,
+  } = useSWR(open ? 'orders/portfolio' : null, () => ordersApi.portfolio());
   const position = toPortfolioPosition(holding);
   const available = isRegisteredHolding(position) ? position : null;
 
   const [weight, setWeight] = useState('');
   const [note, setNote] = useState('');
+  const [noteOpen, setNoteOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,36 +48,49 @@ export function NewPickupModal({
     if (open) return;
     setWeight('');
     setNote('');
+    setNoteOpen(false);
     setError(null);
     setSubmitting(false);
   }, [open]);
 
   const availableGrams = available ? Number(toLatinDigits(available.weightGrams)) : 0;
-  const quickWeights = QUICK_WEIGHTS_GRAMS.filter(
-    (grams) => Number.isFinite(availableGrams) && grams <= availableGrams,
+  const maxWholeGrams = Number.isFinite(availableGrams)
+    ? Math.max(0, Math.floor(availableGrams))
+    : 0;
+  const { data: currentPrice } = useSWR(open ? 'pricing/current-price' : null, () =>
+    pricingApi.getCurrentPrice(),
   );
-  const selectedQuick = Number(toLatinDigits(weight).trim());
-
-  const weightValidForPreview = /^[1-9]\d*$/.test(weight) && Number(weight) <= availableGrams;
-  const { data: feePreview } = useSWR(
-    weightValidForPreview ? ['pickup-fee-preview', weight] : null,
+  const weightValidForPreview =
+    /^[1-9]\d*$/.test(weight) &&
+    Number.isSafeInteger(Number(weight)) &&
+    Number(weight) <= maxWholeGrams;
+  const { data: feePreview, error: feeError } = useSWR(
+    open && weightValidForPreview ? ['pickup-fee-preview', weight] : null,
     () => pickupsApi.feePreview({ weightGrams: weight }),
   );
   const canAfford = !feePreview || feePreview.canAfford;
   const shortfallRial = feePreview && !feePreview.canAfford ? feePreview.shortfallRial : null;
 
+  const pricePerGram =
+    feePreview?.goldPricePerGramRial ??
+    (currentPrice?.validityStatus === 'VALID' ? currentPrice.normalizedValue : null);
+  const goldValueRial =
+    pricePerGram && Number.isFinite(Number(pricePerGram))
+      ? Number(pricePerGram) * Number(weight)
+      : null;
+
   function validateWeight(weightGrams: string): string | null {
     if (!weightGrams) {
       return 'وزن طلا را وارد کنید.';
     }
-    if (!/^[1-9]\d*$/.test(weightGrams)) {
+    if (!/^[1-9]\d*$/.test(weightGrams) || !Number.isSafeInteger(Number(weightGrams))) {
       return 'وزن باید عدد صحیح گرم و بیشتر از صفر باشد.';
     }
     if (!Number.isFinite(availableGrams) || availableGrams <= 0) {
       return 'موجودی قابل درخواست ندارید.';
     }
-    if (Number(weightGrams) > availableGrams) {
-      return `وزن درخواستی از موجودی قابل درخواست (${formatWeight(available!.weightGrams)}) بیشتر است.`;
+    if (Number(weightGrams) > maxWholeGrams) {
+      return `وزن درخواستی نمی‌تواند بیشتر از سقف مجاز (${maxWholeGrams.toLocaleString('fa-IR')} گرم) باشد`;
     }
     return null;
   }
@@ -98,12 +103,13 @@ export function NewPickupModal({
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
-    const weightGrams = normalizeIntegerGrams(weight);
+    const weightGrams = weight;
     const validationError = validateWeight(weightGrams);
     if (validationError) {
       setError(validationError);
       return;
     }
+    if (!feePreview || !canAfford || feeError) return;
     setSubmitting(true);
     try {
       const pickup: PhysicalGoldPickup = await pickupsApi.create({
@@ -155,112 +161,108 @@ export function NewPickupModal({
               <div className="rounded-xl border border-amber-100 bg-amber-50 px-4 py-3">
                 <p className="text-xs text-amber-800/80">موجودی قابل درخواست</p>
                 <p className="mt-1 text-xl font-bold tabular-nums text-amber-950">
-                  {available ? formatWeight(available.weightGrams) : '۰ گرم'}
+                  {availableGrams.toLocaleString('fa-IR', { maximumFractionDigits: 6 })} گرم
                 </p>
                 <p className="mt-1 text-xs text-amber-800/80">
-                  عیار ثابت {toPersianDigits('750')} — با ثبت درخواست، همین وزن از موجودی شما رزرو می‌شود.
+                  فقط اوزان کامل (شمش ۱ گرم به بالا) قابل تحویل هستند. با ثبت درخواست، وزن انتخابی
+                  از موجودی شما رزرو می‌شود.
                 </p>
               </div>
 
               <Input
                 id="pickup-weight"
-                label="وزن (گرم)"
+                label="وزن درخواستی (گرم)"
                 dir="ltr"
                 inputMode="numeric"
                 value={weight ? toPersianDigits(weight) : ''}
                 onChange={(e) => {
-                  const next = normalizeIntegerGrams(e.target.value);
+                  const next = toLatinDigits(e.target.value).trim();
                   setWeight(next);
-                  setError(next ? validateWeight(next) : null);
+                  setError(null);
                 }}
-                placeholder={`مثلاً ${toPersianDigits('50')}`}
+                placeholder={`حداکثر ${maxWholeGrams.toLocaleString('fa-IR')} گرم`}
+                error={weight ? (validateWeight(weight) ?? undefined) : undefined}
+                aria-invalid={!!weight && !!validateWeight(weight)}
                 disabled={!available || submitting}
                 hint="فقط عدد صحیح گرم (بدون اعشار)"
               />
 
-              {quickWeights.length > 0 ? (
-                <div className="space-y-2">
-                  <p className="text-sm font-medium text-foreground">انتخاب سریع</p>
-                  <div className="flex flex-wrap gap-2">
-                    {quickWeights.map((grams) => {
-                      const active = selectedQuick === grams;
-                      return (
-                        <button
-                          key={grams}
-                          type="button"
-                          disabled={submitting}
-                          onClick={() => {
-                            setWeight(String(grams));
-                            setError(null);
-                          }}
-                          className={cn(
-                            'min-h-11 rounded-lg border px-3 text-sm font-medium tabular-nums transition-colors',
-                            active
-                              ? 'border-amber-500 bg-amber-50 text-amber-900'
-                              : 'border-input bg-background text-foreground hover:border-amber-400 hover:bg-amber-50/60',
-                            'disabled:cursor-not-allowed disabled:opacity-50',
-                          )}
-                        >
-                          {toPersianDigits(String(grams))} گرم
-                        </button>
-                      );
-                    })}
+              <QuickAmountPills
+                availableWeightGrams={availableGrams}
+                value={Number(weight)}
+                disabled={submitting || !!holdingError}
+                onChange={(grams) => {
+                  setWeight(String(grams));
+                  setError(null);
+                }}
+              />
+
+              {weightValidForPreview ? (
+                <div
+                  aria-live="polite"
+                  className="space-y-3 rounded-xl border border-amber-200 bg-amber-50/60 p-4 text-sm"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span>ارزش طلای انتخابی (بر اساس نرخ روز طلا)</span>
+                    <span className="font-semibold tabular-nums">
+                      {goldValueRial == null
+                        ? 'در انتظار نرخ طلا'
+                        : formatPickupMoney(goldValueRial)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <span>
+                      کارمزد تبدیل فیزیکی
+                      {feePreview
+                        ? ` (${formatFeeRate(feePreview.mode, feePreview.rateValue) || 'رایگان'})`
+                        : ''}
+                    </span>
+                    <span className="font-semibold tabular-nums">
+                      {feePreview ? formatPickupMoney(feePreview.amountRial) : 'در حال محاسبه…'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between gap-3 border-t border-amber-200 pt-3">
+                    <span>مانده طلای کاربر پس از این تحویل</span>
+                    <span className="font-semibold tabular-nums">
+                      {(availableGrams - Number(weight)).toLocaleString('fa-IR', {
+                        maximumFractionDigits: 6,
+                      })}{' '}
+                      گرم
+                    </span>
                   </div>
                 </div>
               ) : null}
+              {feeError ? (
+                <Alert variant="error">محاسبه کارمزد ممکن نشد. دوباره تلاش کنید.</Alert>
+              ) : null}
 
-              <Input
-                id="pickup-note"
-                label="یادداشت (اختیاری)"
-                value={note}
-                onChange={(e) => setNote(e.target.value)}
-                maxLength={500}
+              <button
+                type="button"
+                aria-expanded={noteOpen}
+                aria-controls="pickup-note-panel"
                 disabled={submitting}
-              />
-
-              {feePreview ? (
-                <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm">
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="text-muted-foreground">کارمزد تبدیل به فیزیکی</span>
-                    <span className="font-medium tabular-nums">
-                      {feePreview.mode === 'NONE'
-                        ? 'رایگان'
-                        : formatWholeMoney(feePreview.amountRial)}
-                    </span>
-                  </div>
-                  {feePreview.mode !== 'NONE' ? (
-                    <>
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">نوع کارمزد</span>
-                        <span className="font-medium">
-                          {formatFeeRate(feePreview.mode, feePreview.rateValue)
-                            ? `${feePreview.labelFa} (${formatFeeRate(feePreview.mode, feePreview.rateValue)})`
-                            : feePreview.labelFa}
-                        </span>
-                      </div>
-                      {feePreview.mode === 'PERCENTAGE' ? (
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-muted-foreground">ارزش طلا (مبنای محاسبه)</span>
-                          <span className="font-medium tabular-nums">
-                            {formatWholeMoney(feePreview.baseAmountRial)}
-                          </span>
-                        </div>
-                      ) : null}
-                      <div className="flex items-center justify-between gap-3">
-                        <span className="text-muted-foreground">موجودی ریالی کیف پول</span>
-                        <span className="font-medium tabular-nums">
-                          {formatWholeMoney(feePreview.availableRial)}
-                        </span>
-                      </div>
-                    </>
-                  ) : null}
+                onClick={() => setNoteOpen(!noteOpen)}
+                className="text-sm text-slate-600 hover:text-amber-800"
+              >
+                {noteOpen ? '− بستن یادداشت' : '+ افزودن یادداشت به سفارش'}
+              </button>
+              {noteOpen ? (
+                <div id="pickup-note-panel">
+                  <Input
+                    id="pickup-note"
+                    label="یادداشت (اختیاری)"
+                    value={note}
+                    onChange={(e) => setNote(e.target.value)}
+                    maxLength={500}
+                    disabled={submitting}
+                  />
                 </div>
               ) : null}
 
               {shortfallRial ? (
                 <Alert variant="error">
                   موجودی ریالی کیف پول برای پرداخت کارمزد تبدیل کافی نیست. کمبود:{' '}
-                  {formatWholeMoney(shortfallRial)}
+                  {formatPickupMoney(shortfallRial)}
                 </Alert>
               ) : null}
 
@@ -269,12 +271,20 @@ export function NewPickupModal({
               <div className="flex gap-3 pt-1">
                 <Button
                   type="submit"
-                  className="flex-1"
-                  disabled={!available || submitting || !canAfford}
+                  className="flex-1 bg-gradient-to-l from-amber-500 to-amber-600 text-white hover:from-amber-600 hover:to-amber-700"
+                  disabled={
+                    !available ||
+                    !!holdingError ||
+                    submitting ||
+                    !weightValidForPreview ||
+                    !feePreview ||
+                    !!feeError ||
+                    !canAfford
+                  }
                 >
                   {submitting ? 'در حال ثبت…' : 'ثبت درخواست و رزرو موجودی'}
                 </Button>
-                <Button type="button" variant="outline" onClick={requestClose} disabled={submitting}>
+                <Button type="button" variant="ghost" onClick={requestClose} disabled={submitting}>
                   انصراف
                 </Button>
               </div>

@@ -187,6 +187,13 @@ export class OrdersController {
    * GET /orders/portfolio
    * Net booked gold holding for the signed-in customer.
    */
+  @Get('summary')
+  @UseGuards(PermissionsGuard)
+  @RequirePermissions('order.read')
+  async pendingSummary() {
+    return this.ordersService.pendingSummary();
+  }
+
   @Get('portfolio')
   async portfolio(@CurrentUser() user: CurrentUserData) {
     return this.activityService.portfolio(user.userId);

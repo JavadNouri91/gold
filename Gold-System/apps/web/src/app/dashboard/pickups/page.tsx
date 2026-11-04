@@ -1,5 +1,8 @@
 'use client';
 
+import { CancelPickupModal, CANCEL_PICKUP_SUCCESS } from '@/components/pickups/CancelPickupModal';
+import { Toast } from '@/components/dashboard/customer-widgets';
+import { pickupActionsFor } from '@/lib/pickup-workflow';
 import { useState } from 'react';
 import Link from 'next/link';
 import useSWR from 'swr';
@@ -35,6 +38,9 @@ const STATUS_OPTIONS = [
 export default function StaffPickupsPage() {
   const { user } = useAuth();
   const canRead = hasPermission(user?.permissions, 'pickup.read');
+  const canCancel = hasPermission(user?.permissions, 'pickup.cancel');
+  const [rejectPickup, setRejectPickup] = useState<PhysicalGoldPickup | null>(null);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const [status, setStatus] = useState('');
   const [appliedStatus, setAppliedStatus] = useState('');
   const [page, setPage] = useState(1);
@@ -123,6 +129,21 @@ export default function StaffPickupsPage() {
             <Printer className="h-3.5 w-3.5" aria-hidden />
             چاپ
           </Button>
+          {pickupActionsFor(row.status, { prepare: false, deliver: false, cancel: canCancel })
+            .cancel ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="border-red-200 text-red-700 hover:bg-red-50"
+              aria-label={`لغو یا رد درخواست تحویل ${row.pickupNumber}`}
+              onClick={() => {
+                setFeedback(null);
+                setRejectPickup(row);
+              }}
+            >
+              لغو یا رد درخواست تحویل
+            </Button>
+          ) : null}
         </div>
       ),
     },
@@ -155,6 +176,7 @@ export default function StaffPickupsPage() {
         }}
       />
       {list.error ? <ApiErrorState error={list.error} onRetry={() => void list.mutate()} /> : null}
+      <Toast message={feedback} onClose={() => setFeedback(null)} />
       <DataTable
         columns={columns}
         rows={list.data?.data ?? []}
@@ -169,6 +191,14 @@ export default function StaffPickupsPage() {
         autoPrint={dialog?.autoPrint ?? false}
         onClose={() => setDialog(null)}
       />
+      {rejectPickup ? (
+        <CancelPickupModal
+          key={rejectPickup.id}
+          pickup={rejectPickup}
+          onClose={() => setRejectPickup(null)}
+          onSuccess={() => setFeedback(CANCEL_PICKUP_SUCCESS)}
+        />
+      ) : null}
     </div>
   );
 }

@@ -160,20 +160,40 @@ html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
 }
 
 @keyframes modal-overlay-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 @keyframes modal-overlay-out {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 @keyframes modal-panel-in {
-  from { opacity: 0; transform: scale(0.96); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 @keyframes modal-panel-out {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.96); }
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.96);
+  }
 }
 
 .portal-dense-copy {
@@ -183,10 +203,18 @@ html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
   letter-spacing: normal;
 }
 
-.modal-overlay-in { animation: modal-overlay-in 150ms ease-out both; }
-.modal-overlay-out { animation: modal-overlay-out 150ms ease-out both; }
-.modal-panel-in { animation: modal-panel-in 150ms ease-out both; }
-.modal-panel-out { animation: modal-panel-out 150ms ease-out both; }
+.modal-overlay-in {
+  animation: modal-overlay-in 150ms ease-out both;
+}
+.modal-overlay-out {
+  animation: modal-overlay-out 150ms ease-out both;
+}
+.modal-panel-in {
+  animation: modal-panel-in 150ms ease-out both;
+}
+.modal-panel-out {
+  animation: modal-panel-out 150ms ease-out both;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .modal-overlay-in,
@@ -446,5 +474,226 @@ html.dark .shadow-\[-4px_0_24px_rgba\(15\,23\,42\,0\.06\)\] {
     margin-top: auto !important;
     break-before: avoid;
     page-break-before: avoid;
+  }
+}
+
+/* Isolated customer pickup voucher. A5 landscape: 210x148mm minus 8mm margins. */
+@page pickup-voucher {
+  size: A5 landscape;
+  margin: 8mm;
+}
+.pickup-voucher-host {
+  display: none;
+}
+.pickup-print-voucher {
+  box-sizing: border-box;
+  width: 194mm;
+  min-height: 130mm;
+  padding: 4mm;
+  border: 0.6mm double #b8954e;
+  color: #171717;
+  background: #fff;
+  font-family: var(--font-vazirmatn), Tahoma, sans-serif;
+  font-size: 8pt;
+  line-height: 1.5;
+  direction: rtl;
+}
+.pickup-print-voucher * {
+  box-sizing: border-box;
+}
+.pickup-print-voucher p,
+.pickup-print-voucher h1,
+.pickup-print-voucher h2 {
+  margin: 0;
+}
+.voucher-heading {
+  display: grid;
+  grid-template-columns: 1fr 1.4fr 1fr;
+  align-items: center;
+  gap: 3mm;
+  border-bottom: 0.3mm solid #b8954e;
+  padding-bottom: 3mm;
+  margin-bottom: 3mm;
+  min-height: 16mm;
+}
+.voucher-brand {
+  display: flex;
+  align-items: center;
+  gap: 2mm;
+  font-size: 9pt;
+}
+.voucher-brand-mark {
+  width: 11mm;
+  height: 11mm;
+  flex-shrink: 0;
+  color: #a37a22;
+}
+.voucher-title {
+  text-align: center;
+}
+.voucher-title h1 {
+  font-size: 12pt;
+  font-weight: 800;
+}
+.voucher-title span {
+  font-size: 7pt;
+}
+.voucher-reference {
+  text-align: left;
+  font-size: 6.5pt;
+  overflow-wrap: anywhere;
+}
+.voucher-info-grid,
+.voucher-details-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm;
+  margin-bottom: 3mm;
+}
+.voucher-section {
+  border: 0.25mm solid #6b665d;
+  border-radius: 1mm;
+  overflow: hidden;
+  min-width: 0;
+}
+.voucher-section h2 {
+  background: #30302e;
+  color: #fff;
+  font-size: 8.5pt;
+  text-align: center;
+  padding: 1mm 2mm;
+}
+.voucher-section table {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: collapse;
+  font-size: 7.5pt;
+}
+.voucher-section th,
+.voucher-section td {
+  padding: 1.25mm 2mm;
+  border-bottom: 0.2mm solid #d8d3c9;
+  vertical-align: middle;
+  overflow-wrap: anywhere;
+}
+.voucher-section th {
+  width: 47%;
+  text-align: right;
+  font-weight: 500;
+}
+.voucher-section td {
+  text-align: left;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.voucher-section tr:last-child > * {
+  border-bottom: 0;
+}
+.voucher-total {
+  background: #fff6df;
+  font-weight: 800;
+}
+.voucher-security {
+  border: 0.3mm solid #b8954e;
+  border-radius: 1mm;
+  padding: 2mm;
+  text-align: center;
+  min-width: 0;
+}
+.voucher-pin {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 2mm;
+  border: 0.3mm solid #171717;
+  padding: 1.5mm 2mm;
+  margin-bottom: 1.5mm;
+  font-size: 8pt;
+}
+.voucher-pin strong {
+  font-size: 10pt;
+}
+.voucher-barcode {
+  display: block;
+  width: 72mm;
+  max-width: 100%;
+  height: 12mm;
+  margin: 0 auto;
+  background: white;
+}
+.voucher-scan-label {
+  font: 7pt monospace;
+  letter-spacing: 0.3mm;
+}
+.voucher-security-note {
+  font-size: 6pt;
+}
+.voucher-legal {
+  border-top: 0.2mm solid #d8d3c9;
+  padding-top: 2mm;
+  font-size: 7pt;
+  text-align: center;
+}
+.voucher-legal p + p {
+  font-size: 6.5pt;
+  margin-top: 1mm;
+}
+.voucher-signatures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm;
+  margin-top: 2mm;
+}
+.voucher-signatures > div {
+  height: 20mm;
+  border: 0.25mm solid #b6b1a7;
+  border-radius: 1mm;
+  padding: 2mm;
+  text-align: center;
+  font-size: 8pt;
+}
+
+@media print {
+  /* Only this body-level portal remains in flow; no invisible shell pages. */
+  body:has(> .pickup-voucher-host) {
+    margin: 0 !important;
+    padding: 0 !important;
+    min-height: 0 !important;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body:has(> .pickup-voucher-host) > *:not(.pickup-voucher-host) {
+    display: none !important;
+  }
+  body:has(> .pickup-voucher-host) .pickup-voucher-host {
+    display: block !important;
+    position: static !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    page: pickup-voucher;
+  }
+  .pickup-voucher-host nav,
+  .pickup-voucher-host aside,
+  .pickup-voucher-host header,
+  .pickup-voucher-host .no-print,
+  .pickup-voucher-host button,
+  .pickup-voucher-host footer {
+    display: none !important;
+  }
+  .pickup-print-voucher {
+    width: 100% !important;
+    max-width: 194mm !important;
+    min-height: 130mm;
+    margin: 0 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    box-shadow: none !important;
+  }
+  .pickup-print-voucher,
+  .pickup-print-voucher * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
   }
 }

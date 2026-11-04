@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 /**
  * Orders Service Unit Tests — Phase 3.3 / Phase 3.4 / Phase 3.5
  *
@@ -78,6 +79,7 @@ function makeOrder(
     customerId: string;
     customerAccountId: string;
     totalAmountRial: Decimal;
+    feeAmountRial: Decimal;
     reservedAmountRial: Decimal;
     weightGrams: Decimal;
     purityRatio: Decimal;
@@ -101,7 +103,7 @@ function makeOrder(
     status: overrides.status ?? OrderStatus.DRAFT,
     totalAmountRial: overrides.totalAmountRial ?? TOTAL_AMOUNT,
     goldAmountRial: overrides.totalAmountRial ?? TOTAL_AMOUNT,
-    feeAmountRial: new Decimal(0),
+    feeAmountRial: overrides.feeAmountRial ?? new Decimal(0),
     reservedAmountRial: overrides.reservedAmountRial ?? new Decimal(0),
     weightGrams: overrides.weightGrams ?? new Decimal('10'),
     purityRatio: overrides.purityRatio ?? new Decimal('0.750'),
@@ -892,6 +894,56 @@ describe('OrdersService', () => {
   // ─── rejectOrder ─────────────────────────────────────────────────────────
 
   describe('rejectOrder', () => {
+    beforeEach(() => {
+      Object.assign(fakeTx.order, { updateMany: jest.fn().mockResolvedValue({ count: 1 }) });
+      Object.assign(fakeTx, {
+        orderItem: { findFirst: jest.fn().mockResolvedValue({ metadata: { side: 'BUY' } }) },
+        financialLedgerJournal: { create: jest.fn().mockResolvedValue({}) },
+        goldLedgerJournal: { create: jest.fn().mockResolvedValue({}) },
+      });
+    });
+
+    it('releases the fee-inclusive BUY reservation without double-refunding fees', async () => {
+      const reserved = new Decimal('102000');
+      (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder({
+        status: OrderStatus.UNDER_REVIEW, reservedAmountRial: reserved,
+        feeAmountRial: new Decimal('2000'), totalAmountRial: reserved,
+      }));
+      await service.rejectOrder('staff', ORDER_ID, { reason: 'declined' });
+      expect(accountRepo.releaseCredit).toHaveBeenCalledTimes(1);
+      expect(accountRepo.releaseCredit).toHaveBeenCalledWith(expect.objectContaining({ amount: reserved }));
+      const data = (fakeTx.financialLedgerJournal.create as jest.Mock).mock.calls[0][0].data;
+      const debit = data.entries.create.reduce((sum: Decimal, e: { debit: Decimal.Value }) => sum.plus(e.debit), new Decimal(0));
+      const credit = data.entries.create.reduce((sum: Decimal, e: { credit: Decimal.Value }) => sum.plus(e.credit), new Decimal(0));
+      expect(debit.eq(credit)).toBe(true);
+      expect(debit.eq(reserved)).toBe(true);
+    });
+
+    it('does not release funds when another decision wins the status transition', async () => {
+      (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder({ status: OrderStatus.UNDER_REVIEW, reservedAmountRial: TOTAL_AMOUNT }));
+      (fakeTx.order.updateMany as jest.Mock).mockResolvedValue({ count: 0 });
+      await expect(service.rejectOrder('staff', ORDER_ID, { reason: 'declined' })).rejects.toThrow();
+      expect(accountRepo.releaseCredit).not.toHaveBeenCalled();
+      expect(fakeTx.financialLedgerJournal.create).not.toHaveBeenCalled();
+    });
+
+    it('releases SELL gold through status and writes both reconciliation journals without a rial refund', async () => {
+      (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder({ status: OrderStatus.UNDER_REVIEW, reservedAmountRial: new Decimal(0) }));
+      (fakeTx.orderItem.findFirst as jest.Mock).mockResolvedValue({ metadata: { side: 'SELL' } });
+      await service.rejectOrder('staff', ORDER_ID, { reason: 'declined' });
+      expect(accountRepo.releaseCredit).not.toHaveBeenCalled();
+      expect(fakeTx.goldLedgerJournal.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ sourceType: 'ORDER_REJECTED', sourceId: ORDER_ID }) }));
+      expect(fakeTx.financialLedgerJournal.create).toHaveBeenCalledTimes(1);
+      expect(quotationsService.expireForOrderInTx).toHaveBeenCalled();
+    });
+
+    it('propagates journal failure inside the same transaction as the release', async () => {
+      (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder({ status: OrderStatus.UNDER_REVIEW, reservedAmountRial: TOTAL_AMOUNT }));
+      (fakeTx.financialLedgerJournal.create as jest.Mock).mockRejectedValue(new Error('posting failed'));
+      await expect(service.rejectOrder('staff', ORDER_ID, { reason: 'declined' })).rejects.toThrow('posting failed');
+      expect(auditService.log).not.toHaveBeenCalled();
+    });
+
     const rejectDto: RejectOrderDto = { reason: 'Insufficient documentation provided' };
 
     it('rejects a SUBMITTED order: releases credit + expires Quotation (§3.5, §2.3)', async () => {
@@ -917,7 +969,7 @@ describe('OrdersService', () => {
         actorId: 'staff-user-id',
         reason: expect.stringContaining(rejectDto.reason),
       });
-      expect(orderRepo.rejectInTx).toHaveBeenCalledTimes(1);
+      expect(fakeTx.order.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: ORDER_ID, status: OrderStatus.SUBMITTED }, data: expect.objectContaining({ status: 'REJECTED', reservedAmountRial: 0 }) }));
 
       // Phase 3.4: Quotation ALSO expired atomically (§2.3)
       expect(quotationsService.expireForOrderInTx).toHaveBeenCalledWith(
@@ -935,32 +987,32 @@ describe('OrdersService', () => {
       );
     });
 
-    it('throws InvalidOrderStateTransitionException if order is already REJECTED', async () => {
+    it('throws BadRequestException if order is already REJECTED', async () => {
       (orderRepo.findById as jest.Mock).mockResolvedValue(
         makeOrder({ status: OrderStatus.REJECTED }),
       );
 
       await expect(
         service.rejectOrder('staff-user-id', ORDER_ID, rejectDto),
-      ).rejects.toBeInstanceOf(InvalidOrderStateTransitionException);
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('throws InvalidOrderStateTransitionException if order is CANCELLED', async () => {
+    it('throws BadRequestException if order is CANCELLED', async () => {
       (orderRepo.findById as jest.Mock).mockResolvedValue(
         makeOrder({ status: OrderStatus.CANCELLED }),
       );
 
       await expect(
         service.rejectOrder('staff-user-id', ORDER_ID, rejectDto),
-      ).rejects.toBeInstanceOf(InvalidOrderStateTransitionException);
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
-    it('throws InvalidOrderStateTransitionException if order is DRAFT (cannot reject uncommitted)', async () => {
+    it('throws BadRequestException if order is DRAFT (cannot reject uncommitted)', async () => {
       (orderRepo.findById as jest.Mock).mockResolvedValue(makeOrder({ status: OrderStatus.DRAFT }));
 
       await expect(
         service.rejectOrder('staff-user-id', ORDER_ID, rejectDto),
-      ).rejects.toBeInstanceOf(InvalidOrderStateTransitionException);
+      ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('throws OrderNotFoundException when order does not exist', async () => {
@@ -993,7 +1045,7 @@ describe('OrdersService', () => {
       // Order updated to APPROVED
       const txOrderUpdate = (fakeTx as unknown as { order: { update: jest.Mock } }).order.update;
       expect(txOrderUpdate).toHaveBeenCalledWith({
-        where: { id: ORDER_ID },
+        where: { id: ORDER_ID, status: 'UNDER_REVIEW' },
         data: expect.objectContaining({ status: 'APPROVED' }),
       });
 
@@ -1125,7 +1177,7 @@ describe('OrdersService', () => {
       // Order updated to REVISION_REQUESTED
       const txOrderUpdate = (fakeTx as unknown as { order: { update: jest.Mock } }).order.update;
       expect(txOrderUpdate).toHaveBeenCalledWith({
-        where: { id: ORDER_ID },
+        where: { id: ORDER_ID, status: 'UNDER_REVIEW' },
         data: expect.objectContaining({ status: 'REVISION_REQUESTED' }),
       });
 

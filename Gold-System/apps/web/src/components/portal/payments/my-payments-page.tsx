@@ -776,6 +776,7 @@ function PaymentTable({ rows }: { rows: Payment[] }) {
 function CopyTrackingCode({ payment }: { payment: Payment }) {
   const [copied, setCopied] = useState(false);
   const code = paymentTrackingCode(payment);
+  const displayCode = toPersianDigits(code);
 
   const copy = async () => {
     try {
@@ -789,8 +790,8 @@ function CopyTrackingCode({ payment }: { payment: Payment }) {
 
   return (
     <div className="inline-flex max-w-full items-center gap-1.5" dir="ltr">
-      <span className="truncate text-xs font-semibold text-gray-900" title={code}>
-        {code}
+      <span className="truncate text-xs font-semibold text-gray-900" title={displayCode}>
+        {displayCode}
       </span>
       <button
         type="button"

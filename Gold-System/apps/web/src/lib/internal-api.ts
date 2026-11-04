@@ -1165,6 +1165,9 @@ export const internalKycApi = {
 };
 
 export const internalOrdersApi = {
+  summary(): Promise<{ pendingBuyOrdersCount: number; pendingSellOrdersCount: number }> {
+    return request('/orders/summary');
+  },
   list(params: {
     status?: string;
     customerId?: string;
@@ -1188,7 +1191,7 @@ export const internalOrdersApi = {
     });
   },
   reject(id: string, reason: string): Promise<StaffOrder> {
-    return request(`/orders/${id}/reject`, {
+    return request(`/staff/orders/${id}/reject`, {
       method: 'POST',
       body: JSON.stringify({ reason }),
     });

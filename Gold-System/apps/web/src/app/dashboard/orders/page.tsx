@@ -17,6 +17,7 @@ import {
 } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
 import { PageHeader } from '@/components/dashboard/page-header';
+import { RejectOrderAction } from '@/components/dashboard/reject-order-action';
 import { OrderQuotationActions } from '@/components/dashboard/order-quotation-actions';
 import { DataTable, type Column } from '@/components/dashboard/data-table';
 import { SideBadge } from '@/components/ui/side-badge';
@@ -34,7 +35,7 @@ import {
   formatDate,
   formatDateTime,
   formatFaNumber,
-  formatMoney,
+  rialToToman,
   formatWeight,
   orderStatusPresentation,
   statusLabel,
@@ -43,6 +44,15 @@ import {
 
 type OrdersView = 'all' | 'review' | 'assignments';
 type OrdersRange = 'all' | ActivityRangePreset;
+
+function formatOrderAmount(value: string | number | null | undefined): string {
+  const toman = rialToToman(value);
+  if (toman == null) return '—';
+  return `${Math.round(Number(toman)).toLocaleString('fa-IR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })} تومان`;
+}
 
 const ORDER_RANGE_OPTIONS: { id: OrdersRange; label: string }[] = [
   { id: 'all', label: 'همه زمان‌ها' },
@@ -338,12 +348,13 @@ export default function OrdersPage() {
     { key: 'side', header: 'نوع', render: (row) => <SideBadge side={row.side ?? null} /> },
     { key: 'date', header: 'تاریخ', render: (row) => formatDate(row.createdAt) },
     { key: 'weight', header: 'وزن', render: (row) => formatWeight(row.weightGrams) },
-    { key: 'amount', header: 'مبلغ', render: (row) => formatMoney(row.totalAmountRial) },
+    { key: 'amount', header: 'مبلغ', render: (row) => formatOrderAmount(row.totalAmountRial) },
     {
       key: 'status',
       header: 'وضعیت',
       render: (row) => <StatusBadge {...orderStatusPresentation(row.status)} />,
     },
+    { key: 'reject', header: 'رد سفارش', render: (row: StaffOrder) => <RejectOrderAction orderId={row.id} status={row.status} /> },
     ...(canReadQuotes
       ? [
           {
@@ -374,7 +385,7 @@ export default function OrdersPage() {
     },
     { key: 'side', header: 'نوع', render: (row) => <SideBadge side={row.side ?? null} /> },
     { key: 'weight', header: 'وزن', render: (row) => formatWeight(row.weightGrams) },
-    { key: 'amount', header: 'مبلغ', render: (row) => formatMoney(row.totalAmountRial) },
+    { key: 'amount', header: 'مبلغ', render: (row) => formatOrderAmount(row.totalAmountRial) },
     {
       key: 'status',
       header: 'وضعیت',
@@ -399,6 +410,7 @@ export default function OrdersPage() {
           </Link>
         ),
     },
+    { key: 'reject', header: 'رد سفارش', render: (row: StaffOrder) => <RejectOrderAction orderId={row.id} status={row.status} /> },
     ...(canReadQuotes
       ? [
           {

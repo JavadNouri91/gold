@@ -1,4 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
+import { StaffOrdersController } from './presentation/controllers/staff-orders.controller';
 import { OrdersController } from './presentation/controllers/orders.controller';
 import { OrdersService } from './application/orders.service';
 import { CustomerActivityService } from './application/customer-activity.service';
@@ -38,7 +39,7 @@ import { TradesModule } from '../trades/trades.module';
     TradingPolicyModule,
     forwardRef(() => TradesModule),
   ],
-  controllers: [OrdersController],
+  controllers: [OrdersController, StaffOrdersController],
   providers: [OrdersService, CustomerActivityService, OrderRepository],
   exports: [OrdersService, OrderRepository, CustomerActivityService],
 })

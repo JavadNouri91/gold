@@ -7,7 +7,7 @@ import { Button } from './button';
 interface ModalProps {
   open: boolean;
   onClose: () => void;
-  title?: string;
+  title?: React.ReactNode;
   titleClassName?: string;
   children: React.ReactNode;
   className?: string;

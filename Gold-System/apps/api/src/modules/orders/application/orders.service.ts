@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger, Inject, forwardRef } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import {
   CustomerType,
@@ -69,6 +69,19 @@ export class OrdersService {
     @Inject(forwardRef(() => TradesService))
     private readonly tradesService: TradesService,
   ) {}
+
+  async pendingSummary() {
+    const status = OrderStatus.UNDER_REVIEW;
+    const [pendingBuyOrdersCount, pendingSellOrdersCount] = await this.prisma.$transaction([
+      this.prisma.order.count({
+        where: { status, items: { some: { metadata: { path: ['side'], equals: 'BUY' } } } },
+      }),
+      this.prisma.order.count({
+        where: { status, items: { some: { metadata: { path: ['side'], equals: 'SELL' } } } },
+      }),
+    ]);
+    return { pendingBuyOrdersCount, pendingSellOrdersCount };
+  }
 
   // ─── Create Order (DRAFT) ─────────────────────────────────────
 
@@ -520,10 +533,8 @@ export class OrdersService {
   /**
    * Rejects an order (staff/reviewer action).
    *
-   * Phase 3.3: implements state transition and credit release.
-   * Full Reviewer assignment workflow is Phase 3.4+.
-   *
-   * ATOMICITY: credit release and status update are in one transaction.
+   * Releases the recorded fee-inclusive rial reservation and the status-based
+   * SELL gold hold, with immutable adjustment journals in the same transaction.
    *
    * docs/21-business-decisions.md §3.5
    */
@@ -536,49 +547,83 @@ export class OrdersService {
     if (!order) throw new OrderNotFoundException(orderId);
 
     if (!order.canReject()) {
-      throw new InvalidOrderStateTransitionException(order.status, 'reject');
+      throw new BadRequestException(`Cannot reject an order with status '${order.status}'.`);
     }
 
-    if (order.hasCreditReserved()) {
-      // Phase 3.4/3.5: expire Quotation + complete Assignments atomically with credit release
-      await this.prisma.$transaction(async (tx) => {
-        if (order.reservedAmountRial.gt(0)) {
-          await this.accountRepo.releaseCredit({
-            tx,
-            customerId: order.customerId,
-            amount: order.reservedAmountRial,
-            orderId,
-            actorId: actorUserId,
-            reason: `Order ${order.orderNumber} rejected: ${dto.reason}`,
-          });
-        }
-        await this.orderRepo.rejectInTx(tx, orderId, {
-          rejectionReason: dto.reason,
-          rejectedByUserId: actorUserId,
-        });
-        // Expire any ACTIVE Quotations (§2.3 — applies to rejection too)
-        await this.quotationsService.expireForOrderInTx(tx, orderId, actorUserId);
-        // Phase 3.5: Complete any active Assignments (review decision reached)
-        await tx.assignment.updateMany({
-          where: { orderId, status: 'ACTIVE' },
-          data: { status: 'COMPLETED', completedAt: new Date(), updatedAt: new Date() },
-        });
-      });
+    const reason = dto.reason.trim();
+    if (!reason) throw new BadRequestException('درج دلیل رد سفارش الزامی است');
 
-      // Post-transaction: audit Quotation expiry
-      await this.quotationsService.auditQuotationExpiry(orderId, actorUserId);
-    } else {
-      // No credit reserved (e.g. rejected from DRAFT — unlikely but safe)
-      await this.prisma.order.update({
-        where: { id: orderId },
+    await this.prisma.$transaction(async (tx) => {
+      // Claim the transition before touching balances. Concurrent approval,
+      // cancellation and rejection serialize on this row; only one can win.
+      const claimed = await tx.order.updateMany({
+        where: { id: orderId, status: order.status },
         data: {
-          status: 'REJECTED',
-          rejectionReason: dto.reason,
-          rejectedByUserId: actorUserId,
-          rejectedAt: new Date(),
+          status: 'REJECTED', rejectionReason: reason,
+          rejectedByUserId: actorUserId, rejectedAt: new Date(),
+          reservedAmountRial: 0,
         },
       });
-    }
+      if (claimed.count !== 1) {
+        throw new BadRequestException('وضعیت سفارش تغییر کرده است');
+      }
+
+      // totalAmountRial already includes the BUY fee. Release the recorded
+      // reservation exactly once, never add feeAmountRial a second time.
+      if (order.reservedAmountRial.gt(0)) {
+        await this.accountRepo.releaseCredit({
+          tx, customerId: order.customerId, amount: order.reservedAmountRial,
+          orderId, actorId: actorUserId, reason: `ORDER_REJECTED: ${reason}`,
+        });
+      }
+      const item = await tx.orderItem.findFirst({
+        where: { orderId }, orderBy: { createdAt: 'asc' }, select: { metadata: true },
+      });
+      const selling = readOrderSide(item?.metadata) === 'SELL';
+      // Pending orders have no posted trade or fee income. These off-balance
+      // journals in the adjustment accounts reconcile released holds without changing booked deposits,
+      // revenue, or gold obligations. SELL fees are netted only at settlement.
+      await tx.financialLedgerJournal.create({
+        data: {
+          idempotencyKey: `ORDER_REJECTED:${orderId}:RIAL`,
+          sourceType: 'ORDER_REJECTED', sourceId: orderId,
+          postedByUserId: actorUserId, description: `ORDER_REJECTED: ${reason}`,
+          entries: { create: [
+            { accountCode: 'FA-14', accountName: 'Reversal / Adjustment',
+              accountType: 'CLEARING', debit: order.reservedAmountRial, credit: 0,
+              description: 'Release recorded reservation including reserved fees' },
+            { accountCode: 'FA-14', accountName: 'Reversal / Adjustment',
+              accountType: 'CLEARING', debit: 0, credit: order.reservedAmountRial,
+              description: selling ? 'SELL fees not charged before settlement' : 'ORDER_REJECTED' },
+          ] },
+        },
+      });
+      if (selling) {
+        // sellableWeightGrams excludes REJECTED orders: the status transition
+        // releases weightGrams; incrementing booked gold would mint gold.
+        await tx.goldLedgerJournal.create({
+          data: {
+            idempotencyKey: `ORDER_REJECTED:${orderId}:GOLD`,
+            sourceType: 'ORDER_REJECTED', sourceId: orderId,
+            postedByUserId: actorUserId, description: `ORDER_REJECTED: ${reason}`,
+            entries: { create: [
+              { accountCode: 'GA-03', accountName: 'Gold Reversal / Adjustment',
+                direction: 'OUT', quantity: order.weightGrams, purity: order.purityRatio,
+                description: 'ORDER_REJECTED: release pending sell hold' },
+              { accountCode: 'GA-03', accountName: 'Gold Reversal / Adjustment',
+                direction: 'IN', quantity: order.weightGrams, purity: order.purityRatio,
+                description: 'ORDER_REJECTED: hold reconciliation' },
+            ] },
+          },
+        });
+      }
+      await this.quotationsService.expireForOrderInTx(tx, orderId, actorUserId);
+      await tx.assignment.updateMany({
+        where: { orderId, status: 'ACTIVE' },
+        data: { status: 'COMPLETED', completedAt: new Date(), updatedAt: new Date() },
+      });
+    });
+    await this.quotationsService.auditQuotationExpiry(orderId, actorUserId);
 
     await this.audit.log({
       actorId: actorUserId,
@@ -643,7 +688,7 @@ export class OrdersService {
       this.assertReviewDecisionStatus(fresh?.status, 'approve');
 
       await tx.order.update({
-        where: { id: orderId },
+        where: { id: orderId, status: fresh!.status },
         data: { status: 'APPROVED', updatedAt: new Date() },
       });
 
@@ -743,7 +788,7 @@ export class OrdersService {
       this.assertReviewDecisionStatus(fresh?.status, 'requestRevision');
 
       await tx.order.update({
-        where: { id: orderId },
+        where: { id: orderId, status: fresh!.status },
         data: { status: 'REVISION_REQUESTED', updatedAt: new Date() },
       });
 

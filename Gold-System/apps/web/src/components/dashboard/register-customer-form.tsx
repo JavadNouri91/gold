@@ -407,7 +407,7 @@ export function RegisterCustomerButton({
 
   register('phone', {
     validate: (v) =>
-      !v.trim() || (v.trim().length >= 8 && v.trim().length <= 20) || 'شماره تلفن معتبر نیست',
+      !v.trim() || /^\d{11}$/.test(v) || 'تلفن ثابت باید دقیقاً ۱۱ رقم باشد',
   });
 
   register('email', {
@@ -749,6 +749,7 @@ export function RegisterCustomerButton({
                         label="تلفن ثابت"
                         dir="ltr"
                         inputMode="numeric"
+                        maxLength={11}
                         hint="اختیاری"
                         error={errors.phone?.message}
                         value={watch('phone') ? toPersianDigits(latinPhone(watch('phone'))) : ''}

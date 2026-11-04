@@ -1,6 +1,6 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { ClipboardList, Hammer, PackageCheck, Handshake } from 'lucide-react';
 import { cn, toPersianDigits } from '@/lib/utils';
 import type { PhysicalGoldPickup, PhysicalGoldPickupStatus } from '@/lib/api';
 import { PICKUP_STATUS_LABELS } from '@/lib/utils';
@@ -96,15 +96,12 @@ function StepNode({
           aria-hidden
         />
       ) : null}
-      {done || current ? (
-        <Check
-          className={cn('relative z-[1]', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')}
-          strokeWidth={3}
-          aria-hidden
-        />
-      ) : (
-        <span className="relative z-[1]">{toPersianDigits(String(index + 1))}</span>
-      )}
+      {(() => {
+        const Icon = [ClipboardList, Hammer, PackageCheck, Handshake][index];
+        return (
+          <Icon className={cn('relative z-[1]', compact ? 'h-3 w-3' : 'h-3.5 w-3.5')} aria-hidden />
+        );
+      })()}
     </span>
   );
 }
@@ -175,12 +172,19 @@ export function PickupStatusStepper({
                     'inline-block leading-4',
                     compact ? 'text-[10px]' : 'text-xs',
                     (done || current) && 'font-medium text-emerald-800',
-                    current && 'rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-900',
+                    current &&
+                      'rounded-md bg-emerald-50 px-1.5 py-0.5 font-semibold text-emerald-900',
                     !reached && 'text-slate-400',
                   )}
                 >
-                  {PICKUP_STATUS_LABELS[step]}
+                  {!compact ? `${toPersianDigits(String(index + 1))}. ` : ''}
+                  <span>{PICKUP_STATUS_LABELS[step]}</span>
                 </span>
+                {!compact ? (
+                  <span className="block rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                    {done ? 'تکمیل‌شده' : current ? 'مرحله جاری' : 'در انتظار'}
+                  </span>
+                ) : null}
                 {atLabel ? (
                   <time
                     dateTime={stepAt?.[step] ?? undefined}
@@ -226,7 +230,10 @@ export function PickupStatusStepper({
           aria-hidden
         />
 
-        <ol className="relative z-[1] flex w-full items-start justify-between" aria-label="مراحل تحویل حضوری">
+        <ol
+          className="relative z-[1] flex w-full items-start justify-between"
+          aria-label="مراحل تحویل حضوری"
+        >
           {STEPS.map((step, index) => {
             const reached = index <= currentIndex;
             const done = reached && (cancelled || index < currentIndex || allDone);
@@ -251,8 +258,14 @@ export function PickupStatusStepper({
                     !reached && 'text-slate-400',
                   )}
                 >
-                  {PICKUP_STATUS_LABELS[step]}
+                  {!compact ? `${toPersianDigits(String(index + 1))}. ` : ''}
+                  <span>{PICKUP_STATUS_LABELS[step]}</span>
                 </span>
+                {!compact ? (
+                  <span className="block rounded-full bg-slate-50 px-2 py-0.5 text-[10px] text-slate-600">
+                    {done ? 'تکمیل‌شده' : current ? 'مرحله جاری' : 'در انتظار'}
+                  </span>
+                ) : null}
                 {atLabel ? (
                   <time
                     dateTime={stepAt?.[step] ?? undefined}
