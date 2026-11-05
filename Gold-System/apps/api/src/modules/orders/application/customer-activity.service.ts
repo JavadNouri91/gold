@@ -11,6 +11,7 @@ import {
   computeCustomerActivity,
   computeCustomerHolding,
   EMPTY_CUSTOMER_HOLDING,
+  activityBucketKey,
   readOrderSide,
   type ActivityBucket,
   type ActivityComputation,
@@ -18,6 +19,7 @@ import {
   type ActivityQuery,
   type ActivityTransaction,
   type OrderSide,
+  type PortfolioGoldHistoryPoint,
 } from './customer-activity.math';
 
 export class CustomerActivityQueryDto {
@@ -162,6 +164,133 @@ export class CustomerActivityService {
       this.pickupWeightTotals(customerId, this.prisma),
     ]);
     return computeCustomerHolding(rows.map(mapRow), pickupTotals);
+  }
+
+  /** Historical movements for the same confirmed-gold and wallet balance used by the portfolio read model. */
+  async portfolioHistory(userId: string, dto: CustomerActivityQueryDto): Promise<PortfolioGoldHistoryPoint[]> {
+    const range = this.parseRange(dto.from, dto.to);
+    const customerId = await this.resolveCustomerId(userId);
+    if (!customerId) return [];
+
+    const [trades, pickups, creditTransactions] = await Promise.all([
+      this.prisma.trade.findMany({
+        where: {
+          customerId,
+          OR: [
+            { confirmedAt: { gte: range.from, lte: range.to } },
+            { reversedAt: { gte: range.from, lte: range.to } },
+          ],
+        },
+        select: {
+          status: true,
+          weightGrams: true,
+          confirmedAt: true,
+          reversedAt: true,
+          order: {
+            select: {
+              items: {
+                orderBy: { createdAt: 'asc' },
+                take: 1,
+                select: { metadata: true },
+              },
+            },
+          },
+        },
+      }),
+      this.prisma.physicalGoldPickup.findMany({
+        where: { customerId, status: 'DELIVERED', deliveredAt: { gte: range.from, lte: range.to } },
+        select: { weightGrams: true, deliveredAt: true },
+      }),
+      this.creditHistoryForCustomer(customerId),
+    ]);
+
+    const grouped = new Map<string, {
+      buy: Decimal; sell: Decimal; delivered: Decimal; available: Decimal; pendingPurchase: Decimal;
+    }>();
+    const add = (date: Date | null, field: 'buy' | 'sell' | 'delivered' | 'available' | 'pendingPurchase', amount: Decimal) => {
+      if (!date || date < range.from || date > range.to || amount.isZero()) return;
+      const key = activityBucketKey(date, dto.bucket ?? 'month');
+      const point = grouped.get(key) ?? {
+        buy: new Decimal(0), sell: new Decimal(0), delivered: new Decimal(0),
+        available: new Decimal(0), pendingPurchase: new Decimal(0),
+      };
+      point[field] = point[field].plus(amount);
+      grouped.set(key, point);
+    };
+
+    const finalized = new Set(['CONFIRMED', 'SETTLING', 'COMPLETED', 'REVERSED']);
+    for (const trade of trades) {
+      if (!finalized.has(trade.status)) continue;
+      const side = readOrderSide(trade.order.items[0]?.metadata);
+      if (!side) continue;
+      const amount = new Decimal(trade.weightGrams.toString());
+      add(trade.confirmedAt, side === 'BUY' ? 'buy' : 'sell', amount);
+      if (trade.status === 'REVERSED' && trade.reversedAt) {
+        add(trade.reversedAt, side === 'BUY' ? 'sell' : 'buy', amount);
+      }
+    }
+    for (const pickup of pickups) add(pickup.deliveredAt, 'delivered', new Decimal(pickup.weightGrams.toString()));
+
+    let previousAvailable = new Decimal(0);
+    for (const transaction of creditTransactions) {
+      const balance = new Decimal(transaction.balanceAfter.toString());
+      let change = balance.minus(previousAvailable);
+      if (transaction.type === 'GRANT' && transaction.sourceType !== 'MANUAL') {
+        change = new Decimal(0);
+      }
+      previousAvailable = balance;
+      add(transaction.createdAt, 'available', change);
+      if (transaction.purchaseSide !== 'BUY') continue;
+      const quantity = new Decimal(transaction.amount.toString());
+      if (transaction.type === 'RESERVATION' && transaction.sourceType === 'ORDER') {
+        add(transaction.createdAt, 'pendingPurchase', quantity);
+      } else if (transaction.type === 'RELEASE' && transaction.sourceType === 'ORDER') {
+        add(transaction.createdAt, 'pendingPurchase', quantity.negated());
+      } else if (transaction.type === 'CONSUME' && transaction.sourceType === 'TRADE') {
+        add(transaction.createdAt, 'pendingPurchase', quantity.negated());
+      }
+    }
+
+    return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([key, point]) => ({
+      key,
+      buyGrams: point.buy.toFixed(6),
+      sellGrams: point.sell.toFixed(6),
+      deliveredPickupGrams: point.delivered.toFixed(6),
+      availableRialChange: point.available.toFixed(2),
+      pendingPurchaseRialChange: point.pendingPurchase.toFixed(2),
+    }));
+  }
+
+  private async creditHistoryForCustomer(customerId: string) {
+    const account = await this.prisma.customerAccount.findUnique({
+      where: { customerId }, select: { id: true },
+    });
+    if (!account) return [];
+    const transactions = await this.prisma.creditTransaction.findMany({
+      where: { accountId: account.id, creditPool: 'RIAL' },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      select: { type: true, amount: true, balanceAfter: true, sourceType: true, sourceId: true, createdAt: true },
+    });
+    const orderIds = [...new Set(transactions.filter((tx) => tx.sourceType === 'ORDER').map((tx) => tx.sourceId).filter((id): id is string => id != null))];
+    const tradeIds = [...new Set(transactions.filter((tx) => tx.sourceType === 'TRADE').map((tx) => tx.sourceId).filter((id): id is string => id != null))];
+    const [orders, trades] = await Promise.all([
+      orderIds.length ? this.prisma.order.findMany({
+        where: { id: { in: orderIds } },
+        select: { id: true, items: { orderBy: { createdAt: 'asc' }, take: 1, select: { metadata: true } } },
+      }) : Promise.resolve([]),
+      tradeIds.length ? this.prisma.trade.findMany({
+        where: { id: { in: tradeIds } },
+        select: { id: true, order: { select: { items: { orderBy: { createdAt: 'asc' }, take: 1, select: { metadata: true } } } } },
+      }) : Promise.resolve([]),
+    ]);
+    const orderSides = new Map(orders.map((order) => [order.id, readOrderSide(order.items[0]?.metadata)]));
+    const tradeSides = new Map(trades.map((trade) => [trade.id, readOrderSide(trade.order.items[0]?.metadata)]));
+    return transactions.map((tx) => ({
+      ...tx,
+      purchaseSide: tx.sourceType === 'ORDER'
+        ? orderSides.get(tx.sourceId ?? '')
+        : tx.sourceType === 'TRADE' ? tradeSides.get(tx.sourceId ?? '') : null,
+    }));
   }
 
   /**

@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
 import { hasPermission } from '@/lib/permissions';
@@ -29,7 +31,7 @@ export default function FinancialLedgerPage() {
       <Card>
         <CardHeader><CardTitle>حساب‌ها و مانده</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <NumberedTable className="min-w-full text-sm">
             <thead>
               <tr className="text-muted-foreground">
                 <th className="px-3 py-2 text-right">کد</th>
@@ -53,7 +55,7 @@ export default function FinancialLedgerPage() {
                 );
               })}
             </tbody>
-          </table>
+          </NumberedTable>
         </CardContent>
       </Card>
       {journals.error ? <ApiErrorState error={journals.error} /> : null}

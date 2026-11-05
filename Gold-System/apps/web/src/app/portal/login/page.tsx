@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
-import { isValidMobile, latinMobile, toLatinDigits, MOBILE_PLACEHOLDER } from '@/lib/utils';
+import { isValidMobile, latinMobile, toLatinDigits, toPersianDigits, MOBILE_PLACEHOLDER } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { PasswordInput } from '@/components/ui/password-input';
 import { MobileInput } from '@/components/ui/mobile-input';
@@ -124,6 +124,7 @@ export default function LoginPage() {
                       required: 'رمز عبور الزامی است',
                       minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
                     })}
+                    value={toPersianDigits(watch('password'))}
                   />
                   <div className="flex justify-start">
                     <button

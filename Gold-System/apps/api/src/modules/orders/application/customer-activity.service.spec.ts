@@ -1,6 +1,34 @@
 import { CustomerActivityService } from './customer-activity.service';
 
 describe('CustomerActivityService ownership', () => {
+  it('builds chart movements from confirmed trades, delivered pickups, and credit ledger', async () => {
+    const date = new Date('2026-10-12T10:00:00.000Z');
+    const service = new CustomerActivityService({
+      customer: { findUnique: jest.fn().mockResolvedValue({ id: 'customer-1' }) },
+      trade: { findMany: jest.fn().mockResolvedValue([{
+        status: 'CONFIRMED', weightGrams: { toString: () => '2.000000' },
+        confirmedAt: date, reversedAt: null, order: { items: [{ metadata: { side: 'BUY' } }] },
+      }]) },
+      physicalGoldPickup: { findMany: jest.fn().mockResolvedValue([{
+        weightGrams: { toString: () => '1.000000' }, deliveredAt: date,
+      }]) },
+      customerAccount: { findUnique: jest.fn().mockResolvedValue({ id: 'account-1' }) },
+      creditTransaction: { findMany: jest.fn().mockResolvedValue([{
+        type: 'RESERVATION', amount: { toString: () => '500.00' },
+        balanceAfter: { toString: () => '9500.00' }, sourceType: 'ORDER', sourceId: 'order-1', createdAt: date,
+      }]) },
+      order: { findMany: jest.fn().mockResolvedValue([{ id: 'order-1', items: [{ metadata: { side: 'BUY' } }] }]) },
+    } as never);
+
+    const series = await service.portfolioHistory('user-1', {
+      from: '2026-10-01T00:00:00.000+03:30', to: '2026-10-31T23:59:59.999+03:30', bucket: 'month',
+    });
+    expect(series).toEqual([expect.objectContaining({
+      buyGrams: '2.000000', deliveredPickupGrams: '1.000000',
+      availableRialChange: '9500.00', pendingPurchaseRialChange: '500.00',
+    })]);
+  });
+
   it('loads orders only for the customer resolved from the authenticated user', async () => {
     const findUnique = jest.fn().mockResolvedValue({ id: 'customer-1' });
     const findMany = jest.fn().mockResolvedValue([]);

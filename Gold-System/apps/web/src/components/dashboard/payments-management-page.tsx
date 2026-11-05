@@ -320,7 +320,7 @@ export function PaymentsManagementPage() {
         key: 'amount',
         header: 'مبلغ',
         render: (row) => (
-          <span className={cn('font-bold tabular-nums', row.direction === 'WITHDRAWAL' ? 'text-rose-600' : 'text-slate-900')}>
+          <span className={cn('font-bold tabular-nums', row.direction === 'WITHDRAWAL' ? 'text-rose-600' : 'text-emerald-600')}>
             {row.direction === 'WITHDRAWAL' ? '−' : ''}
             {formatMoney(row.amount)}
           </span>
@@ -591,10 +591,10 @@ export function PaymentsManagementPage() {
         rows={data?.data ?? []}
         isLoading={isLoading}
         emptyMessage={activeTab === 'WITHDRAWAL' ? 'برداشتی یافت نشد' : 'واریزی‌ای یافت نشد'}
-        page={page}
+        page={data?.meta.page ?? page}
         totalPages={data?.meta.totalPages}
         total={data?.meta.total}
-        pageSize={LIMIT}
+        pageSize={data?.meta.limit ?? LIMIT}
         onPageChange={setPage}
       />
 

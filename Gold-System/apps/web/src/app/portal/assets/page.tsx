@@ -16,8 +16,9 @@ export default function PortalAssetsRoute() {
   const price = useSWR('pricing/current-price', () => pricingApi.getCurrentPrice());
   const holding = useSWR('orders/portfolio', () => ordersApi.portfolio());
   const account = useSWR('customer/me/account', () => customerApi.getMyAccount());
-  const valueHistory = useSWR(['assets/value-history', valueBounds.from, valueBounds.to, valueBucket], () =>
-    ordersApi.activitySummary({ ...valueBounds, bucket: valueBucket, page: 1, limit: 10 }),
+  const valueHistory = useSWR(
+    ['assets/value-history', valueBounds.from, valueBounds.to, valueBucket],
+    () => ordersApi.portfolioHistory({ ...valueBounds, bucket: valueBucket, page: 1, limit: 10 }),
   );
 
   return (

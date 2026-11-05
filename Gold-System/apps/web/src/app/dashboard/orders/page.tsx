@@ -582,6 +582,7 @@ export default function OrdersPage() {
             rows={orders.data?.orders ?? []}
             isLoading={orders.isLoading}
             page={orders.data?.meta.page}
+            pageSize={orders.data?.meta.limit}
             totalPages={orders.data?.meta.totalPages}
             onPageChange={setOrdersPage}
           />
@@ -630,6 +631,7 @@ export default function OrdersPage() {
             rows={assignments.data?.assignments ?? []}
             isLoading={assignments.isLoading}
             page={assignments.data?.meta.page}
+            pageSize={assignments.data?.meta.limit}
             totalPages={assignments.data?.meta.totalPages}
             onPageChange={setAssignmentPage}
           />

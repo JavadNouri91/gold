@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { Toast } from '@/components/dashboard/customer-widgets';
 import { CANCEL_PICKUP_SUCCESS } from '@/components/pickups/CancelPickupModal';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
+import { pickupReturnHref } from '@/lib/pickup-list-filters';
 import useSWR from 'swr';
 import { CalendarDays } from 'lucide-react';
 import { useAuth } from '@/lib/auth';
@@ -26,8 +27,13 @@ import {
 import { formatDate } from '@/lib/utils';
 
 export default function StaffPickupDetailPage() {
+  return <Suspense fallback={null}><StaffPickupDetail /></Suspense>;
+}
+
+function StaffPickupDetail() {
   const [cancelToast, setCancelToast] = useState<string | null>(null);
   const params = useParams<{ id: string }>();
+  const backHref = pickupReturnHref(useSearchParams().get('returnTo'));
   const { user } = useAuth();
   const canRead = hasPermission(user?.permissions, 'pickup.read');
   const canPrepare = hasPermission(user?.permissions, 'pickup.prepare');
@@ -50,7 +56,7 @@ export default function StaffPickupDetailPage() {
   return (
     <div dir="rtl" className="print-doc space-y-6 rounded-2xl bg-slate-50/80 p-3 sm:p-6">
       <Toast message={cancelToast} onClose={() => setCancelToast(null)} />
-      {pickup ? <PickupDetailHeader pickup={pickup} /> : <SkeletonBlock className="h-20" />}
+      {pickup ? <PickupDetailHeader pickup={pickup} backHref={backHref} /> : <SkeletonBlock className="h-20" />}
 
       {!pickup ? (
         <div className="space-y-4" aria-busy="true" aria-label="در حال بارگذاری">

@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import { useState } from 'react';
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
@@ -67,7 +69,7 @@ export default function AuditPage() {
       {report.error ? <ApiErrorState error={report.error} onRetry={() => void report.mutate()} /> : null}
       {report.isLoading ? <p className="text-sm">در حال دریافت…</p> : null}
       <div className="overflow-x-auto rounded-xl border bg-white">
-        <table className="min-w-full text-sm">
+        <NumberedTable page={page} pageSize={20} className="min-w-full text-sm">
           <thead>
             <tr className="bg-muted/50 text-muted-foreground">
               {['زمان', 'عامل', 'عمل', 'موجودیت', 'شناسه', 'دلیل'].map((header) => (
@@ -87,7 +89,7 @@ export default function AuditPage() {
               </tr>
             ))}
           </tbody>
-        </table>
+        </NumberedTable>
         {report.data && report.data.logs.length === 0 ? (
           <p className="p-4 text-sm text-muted-foreground">رکوردی با این فیلتر نیست.</p>
         ) : null}

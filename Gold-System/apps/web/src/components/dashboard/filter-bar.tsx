@@ -21,6 +21,7 @@ export function FilterBar({
   onReset,
   extra,
   live = false,
+  resetLabel = 'پاک کردن',
 }: {
   fields: FilterField[];
   values: Record<string, string>;
@@ -29,6 +30,7 @@ export function FilterBar({
   onReset?: () => void;
   extra?: ReactNode;
   live?: boolean;
+  resetLabel?: string;
 }) {
   return (
     <form
@@ -75,7 +77,7 @@ export function FilterBar({
           )}
           {onReset ? (
             <Button type="button" variant="outline" onClick={onReset}>
-              پاک کردن
+              {resetLabel}
             </Button>
           ) : null}
         </div>

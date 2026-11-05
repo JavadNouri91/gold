@@ -111,6 +111,7 @@ export function PersonalInformationCard({
                 <dd
                   className={cn(
                     'mt-1.5 break-words text-base font-bold text-slate-900',
+                    field.ltr && 'text-right',
                     field.valueClassName,
                   )}
                   dir={field.ltr ? 'ltr' : undefined}
@@ -226,6 +227,7 @@ function EditContactModal({
           label="ایمیل"
           type="email"
           dir="ltr"
+          className="text-right"
           value={email}
           onChange={(event) => setEmail(event.target.value)}
           error={emailError}
@@ -247,6 +249,7 @@ function EditContactModal({
         <PostalCodeInput
           label="کد پستی"
           value={postalCode}
+          className="text-right pr-9 pl-3"
           onValueChange={setPostalCode}
           error={postalError}
         />

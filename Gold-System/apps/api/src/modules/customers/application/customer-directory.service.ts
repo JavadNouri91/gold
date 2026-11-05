@@ -22,6 +22,7 @@ import {
   NotificationType,
 } from '../../notifications/domain/constants/notification-types';
 import { CustomersService } from './customers.service';
+import { requiredKycTypes } from '../../kyc/domain/kyc-workflow';
 import { CustomerResponseDto } from './dto/customer-response.dto';
 import { ListCustomersDto } from './dto/list-customers.dto';
 import { UpdateCustomerDto } from './dto/update-customer.dto';
@@ -418,8 +419,30 @@ export class CustomerDirectoryService {
   ) {
     const current = await this.prisma.customer.findUnique({ where: { id } });
     if (!current) throw new NotFoundException('مشتری پیدا نشد');
+    if (
+      dto.accountStatus === 'ACTIVE' &&
+      current.status !== 'APPROVED' &&
+      current.status !== 'ACTIVE'
+    ) {
+      throw new BadRequestException('فعال‌سازی حساب تنها پس از تأیید احراز هویت امکان‌پذیر است');
+    }
     if (current.accountStatus === dto.accountStatus) {
       throw new BadRequestException('وضعیت حساب همین مقدار است');
+    }
+    if (dto.accountStatus === 'ACTIVE') {
+      const documents = await this.prisma.customerDocument.findMany({
+        where: { customerId: id },
+        distinct: ['documentType'],
+        orderBy: { createdAt: 'desc' },
+        select: { documentType: true, status: true },
+      });
+      if (!requiredKycTypes(current.type).every((requirement) =>
+        documents.some((document) =>
+          document.documentType === requirement.type && document.status === 'APPROVED',
+        ),
+      )) {
+        throw new BadRequestException('پیش از فعال‌سازی حساب، همه مدارک الزامی باید تأیید شوند');
+      }
     }
     const updated = await this.prisma.customer.update({
       where: { id },
@@ -589,6 +612,7 @@ export class CustomerDirectoryService {
       email: string | null;
       dateOfBirth: Date | null;
       address: string | null;
+      avatarKey?: string | null;
       type: string | null;
       status: string;
       accountStatus: string;
@@ -620,6 +644,7 @@ export class CustomerDirectoryService {
     item.email = row.email;
     item.dateOfBirth = row.dateOfBirth;
     item.address = row.address;
+    item.hasAvatar = Boolean(row.avatarKey);
     item.type = type;
     item.status = status;
     item.accountStatus = accountStatus;

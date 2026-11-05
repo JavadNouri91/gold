@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { SWRConfig } from 'swr';
 import userEvent from '@testing-library/user-event';
 import KycQueuePage from '@/app/dashboard/kyc/page';
 import { signIn } from './auth-state';
@@ -19,6 +20,61 @@ const { internalKycApi } = jest.requireMock('@/lib/internal-api') as {
 };
 
 describe('KYC review queue', () => {
+  it.each([18, 20])('keeps row numbers and summary totals correct across pages of %i', async (initialLimit) => {
+    signIn(['customer.read', 'kyc.review']);
+    const user = userEvent.setup();
+    internalKycApi.queue.mockImplementation(async ({ page, limit }) => {
+      const size = limit === 10 ? 10 : initialLimit;
+      return {
+        items: Array.from({ length: size }, (_, index) => ({
+          id: `customer-${size - index}`,
+          customerNumber: `C-${size - index}`,
+          fullName: `مشتری ${size - index}`,
+          mobile: '09120001005',
+          status: 'ACTIVE',
+          bucket: 'awaiting',
+          kycDisplay: 'awaiting',
+          latestSubmittedAt: '2026-10-13T15:02:20.000Z',
+        })),
+        summary: { verified: 15, unverified: 48, awaiting: 37 },
+        meta: { page, limit: size, total: 100, totalPages: Math.ceil(100 / size) },
+      };
+    });
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <KycQueuePage />
+      </SWRConfig>,
+    );
+    const checkRows = async (offset: number, size: number) => {
+      await waitFor(() => {
+        const table = screen.getByRole('table');
+        const headers = within(table).getAllByRole('columnheader');
+        expect(headers[0]).toHaveTextContent('ردیف');
+        expect(headers[0]).toHaveClass('w-12', 'text-center');
+        expect(headers[1]).toHaveTextContent('شناسه');
+        const rows = within(table).getAllByRole('row').slice(1);
+        expect(rows).toHaveLength(size);
+        rows.forEach((row, index) => {
+          const cells = within(row).getAllByRole('cell');
+          expect(cells[0].textContent).toBe(String(offset + index + 1).replace(/\d/g, (digit) => '۰۱۲۳۴۵۶۷۸۹'[Number(digit)]));
+          expect(cells[0]).toHaveClass('w-12', 'text-center');
+          expect(cells[1]).toHaveTextContent('C-');
+        });
+        expect(screen.getByText('۱۵ حساب')).toBeInTheDocument();
+        expect(screen.getByText('۴۸ حساب')).toBeInTheDocument();
+        expect(screen.getByText('۳۷ پرونده')).toBeInTheDocument();
+      });
+    };
+    await checkRows(0, initialLimit);
+    await user.click(screen.getByRole('button', { name: 'بعدی' }));
+    await checkRows(initialLimit, initialLimit);
+    await user.selectOptions(screen.getByRole('combobox', { name: 'تعداد در صفحه' }), '10');
+    await checkRows(0, 10);
+    expect(internalKycApi.queue).toHaveBeenLastCalledWith(expect.objectContaining({ page: 1, limit: 10 }));
+    await user.click(screen.getByText('در انتظار تایید مدارک (صف)'));
+    await checkRows(0, 10);
+  });
+
   it('shows the management dashboard with KPI cards, search, and dynamic actions', async () => {
     signIn(['customer.read', 'kyc.review']);
     internalKycApi.queue.mockResolvedValue({
@@ -81,7 +137,8 @@ describe('KYC review queue', () => {
 
     expect(await screen.findByText('رضا نوری')).toBeInTheDocument();
     expect(screen.getByText('۰۹۱۲۰۰۰۱۰۰۵')).toBeInTheDocument();
-    expect(screen.getByText('فعال')).toBeInTheDocument();
+    expect(screen.queryByText('فعال')).not.toBeInTheDocument();
+    expect(screen.getByText('غیرفعال')).toBeInTheDocument();
     expect(screen.getAllByText('در انتظار تایید (صف)').length).toBeGreaterThan(0);
     expect(
       screen.getByRole('link', { name: /بررسی مدارک/ }),

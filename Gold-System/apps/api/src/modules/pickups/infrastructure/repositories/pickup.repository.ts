@@ -1,3 +1,4 @@
+import { normalizePickupSearch } from '../../application/pickup-list-filters';
 import { Injectable } from '@nestjs/common';
 import {
   Prisma,
@@ -120,12 +121,47 @@ export class PickupRepository {
   async listStaff(opts: {
     status?: PhysicalGoldPickupStatus;
     customerId?: string;
+    search?: string;
+    actionRequired?: boolean;
+    requestedAt?: { gte: Date; lt: Date };
     limit?: number;
     offset?: number;
   }): Promise<{ items: PhysicalGoldPickupEntity[]; total: number }> {
+    const search = normalizePickupSearch(opts.search ?? '');
+    // Normalize stored text too, so Arabic/Persian variants and digit scripts match.
+    // This read-only query finds IDs; the same Prisma predicate counts and pages them.
+    const matches = search
+      ? await this.prisma.$queryRaw<Array<{ id: string }>>(Prisma.sql`
+      SELECT p.id FROM physical_gold_pickups p
+      JOIN customers c ON c.id = p.customer_id
+      WHERE position(${search} in
+        regexp_replace(
+          translate(lower(concat_ws(' ', p.pickup_number, c.first_name, c.last_name, c.mobile)),
+            'يىك۰۱۲۳۴۵۶۷۸۹٠١٢٣٤٥٦٧٨٩', 'ییک01234567890123456789'),
+          '[[:space:]‌ـً-ٰٟ]', '', 'g')
+      ) > 0
+    `)
+      : undefined;
     const where: Prisma.PhysicalGoldPickupWhereInput = {
       ...(opts.status ? { status: opts.status } : {}),
       ...(opts.customerId ? { customerId: opts.customerId } : {}),
+      ...(opts.requestedAt ? { requestedAt: opts.requestedAt } : {}),
+      ...(matches ? { id: { in: matches.map((row) => row.id) } } : {}),
+      ...(opts.actionRequired
+        ? {
+            AND: [
+              {
+                status: {
+                  in: [
+                    PhysicalGoldPickupStatus.REQUESTED,
+                    PhysicalGoldPickupStatus.PREPARING,
+                    PhysicalGoldPickupStatus.READY,
+                  ],
+                },
+              },
+            ],
+          }
+        : {}),
     };
     const [rows, total] = await Promise.all([
       this.prisma.physicalGoldPickup.findMany({
@@ -361,10 +397,7 @@ export class PickupRepository {
     return map;
   }
 
-  private mapRow(
-    row: PickupRow,
-    extras?: PickupExtraColumns,
-  ): PhysicalGoldPickupEntity {
+  private mapRow(row: PickupRow, extras?: PickupExtraColumns): PhysicalGoldPickupEntity {
     const events: PickupEventSnapshot[] = row.events.map((e) => ({
       id: e.id,
       status: e.status as PhysicalGoldPickupStatus,

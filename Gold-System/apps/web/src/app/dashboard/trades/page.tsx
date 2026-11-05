@@ -147,6 +147,7 @@ export default function TradesPage() {
         rows={rows}
         isLoading={isLoading}
         page={data?.page}
+        pageSize={data?.limit}
         totalPages={data ? Math.max(1, Math.ceil(data.total / data.limit)) : 1}
         onPageChange={setPage}
       />

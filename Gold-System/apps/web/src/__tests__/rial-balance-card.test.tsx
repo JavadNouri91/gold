@@ -11,6 +11,7 @@ const mockGetMe = jest.fn();
 const mockGetAccount = jest.fn();
 const mockSummary = jest.fn();
 const mockPortfolio = jest.fn();
+const mockGetKyc = jest.fn();
 
 jest.mock('next/navigation', () => ({
   usePathname: () => '/portal/dashboard',
@@ -30,6 +31,7 @@ jest.mock('@/lib/api', () => {
   const actual = jest.requireActual<typeof import('@/lib/api')>('@/lib/api');
   return {
     ...actual,
+    kycApi: { ...actual.kycApi, getMine: () => mockGetKyc() },
     customerApi: {
       ...actual.customerApi,
       getMe: (...args: unknown[]) => mockGetMe(...args),
@@ -85,6 +87,8 @@ function renderCard() {
 
 beforeEach(() => {
   mockGetMe.mockReset();
+  mockGetKyc.mockReset();
+  mockGetKyc.mockResolvedValue({ phase: 'VERIFIED', documents: [] });
   mockGetAccount.mockReset();
   mockSummary.mockReset();
   mockPortfolio.mockReset();
@@ -215,6 +219,7 @@ describe('DashboardHeader', () => {
 
   it('shows a KYC warning beside purchasing power when the customer is not verified', async () => {
     mockGetMe.mockResolvedValue({ ...customer, status: 'PENDING' });
+    mockGetKyc.mockResolvedValue({ phase: 'NOT_STARTED', documents: [] });
     render(
       <ThemeProvider>
         <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
@@ -223,13 +228,13 @@ describe('DashboardHeader', () => {
       </ThemeProvider>,
     );
 
-    const warning = await screen.findAllByRole('link', { name: 'هشدار احراز هویت نشده' });
+    const warning = await screen.findAllByRole('link', { name: 'مدارک احراز هویت را ارسال کنید' });
     expect(warning.length).toBeGreaterThanOrEqual(1);
     expect(warning[0]).toHaveAttribute('href', '/portal/profile#kyc');
     expect(warning[0]).not.toHaveAttribute('title');
     await userEvent.hover(warning[0]!);
     expect(
-      await screen.findByRole('tooltip', { name: 'احراز هویت نشده است. برای معامله مدارک را ارسال کنید.' }),
+      await screen.findByRole('tooltip', { name: 'مدارک احراز هویت را ارسال کنید' }),
     ).toBeInTheDocument();
     expect(screen.getAllByTestId('kyc-warning-icon').length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByTestId('kyc-verified-icon')).not.toBeInTheDocument();

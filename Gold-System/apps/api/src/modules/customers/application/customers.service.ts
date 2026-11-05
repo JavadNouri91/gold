@@ -96,8 +96,8 @@ export class CustomersService {
       // Generate customer number within the same transaction
       const customerNumber = await this.customerRepo.nextCustomerNumber(tx);
 
-      // Account may be opened immediately; KYC stays unverified until documents are approved.
-      const initialAccountStatus = dto.initialAccountStatus ?? 'INACTIVE';
+      // New customers cannot be active before KYC approval.
+      const initialAccountStatus = CustomerAccountStatus.INACTIVE;
 
       // Create Customer profile
       const customerRow = await tx.customer.create({
@@ -138,15 +138,6 @@ export class CustomersService {
 
       return customerRow;
     });
-
-    // If customer was created as ACTIVE, create their account immediately
-    if (customer.accountStatus === 'ACTIVE') {
-      try {
-        await this.accountRepo.createForCustomer(customer.id);
-      } catch {
-        // Account may already exist; non-fatal
-      }
-    }
 
     // Create internal note if provided
     if (dto.internalNote?.trim()) {
@@ -590,6 +581,15 @@ export class CustomersService {
     }
     const buffer = await this.storage.getObject(current.avatarKey);
     return { buffer, mimeType: mimeFromAvatarKey(current.avatarKey) };
+  }
+
+  async readCustomerAvatar(customerId: string): Promise<{ buffer: Buffer; mimeType: string }> {
+    const customer = await this.requireCustomer(customerId);
+    if (!customer.avatarKey) {
+      throw new NotFoundException('عکس پروفایل ثبت نشده است');
+    }
+    const buffer = await this.storage.getObject(customer.avatarKey);
+    return { buffer, mimeType: mimeFromAvatarKey(customer.avatarKey) };
   }
 
   // ----------------------------------------------------------------

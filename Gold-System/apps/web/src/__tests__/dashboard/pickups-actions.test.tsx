@@ -1,19 +1,22 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import PickupsPage from '@/app/dashboard/pickups/page';
 import { signIn } from './auth-state';
 import { SWRConfig } from 'swr';
 import { ApiClientError } from '@/lib/api';
 
+const mockReplace = jest.fn();
+let mockQueryString = '';
+
 jest.mock('@/lib/auth', () => ({
   useAuth: () => require('./auth-state').authState,
 }));
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useRouter: () => ({ push: jest.fn(), replace: mockReplace }),
   usePathname: () => '/dashboard/pickups',
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(mockQueryString),
 }));
 
 jest.mock('@/lib/internal-api', () => ({
@@ -70,6 +73,7 @@ describe('pickups list actions', () => {
   }
 
   beforeEach(() => {
+    mockQueryString = '';
     signIn(['pickup.read']);
     api.staffPickupsApi.list.mockResolvedValue({
       data: [PICKUP],
@@ -81,6 +85,62 @@ describe('pickups list actions', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('applies search, actual status, date preset, and action-required together, then clears them', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByRole('link', { name: 'اقدام روی درخواست PU-1' });
+    await user.type(screen.getByRole('textbox', { name: 'جستجو' }), 'علي ۰۹۱۲');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'وضعیت' }), 'READY');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'بازه ثبت درخواست' }), 'last7');
+    await user.click(screen.getByRole('checkbox', { name: 'فقط درخواست‌های نیازمند اقدام' }));
+    expect(api.staffPickupsApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ search: undefined, status: undefined }));
+    await user.click(screen.getByRole('button', { name: 'اعمال فیلتر' }));
+    await waitFor(() => expect(api.staffPickupsApi.list).toHaveBeenLastCalledWith(expect.objectContaining({
+      search: 'علي ۰۹۱۲', status: 'READY', dateRange: 'last7', actionRequired: 'true', offset: 0,
+    })));
+    expect(mockReplace).toHaveBeenLastCalledWith(expect.stringContaining('status=READY'), { scroll: false });
+    expect(screen.getByRole('link', { name: 'اقدام روی درخواست PU-1' }).getAttribute('href')).toContain('returnTo=');
+    await user.click(screen.getByRole('button', { name: 'پاک کردن فیلترها' }));
+    await waitFor(() => expect(api.staffPickupsApi.list).toHaveBeenLastCalledWith(expect.objectContaining({
+      search: undefined, status: undefined, dateRange: undefined, actionRequired: undefined, from: undefined, to: undefined, offset: 0,
+    })));
+    expect(screen.getByRole('textbox', { name: 'جستجو' })).toHaveValue('');
+    expect(screen.getByRole('checkbox')).not.toBeChecked();
+    expect(mockReplace).toHaveBeenLastCalledWith('/dashboard/pickups', { scroll: false });
+  });
+
+  it('sends complete custom dates and renders a filtered empty state', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('مشتری نمونه');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'بازه ثبت درخواست' }), 'custom');
+    expect(screen.getByLabelText(/از تاریخ/)).toBeRequired();
+    fireEvent.change(screen.getByLabelText(/از تاریخ/), { target: { value: '2026-11-01' } });
+    fireEvent.change(screen.getByLabelText(/تا تاریخ/), { target: { value: '2026-11-05' } });
+    api.staffPickupsApi.list.mockResolvedValue({ data: [], meta: { total: 0, offset: 0, limit: 20 } });
+    await user.click(screen.getByRole('button', { name: 'اعمال فیلتر' }));
+    await waitFor(() => expect(api.staffPickupsApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ dateRange: 'custom', from: '2026-11-01', to: '2026-11-05' })));
+    expect(await screen.findByText('درخواست تحویلی با این فیلترها یافت نشد')).toBeInTheDocument();
+    expect(screen.queryByRole('table')).not.toBeInTheDocument();
+  });
+
+  it('restores URL filters, carries them through pagination, and resets to page one on apply', async () => {
+    mockQueryString = 'search=PU&status=READY&page=2';
+    api.staffPickupsApi.list.mockImplementation(async (params) => ({ data: [PICKUP], meta: { total: 60, limit: 20, offset: params.offset } }));
+    const user = userEvent.setup();
+    renderPage();
+    await screen.findByText('مشتری نمونه');
+    expect(screen.getByRole('textbox', { name: 'جستجو' })).toHaveValue('PU');
+    expect(api.staffPickupsApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'PU', status: 'READY', offset: 20 }));
+    const firstRow = within(screen.getByRole('table')).getAllByRole('row')[1];
+    expect(within(firstRow).getAllByRole('cell')[0]).toHaveTextContent('۲۱');
+    await user.click(screen.getByRole('button', { name: 'بعدی' }));
+    await waitFor(() => expect(api.staffPickupsApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ search: 'PU', status: 'READY', offset: 40 })));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'وضعیت' }), 'DELIVERED');
+    await user.click(screen.getByRole('button', { name: 'اعمال فیلتر' }));
+    await waitFor(() => expect(api.staffPickupsApi.list).toHaveBeenLastCalledWith(expect.objectContaining({ status: 'DELIVERED', offset: 0 })));
   });
 
   it('renders separate view and print buttons in the actions column', async () => {
@@ -197,13 +257,13 @@ describe('pickups list actions', () => {
     const user = userEvent.setup();
     renderPage();
     await user.click(await screen.findByRole('button', { name: 'لغو یا رد درخواست تحویل PU-1' }));
-    await user.type(screen.getByRole('textbox'), 'عدم موجودی');
+    await user.type(screen.getByRole('textbox', { name: /دلیل لغو/ }), 'عدم موجودی');
     await user.click(screen.getByRole('button', { name: 'تأیید و لغو درخواست' }));
     expect(await screen.findByRole('status')).toHaveTextContent('امکان لغو وجود ندارد');
-    expect(screen.getByRole('textbox')).toHaveValue('عدم موجودی');
+    expect(screen.getByRole('textbox', { name: /دلیل لغو/ })).toHaveValue('عدم موجودی');
     await user.click(screen.getByRole('button', { name: 'انصراف' }));
     await user.click(screen.getByRole('button', { name: 'لغو یا رد درخواست تحویل PU-1' }));
-    expect(screen.getByRole('textbox')).toHaveValue('');
+    expect(screen.getByRole('textbox', { name: /دلیل لغو/ })).toHaveValue('');
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

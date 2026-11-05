@@ -32,6 +32,7 @@ export interface StaffCustomer {
   firstName: string;
   lastName: string;
   fullName: string;
+  hasAvatar?: boolean;
   nationalId: string;
   mobile: string;
   email: string | null;
@@ -1417,6 +1418,11 @@ export const staffPickupsApi = {
   list(params?: {
     status?: string;
     customerId?: string;
+    search?: string;
+    dateRange?: string;
+    from?: string;
+    to?: string;
+    actionRequired?: string;
     limit?: number;
     offset?: number;
   }): Promise<ListPickupsResponse> {

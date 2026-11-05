@@ -1,3 +1,4 @@
+import { NumberedTable } from '@/components/dashboard/numbered-table';
 import { formatDateTime, formatMoney, formatWeight, statusLabel, toPersianDigits, LEDGER_DIRECTION_LABELS } from '@/lib/utils';
 import type { GoldJournal, LedgerJournal } from '@/lib/internal-api';
 
@@ -14,7 +15,7 @@ export function LedgerTable({ journals }: { journals: LedgerJournal[] }) {
             <span>بدهکار {formatMoney(journal.totalDebits)}</span>
             <span>بستانکار {formatMoney(journal.totalCredits)}</span>
           </header>
-          <table className="min-w-full text-sm">
+          <NumberedTable className="min-w-full text-sm">
             <thead>
               <tr className="text-muted-foreground">
                 <th className="px-4 py-2 text-right">حساب</th>
@@ -33,7 +34,7 @@ export function LedgerTable({ journals }: { journals: LedgerJournal[] }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </NumberedTable>
         </article>
       ))}
     </div>
@@ -51,7 +52,7 @@ export function GoldLedgerTable({ journals }: { journals: GoldJournal[] }) {
             <span dir="ltr">{toPersianDigits(journal.sourceId)}</span>
             <span>{formatDateTime(journal.postedAt)}</span>
           </header>
-          <table className="min-w-full text-sm">
+          <NumberedTable className="min-w-full text-sm">
             <thead>
               <tr className="text-muted-foreground">
                 <th className="px-4 py-2 text-right">حساب</th>
@@ -70,7 +71,7 @@ export function GoldLedgerTable({ journals }: { journals: GoldJournal[] }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </NumberedTable>
         </article>
       ))}
     </div>

@@ -4,12 +4,14 @@ import { Button } from '@/components/ui/button';
 import { cn, formatFaNumber } from '@/lib/utils';
 import { EmptyState } from '@/components/ui/alert';
 import { TableSkeleton } from './states';
+import { NumberedTable } from './numbered-table';
 
 export interface Column<T> {
   key: string;
   header: React.ReactNode;
-  render: (row: T) => React.ReactNode;
+  render: (row: T, index: number) => React.ReactNode;
   className?: string;
+  headerClassName?: string;
 }
 
 export function DataTable<T extends { id: string }>({
@@ -57,7 +59,11 @@ export function DataTable<T extends { id: string }>({
           stickyHeader && 'max-h-[640px]',
         )}
       >
-        <table
+        <NumberedTable
+          page={page}
+          pageSize={pageSize}
+          selectionColumn={columns[0]?.key === 'select'}
+          numberCellClassName={compact ? 'border-b border-border' : undefined}
           className={cn(
             'min-w-full text-sm',
             compact && 'border-separate border-spacing-0',
@@ -74,7 +80,7 @@ export function DataTable<T extends { id: string }>({
               {columns.map((column) => (
                 <th
                   key={column.key}
-                  className={cn(cellPad, 'text-right font-medium whitespace-nowrap border-b border-border')}
+                  className={cn(cellPad, 'text-right font-medium whitespace-nowrap border-b border-border', column.headerClassName)}
                 >
                   {column.header}
                 </th>
@@ -82,7 +88,7 @@ export function DataTable<T extends { id: string }>({
             </tr>
           </thead>
           <tbody className={compact ? undefined : 'divide-y'}>
-            {rows.map((row) => (
+            {rows.map((row, index) => (
               <tr
                 key={row.id}
                 className={cn(
@@ -101,13 +107,13 @@ export function DataTable<T extends { id: string }>({
                       column.className,
                     )}
                   >
-                    {column.render(row)}
+                    {column.render(row, index)}
                   </td>
                 ))}
               </tr>
             ))}
           </tbody>
-        </table>
+        </NumberedTable>
       </div>
       {onPageChange && page && totalPages && (totalPages > 1 || total != null) ? (
         <div className="flex flex-col gap-3 text-sm sm:flex-row sm:items-center sm:justify-between">

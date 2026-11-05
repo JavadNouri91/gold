@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import { useState } from 'react';
 import useSWR from 'swr';
 import { useAuth } from '@/lib/auth';
@@ -78,7 +80,7 @@ export function ReportView({ kind }: { kind: ReportKind }) {
       />
       {report.error ? <ApiErrorState error={report.error} onRetry={() => void report.mutate()} /> : null}
       {report.isLoading ? <p className="text-sm text-muted-foreground">در حال دریافت گزارش…</p> : null}
-      {report.data ? <ReportBody kind={kind} data={report.data} /> : null}
+      {report.data ? <ReportBody kind={kind} data={report.data} offset={query.offset ?? 0} /> : null}
       <div className="flex gap-2">
         <button className="rounded-md border px-3 py-1 text-sm" type="button" disabled={page <= 1} onClick={() => setPage((current) => current - 1)}>
           قبلی
@@ -114,11 +116,11 @@ async function loadReport(kind: ReportKind, query: ReportQuery) {
   }
 }
 
-function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType<typeof loadReport>> }) {
+function ReportBody({ kind, data, offset }: { kind: ReportKind; data: Awaited<ReturnType<typeof loadReport>>; offset: number }) {
   if (kind === 'customers') {
     const report = data as import('@/lib/internal-api').CustomerReport;
     return (
-      <SimpleTable
+      <SimpleTable offset={offset}
         headers={['شماره', 'نام', 'وضعیت', 'احراز', 'سقف اعتبار', 'در دسترس']}
         rows={report.customers.map((row) => [
           toPersianDigits(row.customerNumber),
@@ -134,7 +136,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
   if (kind === 'orders') {
     const report = data as import('@/lib/internal-api').OrderReport;
     return (
-      <SimpleTable
+      <SimpleTable offset={offset}
         headers={['شماره', 'وضعیت', 'مبلغ', 'وزن']}
         rows={report.orders.map((row) => [
           toPersianDigits(row.orderNumber),
@@ -150,7 +152,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
     return (
       <div className="space-y-3">
         <p className="text-sm">جمع مبلغ {formatMoney(report.totalValueRial)} — جمع وزن {formatWeight(report.totalWeightGrams)}</p>
-        <SimpleTable
+        <SimpleTable offset={offset}
           headers={['شماره', 'وضعیت', 'مبلغ', 'وزن']}
           rows={report.trades.map((row) => [toPersianDigits(row.tradeNumber), row.status, formatMoney(row.totalAmountRial), formatWeight(row.weightGrams)])}
         />
@@ -162,7 +164,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
     return (
       <div className="space-y-3">
         <p className="text-sm">جمع {formatMoney(report.totalValueRial)}</p>
-        <SimpleTable
+        <SimpleTable offset={offset}
           headers={['روش', 'وضعیت', 'مبلغ', 'ارجاع']}
           rows={report.payments.map((row) => [row.method, row.status, formatMoney(row.amount), row.referenceNumber ? toPersianDigits(row.referenceNumber) : '—'])}
         />
@@ -174,7 +176,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
     return (
       <div className="space-y-3">
         <p className="text-sm">تسویه‌شده {formatMoney(report.totalSettledValueRial)} — باز {formatMoney(report.totalPendingValueRial)}</p>
-        <SimpleTable
+        <SimpleTable offset={offset}
           headers={['معامله', 'وضعیت', 'مبلغ']}
           rows={report.settlements.map((row) => [row.tradeId, row.status, formatMoney(row.settledAmount)])}
         />
@@ -185,7 +187,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
     const report = data as import('@/lib/internal-api').FinancialReport;
     return (
       <div className="space-y-4">
-        <SimpleTable
+        <SimpleTable offset={0}
           headers={['کد', 'نام', 'بدهکار', 'بستانکار', 'خالص']}
           rows={report.accountBalances.map((row) => [
             toPersianDigits(row.accountCode),
@@ -195,7 +197,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
             formatMoney(row.netBalance),
           ])}
         />
-        <SimpleTable
+        <SimpleTable offset={offset}
           headers={['حساب', 'بدهکار', 'بستانکار', 'منبع', 'تاریخ']}
           rows={report.entries.map((row) => [toPersianDigits(row.accountCode), formatMoney(row.debit), formatMoney(row.credit), row.sourceType, formatDateTime(row.createdAt)])}
         />
@@ -206,7 +208,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
     const report = data as import('@/lib/internal-api').GoldReport;
     return (
       <div className="space-y-4">
-        <SimpleTable
+        <SimpleTable offset={0}
           headers={['کد', 'نام', 'خالص', 'ورود', 'خروج']}
           rows={report.accountBalances.map((row) => [
             toPersianDigits(row.accountCode),
@@ -216,7 +218,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
             formatWeight(row.totalOutGrams),
           ])}
         />
-        <SimpleTable
+        <SimpleTable offset={offset}
           headers={['حساب', 'جهت', 'وزن', 'منبع']}
           rows={report.entries.map((row) => [toPersianDigits(row.accountCode), row.direction, formatWeight(row.quantity), row.sourceType])}
         />
@@ -226,7 +228,7 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
   if (kind === 'suppliers') {
     const report = data as import('@/lib/internal-api').SupplierReport;
     return (
-      <SimpleTable
+      <SimpleTable offset={offset}
         headers={['شماره', 'نام', 'خرید', 'مانده']}
         rows={report.suppliers.map((row) => [
           toPersianDigits(row.supplierNumber),
@@ -240,11 +242,11 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
   const pricing = data as import('@/lib/internal-api').PricingReport;
   return (
     <div className="space-y-4">
-      <SimpleTable
+      <SimpleTable offset={offset}
         headers={['زمان', 'مقدار نرمال', 'وضعیت']}
         rows={pricing.snapshots.map((row) => [row.capturedAt, row.normalizedValue, row.status])}
       />
-      <SimpleTable
+      <SimpleTable offset={offset}
         headers={['منبع', 'قیمت پایه', 'قیمت نهایی']}
         rows={pricing.calculations.map((row) => [row.sourceType, row.basePrice, row.finalPrice])}
       />
@@ -252,11 +254,11 @@ function ReportBody({ kind, data }: { kind: ReportKind; data: Awaited<ReturnType
   );
 }
 
-function SimpleTable({ headers, rows }: { headers: string[]; rows: string[][] }) {
+function SimpleTable({ headers, rows, offset }: { headers: string[]; rows: string[][]; offset: number }) {
   if (!rows.length) return <p className="text-sm text-muted-foreground">ردیفی برای این فیلتر نیست.</p>;
   return (
     <div className="overflow-x-auto rounded-xl border bg-white">
-      <table className="min-w-full text-sm">
+      <NumberedTable offset={offset} className="min-w-full text-sm">
         <thead>
           <tr className="bg-muted/50 text-muted-foreground">
             {headers.map((header) => (
@@ -273,7 +275,7 @@ function SimpleTable({ headers, rows }: { headers: string[]; rows: string[][] })
             </tr>
           ))}
         </tbody>
-      </table>
+      </NumberedTable>
     </div>
   );
 }

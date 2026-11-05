@@ -48,11 +48,11 @@ const LEVEL_OPTIONS = Object.entries(CUSTOMER_TYPE_LABELS).map(([value, label]) 
   label,
 }));
 
-function accountStatusPresentation(status: string): { label: string; className: string } {
-  if (status === 'ACTIVE') {
+function accountStatusPresentation(row: KycReviewQueueItem): { label: string; className: string } {
+  if (row.status === 'ACTIVE' && kycDisplayOf(row) === 'verified') {
     return { label: 'فعال', className: 'bg-emerald-50 text-emerald-700 border-emerald-200' };
   }
-  if (status === 'SUSPENDED') {
+  if (row.status === 'SUSPENDED') {
     return { label: 'تعلیق', className: 'bg-rose-50 text-rose-700 border-rose-200' };
   }
   return { label: 'غیرفعال', className: 'bg-slate-100 text-slate-600 border-slate-200' };
@@ -115,6 +115,7 @@ export function KycManagementPage() {
   const [applied, setApplied] = useState<Filters>(emptyFilters);
   const [bucket, setBucket] = useState<KycStaffBucket | ''>('');
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(LIMIT);
   const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   const kycDisplayParam =
@@ -131,6 +132,7 @@ export function KycManagementPage() {
           applied.customerType,
           applied.search,
           page,
+          limit,
         ]
       : null,
     () =>
@@ -142,7 +144,7 @@ export function KycManagementPage() {
         customerType: applied.customerType || undefined,
         search: applied.search || undefined,
         page,
-        limit: LIMIT,
+        limit,
       }),
   );
 
@@ -171,7 +173,7 @@ export function KycManagementPage() {
           نام_مشتری: row.fullName,
           موبایل: row.mobile,
           کدملی: row.nationalId ?? '',
-          وضعیت_حساب: accountStatusPresentation(row.status).label,
+          وضعیت_حساب: accountStatusPresentation(row).label,
           وضعیت_KYC: kycStatusPresentation(display).label,
           سطح: row.customerType
             ? statusLabel(CUSTOMER_TYPE_LABELS, row.customerType)
@@ -217,7 +219,7 @@ export function KycManagementPage() {
         key: 'account',
         header: 'وضعیت حساب',
         render: (row) => {
-          const presentation = accountStatusPresentation(row.status);
+          const presentation = accountStatusPresentation(row);
           return <SoftPill label={presentation.label} className={presentation.className} />;
         },
       },
@@ -459,6 +461,10 @@ export function KycManagementPage() {
           total={data?.meta.total}
           pageSize={data?.meta.limit}
           onPageChange={setPage}
+          onPageSizeChange={(size) => {
+            setLimit(size);
+            setPage(1);
+          }}
           emptyMessage={
             kycDisplayParam === 'awaiting'
               ? 'مدرک منتظر تأییدی در این فیلتر وجود ندارد'

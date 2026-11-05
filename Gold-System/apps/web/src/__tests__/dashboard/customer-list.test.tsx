@@ -1,5 +1,6 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import { SWRConfig } from 'swr';
 import userEvent from '@testing-library/user-event';
 import CustomersPage from '@/app/dashboard/customers/page';
 import { signIn } from './auth-state';
@@ -89,6 +90,45 @@ describe('customer list', () => {
     expect(screen.getByText(`#${toPersianDigits('C-100')}`)).toBeInTheDocument();
     await waitFor(() => {
       expect(internalCustomersApi.list).toHaveBeenCalled();
+    });
+  });
+
+  it.each([
+    [1, 10],
+    [2, 10],
+    [2, 20],
+  ])('numbers the returned result order on page %i with page size %i', async (page, limit) => {
+    signIn(['customer.read']);
+    // Deliberately reverse customer IDs to verify numbering follows result position.
+    const items = Array.from({ length: limit }, (_, index) => ({
+      ...sampleCustomer,
+      id: `customer-${limit - index}`,
+      customerNumber: `C-${limit - index}`,
+    }));
+    internalCustomersApi.list.mockResolvedValue({
+      items,
+      meta: { page, limit, total: 60, totalPages: Math.ceil(60 / limit) },
+    });
+    render(
+      <SWRConfig value={{ provider: () => new Map() }}>
+        <CustomersPage />
+      </SWRConfig>,
+    );
+    const header = await screen.findByRole('columnheader', { name: 'ردیف' });
+    expect(header).toHaveClass('w-12', 'text-center');
+    const table = screen.getByRole('table');
+    const headers = within(table).getAllByRole('columnheader');
+    expect(headers[1]).toBe(header);
+    expect(headers[2]).toHaveTextContent('شناسه');
+    const rows = within(table).getAllByRole('row').slice(1);
+    expect(rows).toHaveLength(limit);
+    rows.forEach((row, index) => {
+      const cells = within(row).getAllByRole('cell');
+      expect(cells[1]).toHaveTextContent(toPersianDigits(String((page - 1) * limit + index + 1)));
+      expect(cells[1]).toHaveClass('w-12', 'text-center');
+      expect(within(cells[2]).getByRole('link')).toHaveAttribute(
+        'href', `/dashboard/customers/${items[index].id}`,
+      );
     });
   });
 

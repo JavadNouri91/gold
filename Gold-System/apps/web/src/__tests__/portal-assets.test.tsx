@@ -74,6 +74,16 @@ describe('customer portfolio valuation', () => {
     expect(
       netBookedGrams({ key: 'M:1404-07', buyGrams: '10.000000', sellGrams: '4.000000', unclassifiedGrams: '2' }),
     ).toBe('6');
+    expect(netBookedGrams({ key: 'D:1404-07-01', buyGrams: '0', sellGrams: '0', deliveredPickupGrams: '2' })).toBe('-2');
+  });
+
+  it('reconciles current chart value with cash, confirmed wallet gold, delivery claim, and pending payment', () => {
+    const points = [{
+      key: 'M:1405-08', buyGrams: '0', sellGrams: '0', unclassifiedGrams: '0',
+      deliveredPickupGrams: '0', availableRialChange: '0', pendingPurchaseRialChange: '0',
+    }];
+    const series = portfolioValueSeries(points, '100', '2', '1000', '300');
+    expect(series.at(-1)).toMatchObject({ grams: '2', valueRial: '1500' });
   });
 });
 
@@ -90,7 +100,7 @@ describe('AssetsPage', () => {
   it('shows live value, weight, unrealized profit, and the spot price', () => {
     renderAssets({ position, price, availableRial: '1000000000' });
     const value = screen.getByRole('region', { name: 'مجموع ارزش کل دارایی' });
-    expect(within(value).getByText(formatWholeMoney('6875000000'))).toBeInTheDocument();
+    expect(within(value).getByText(formatWholeMoney('1000000000'))).toBeInTheDocument();
     expect(within(value).getByText(/سود کل/)).toBeInTheDocument();
     expect(within(value).getByText(/توان خرید \(نقدی\)/)).toBeInTheDocument();
     expect(value).not.toHaveTextContent(signed(position.unrealizedPnlRial));
@@ -130,13 +140,14 @@ describe('AssetsPage', () => {
     expect(within(composition).getByRole('button', { name: 'مخفی کردن مبالغ' })).toBeInTheDocument();
   });
 
-  it('includes reserved pickup grams in total gold holdings', () => {
+  it('keeps reserved pickup grams separate from confirmed wallet gold', () => {
     renderAssets({
       position: { ...position, reservedPickupGrams: '7.000000' },
       price,
     });
     const balance = screen.getByRole('region', { name: 'مجموع موجودی طلا' });
-    expect(within(balance).getByText(formatWeight('31.75'))).toBeInTheDocument();
+    expect(within(balance).getByText(formatWeight(position.weightGrams))).toBeInTheDocument();
+    expect(within(balance).getByText(/طلای در انتظار تحویل/)).toHaveTextContent(formatWeight('7'));
     expect(within(balance).getByRole('link', { name: 'درخواست تحویل فیزیکی' })).toHaveAttribute(
       'href',
       '/portal/pickups/new',
@@ -170,20 +181,20 @@ describe('AssetsPage', () => {
       price,
       availableRial: '1000000000',
       valuePoints: [
-        { key: 'M:1404-07', buyGrams: '10.000000', sellGrams: '4.000000', unclassifiedGrams: '0' },
+        { key: 'M:1404-07', buyGrams: '10.000000', sellGrams: '4.000000', unclassifiedGrams: '0', deliveredPickupGrams: '0', availableRialChange: '0', pendingPurchaseRialChange: '0' },
       ],
     });
     const chart = screen.getByRole('region', { name: 'نمودار ارزش و وزن دارایی' });
     expect(within(chart).getByRole('img', { name: /نمودار ارزش و وزن دارایی/ })).toBeInTheDocument();
     expect(within(chart).getByText('ارزش (تومان)')).toBeInTheDocument();
     expect(within(chart).getByText('وزن (گرم)')).toBeInTheDocument();
-    expect(within(chart).getByText(/دو خط روند/)).toBeInTheDocument();
+    expect(within(chart).getByText(/ارزش کل دارایی/)).toBeInTheDocument();
     expect(within(chart).getByText(formatWholeMoney('2445895000'))).toBeInTheDocument();
     expect(within(chart).getByText(formatWeight('24.75'))).toBeInTheDocument();
     expect(ownedGoldGrams(position.weightGrams, position.reservedPickupGrams)).toBe('24.75');
     expect(
       portfolioValueSeries(
-        [{ key: 'M:1404-07', buyGrams: '10.000000', sellGrams: '4.000000', unclassifiedGrams: '0' }],
+        [{ key: 'M:1404-07', buyGrams: '10.000000', sellGrams: '4.000000', unclassifiedGrams: '0', deliveredPickupGrams: '0', availableRialChange: '0', pendingPurchaseRialChange: '0' }],
         price.normalizedValue,
         '24.750',
         '1000000000',

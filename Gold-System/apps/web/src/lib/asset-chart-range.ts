@@ -1,4 +1,4 @@
-import type { ActivityBucket, ActivitySeriesPoint } from '@/lib/api';
+import type { ActivityBucket, PortfolioGoldHistoryPoint } from '@/lib/api';
 import { addDecimal, compareDecimal, isZeroDecimal, multiplyDecimal, subtractDecimal } from '@/lib/decimal-string';
 import { activityBounds, tehranCivilDate } from '@/lib/activity-range';
 import { toPersianDigits } from '@/lib/utils';
@@ -91,9 +91,11 @@ export function seriesPointLabel(key: string): string {
 }
 
 /** Booked buy minus booked sell for one activity bucket. Unclassified grams stay out. */
-export function netBookedGrams(point: ActivitySeriesPoint): string | null {
+type PortfolioMovement = Pick<PortfolioGoldHistoryPoint, 'key' | 'buyGrams' | 'sellGrams'> & Partial<Pick<PortfolioGoldHistoryPoint, 'deliveredPickupGrams' | 'availableRialChange' | 'pendingPurchaseRialChange'>> & { unclassifiedGrams?: string };
+
+export function netBookedGrams(point: PortfolioMovement): string | null {
   try {
-    return subtractDecimal(point.buyGrams, point.sellGrams);
+    return subtractDecimal(subtractDecimal(point.buyGrams, point.sellGrams), point.deliveredPickupGrams ?? '0');
   } catch {
     return null;
   }
@@ -129,40 +131,46 @@ export function ownedGoldGrams(weightGrams?: string | null, reservedPickupGrams?
  * Past market prices are not stored, so the line follows inventory at today's price.
  */
 export function portfolioValueSeries(
-  points: ActivitySeriesPoint[],
+  points: PortfolioMovement[],
   livePricePerGram: string | null | undefined,
   currentGoldGrams: string,
   availableRial: string | null | undefined,
+  pendingPurchaseRial = '0',
 ): PortfolioValuePoint[] {
-  const cash = availableRial && !isZeroDecimal(availableRial) ? availableRial : '0';
+  const cashNow = availableRial && !isZeroDecimal(availableRial) ? availableRial : '0';
+  const pendingNow = pendingPurchaseRial && !isZeroDecimal(pendingPurchaseRial) ? pendingPurchaseRial : '0';
   const goldNow = currentGoldGrams && !isZeroDecimal(currentGoldGrams) ? currentGoldGrams : '0';
   const hasPrice = Boolean(livePricePerGram && !isZeroDecimal(livePricePerGram));
   const hasGoldStory = !isZeroDecimal(goldNow) || points.length > 0;
-  if ((!hasPrice || !hasGoldStory) && isZeroDecimal(cash)) return [];
+  if ((!hasPrice || !hasGoldStory) && isZeroDecimal(addDecimal(cashNow, pendingNow))) return [];
 
   const ordered = [...points].sort((left, right) => left.key.localeCompare(right.key));
   let netWindow = '0';
+  let availableWindow = '0';
+  let pendingWindow = '0';
   for (const point of ordered) {
     const net = netBookedGrams(point);
-    if (!net) continue;
+    if (net == null) continue;
     try {
       netWindow = addDecimal(netWindow, net);
+      availableWindow = addDecimal(availableWindow, point.availableRialChange ?? '0');
+      pendingWindow = addDecimal(pendingWindow, point.pendingPurchaseRialChange ?? '0');
     } catch {
       /* skip a malformed bucket */
     }
   }
 
-  const valueOf = (grams: string): string => {
+  const valueOf = (grams: string, cash: string, pending: string): string => {
     const gold = floorZero(grams);
     const goldRial =
       livePricePerGram && !isZeroDecimal(livePricePerGram) && !isZeroDecimal(gold)
         ? multiplyDecimal(gold, livePricePerGram)
         : '0';
-    return addDecimal(goldRial, cash);
+    return addDecimal(addDecimal(goldRial, cash), pending);
   };
 
   if (ordered.length === 0) {
-    const now = valueOf(goldNow);
+    const now = valueOf(goldNow, cashNow, pendingNow);
     return [
       { key: 'start', label: 'شروع', valueRial: now, grams: goldNow },
       { key: 'now', label: 'اکنون', valueRial: now, grams: goldNow },
@@ -170,25 +178,32 @@ export function portfolioValueSeries(
   }
 
   let grams = '0';
+  let cash = '0';
+  let pending = '0';
   try {
     grams = floorZero(subtractDecimal(goldNow, netWindow));
+    cash = subtractDecimal(cashNow, availableWindow);
+    pending = subtractDecimal(pendingNow, pendingWindow);
   } catch {
     grams = '0';
   }
   const series: PortfolioValuePoint[] = [
-    { key: `open:${ordered[0]!.key}`, label: 'شروع', valueRial: valueOf(grams), grams },
+    { key: `open:${ordered[0]!.key}`, label: 'شروع', valueRial: valueOf(grams, cash, pending), grams },
   ];
   for (const point of ordered) {
-    const net = netBookedGrams(point) ?? '0';
+    const net = netBookedGrams(point);
+    if (net == null) continue;
     try {
       grams = floorZero(addDecimal(grams, net));
+      cash = addDecimal(cash, point.availableRialChange ?? '0');
+      pending = addDecimal(pending, point.pendingPurchaseRialChange ?? '0');
     } catch {
       continue;
     }
     series.push({
       key: point.key,
       label: seriesPointLabel(point.key),
-      valueRial: valueOf(grams),
+      valueRial: valueOf(grams, cash, pending),
       grams,
     });
   }

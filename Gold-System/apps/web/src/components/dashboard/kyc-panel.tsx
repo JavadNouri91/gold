@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR, { useSWRConfig } from 'swr';
 import { CheckCircle2, Clock, Expand, Pencil, XCircle } from 'lucide-react';
@@ -1003,7 +1005,7 @@ export function KycHistoryTable({
 
   return (
     <div className="overflow-x-auto rounded-lg border">
-      <table className="w-full min-w-[32rem] table-auto text-sm">
+      <NumberedTable className="w-full min-w-[32rem] table-auto text-sm">
         <thead className="bg-slate-50 text-muted-foreground">
           <tr className="border-b text-right">
             <th className="px-3 py-2 font-medium">تاریخ و زمان</th>
@@ -1035,7 +1037,7 @@ export function KycHistoryTable({
             </tr>
           ))}
         </tbody>
-      </table>
+      </NumberedTable>
     </div>
   );
 }

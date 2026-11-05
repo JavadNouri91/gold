@@ -17,20 +17,26 @@ function isNotFound(error: unknown): boolean {
 }
 
 export default function DashboardPage() {
-  const { error: customerError, isLoading: customerLoading } =
-    useSWR('customer/me', () => customerApi.getMe());
+  const { error: customerError, isLoading: customerLoading } = useSWR('customer/me', () =>
+    customerApi.getMe(),
+  );
 
-  const { data: price, isValidating: priceRefreshing, mutate: refreshPrice } =
-    useSWR('pricing/current-price', () => pricingApi.getCurrentPrice());
+  const {
+    data: price,
+    isValidating: priceRefreshing,
+    mutate: refreshPrice,
+  } = useSWR('pricing/current-price', () => pricingApi.getCurrentPrice());
 
-  const { data: ordersResp } =
-    useSWR('orders/recent', () => ordersApi.list({ limit: 100 }));
+  const { data: ordersResp } = useSWR('orders/recent', () => ordersApi.list({ limit: 100 }));
 
-  const { data: tradesResp } =
-    useSWR('trades/recent', () => tradesApi.list({ limit: 100 }));
+  const { data: tradesResp } = useSWR('trades/recent', () => tradesApi.list({ limit: 100 }));
 
-  const { data: holding } = useSWR('orders/portfolio', () => ordersApi.portfolio());
-  const { data: account } = useSWR('customer/me/account', () => customerApi.getMyAccount());
+  const { data: holding } = useSWR('orders/portfolio', () => ordersApi.portfolio(), {
+    refreshInterval: 15_000,
+  });
+  const { data: account } = useSWR('customer/me/account', () => customerApi.getMyAccount(), {
+    refreshInterval: 15_000,
+  });
   const position = toPortfolioPosition(holding, price?.normalizedValue);
   const customerMissing = isNotFound(customerError);
   const customerLoadFailed = Boolean(customerError) && !customerMissing;

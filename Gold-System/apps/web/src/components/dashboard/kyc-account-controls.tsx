@@ -43,7 +43,7 @@ export function KycAccountControls({
     setType(customer.type ?? '');
   }, [customer.type]);
 
-  const isActive = customer.status === 'ACTIVE';
+  const isActive = customer.status === 'ACTIVE' && documentsApproved;
   const blocked = activationBlocked(customer.status);
   const canActivate = documentsApproved && !isActive && !blocked;
   const canAssign = typeAssignable(customer.status);

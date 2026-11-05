@@ -1,3 +1,5 @@
+import { ListStaffPickupsDto } from './dto/list-staff-pickups.dto';
+import { pickupDateBounds } from './pickup-list-filters';
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import Decimal from 'decimal.js';
 import { CustomerStatus, CustomerType } from '@gold/shared-types';
@@ -277,10 +279,13 @@ export class PickupService {
   ): Promise<{ buffer: Buffer; mimeType: string; fileName: string }> {
     const isPreInvoice = kind === 'PRE_INVOICE';
     const key = isPreInvoice ? pickup.preInvoiceKey : pickup.invoiceKey;
-    const mimeType = (isPreInvoice ? pickup.preInvoiceMimeType : pickup.invoiceMimeType) ?? 'application/json';
+    const mimeType =
+      (isPreInvoice ? pickup.preInvoiceMimeType : pickup.invoiceMimeType) ?? 'application/json';
     if (!key) {
       throw new NotFoundException(
-        isPreInvoice ? 'پیش‌فاکتور برای این درخواست موجود نیست.' : 'فاکتور برای این درخواست موجود نیست.',
+        isPreInvoice
+          ? 'پیش‌فاکتور برای این درخواست موجود نیست.'
+          : 'فاکتور برای این درخواست موجود نیست.',
       );
     }
     const buffer = await this.documentService.read(key);
@@ -302,13 +307,12 @@ export class PickupService {
     return this.cancelInternal(existing.id, actorUserId, dto.reason, true);
   }
 
-  async listStaff(opts: {
-    status?: PhysicalGoldPickupStatus;
-    customerId?: string;
-    limit?: number;
-    offset?: number;
-  }) {
-    const { items, total } = await this.repo.listStaff(opts);
+  async listStaff(opts: ListStaffPickupsDto) {
+    const { items, total } = await this.repo.listStaff({
+      ...opts,
+      actionRequired: opts.actionRequired === 'true',
+      requestedAt: pickupDateBounds(opts),
+    });
     return {
       data: items.map((i) => PickupResponseDto.from(i)),
       meta: { total, limit: opts.limit ?? 50, offset: opts.offset ?? 0 },
@@ -405,7 +409,11 @@ export class PickupService {
       });
 
       // Settle the reserved conversion fee (if any): consume credit + FA-16 income.
-      if (existing.charge && existing.charge.status === 'RESERVED' && existing.charge.amountRial.gt(0)) {
+      if (
+        existing.charge &&
+        existing.charge.status === 'RESERVED' &&
+        existing.charge.amountRial.gt(0)
+      ) {
         const feeAmount = existing.charge.amountRial;
         await this.accountRepo.consumeCredit({
           tx,
@@ -448,7 +456,9 @@ export class PickupService {
       customer: {
         id: existing.customer?.id ?? pickup.customerId,
         customerNumber: existing.customer?.customerNumber ?? '',
-        name: existing.customer ? `${existing.customer.firstName} ${existing.customer.lastName}`.trim() : '',
+        name: existing.customer
+          ? `${existing.customer.firstName} ${existing.customer.lastName}`.trim()
+          : '',
         mobile: existing.customer?.mobile ?? '',
         customerType: existing.customer?.type ?? null,
       },
@@ -541,7 +551,11 @@ export class PickupService {
       });
 
       // Release the reserved conversion fee back to the rial wallet.
-      if (existing.charge && existing.charge.status === 'RESERVED' && existing.charge.amountRial.gt(0)) {
+      if (
+        existing.charge &&
+        existing.charge.status === 'RESERVED' &&
+        existing.charge.amountRial.gt(0)
+      ) {
         await this.accountRepo.releaseCredit({
           tx,
           customerId: updated.customerId,
@@ -638,9 +652,7 @@ export class PickupService {
     }
     const todayKey = tehranParts(new Date()).dateKey;
     if (key < todayKey) {
-      throw new InvalidScheduledPickupDateException(
-        'تاریخ تحویل نمی‌تواند قبل از امروز باشد.',
-      );
+      throw new InvalidScheduledPickupDateException('تاریخ تحویل نمی‌تواند قبل از امروز باشد.');
     }
     return tehranDateStartUtc(key);
   }

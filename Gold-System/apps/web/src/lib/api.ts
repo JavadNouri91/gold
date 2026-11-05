@@ -16,7 +16,8 @@ import type { ApiResponse, PaginationMeta } from '@gold/shared-types';
 
 function configuredApiOrigin(): string {
   const raw =
-    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) || 'https://zargoldonline.ir/api/v1';
+    (typeof process !== 'undefined' && process.env.NEXT_PUBLIC_API_URL) ||
+    'https://zargoldonline.ir/api/v1';
   return raw.replace(/\/api\/v1\/?$/, '');
 }
 
@@ -483,12 +484,7 @@ export type KycPhase =
   | 'NEEDS_CORRECTION';
 
 export type KycDocumentDisplayStatus =
-  | 'NOT_UPLOADED'
-  | 'SUBMITTED'
-  | 'UNDER_REVIEW'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'NEEDS_CORRECTION';
+  'NOT_UPLOADED' | 'SUBMITTED' | 'UNDER_REVIEW' | 'APPROVED' | 'REJECTED' | 'NEEDS_CORRECTION';
 
 export interface OwnKycFile {
   id: string;
@@ -752,7 +748,11 @@ export interface Order {
 
 export interface CustomerHolding {
   weightGrams: string;
+  confirmedWeightGrams?: string;
+  ownedGoldGrams?: string;
   reservedPickupGrams?: string;
+  pendingPurchaseGrams?: string;
+  pendingPurchaseAmountRial?: string;
   purityRatio: string | null;
   averageBuyPriceRial: string | null;
   totalBuyValueRial: string | null;
@@ -760,11 +760,7 @@ export interface CustomerHolding {
 }
 
 export type PhysicalGoldPickupStatus =
-  | 'REQUESTED'
-  | 'PREPARING'
-  | 'READY'
-  | 'DELIVERED'
-  | 'CANCELLED';
+  'REQUESTED' | 'PREPARING' | 'READY' | 'DELIVERED' | 'CANCELLED';
 
 export interface PhysicalGoldPickupEvent {
   id: string;
@@ -873,6 +869,12 @@ export interface ActivitySeriesPoint {
   buyGrams: string;
   sellGrams: string;
   unclassifiedGrams: string;
+}
+
+export interface PortfolioGoldHistoryPoint extends ActivitySeriesPoint {
+  deliveredPickupGrams: string;
+  availableRialChange: string;
+  pendingPurchaseRialChange: string;
 }
 
 export interface ActivitySummary {
@@ -994,6 +996,10 @@ export const ordersApi = {
 
   activitySummary(params: ActivityParams): Promise<ActivitySummary> {
     return request(`/orders/activity/summary?${activityQuery(params)}`);
+  },
+
+  portfolioHistory(params: ActivityParams): Promise<{ series: PortfolioGoldHistoryPoint[] }> {
+    return request(`/orders/portfolio/history?${activityQuery(params)}`);
   },
 
   activityList(params: ActivityParams): Promise<ActivityList> {
@@ -1241,7 +1247,9 @@ export const paymentsApi = {
     return request(`/payments?${paymentQuery(params)}`);
   },
 
-  summary(params: Omit<ListOwnPaymentsParams, 'page' | 'limit' | 'statusGroup'>): Promise<PaymentSummary> {
+  summary(
+    params: Omit<ListOwnPaymentsParams, 'page' | 'limit' | 'statusGroup'>,
+  ): Promise<PaymentSummary> {
     return request(`/payments/summary?${paymentQuery(params)}`);
   },
 
@@ -1256,7 +1264,12 @@ export const paymentsApi = {
     });
   },
 
-  submitReceipt(input: { method: string; amount: string; referenceNumber?: string; file: File }): Promise<Payment> {
+  submitReceipt(input: {
+    method: string;
+    amount: string;
+    referenceNumber?: string;
+    file: File;
+  }): Promise<Payment> {
     const body = new FormData();
     body.set('method', input.method);
     body.set('amount', input.amount);

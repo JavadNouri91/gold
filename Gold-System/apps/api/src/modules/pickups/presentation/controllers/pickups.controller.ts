@@ -12,6 +12,7 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import Decimal from 'decimal.js';
+import { ListStaffPickupsDto } from '../../application/dto/list-staff-pickups.dto';
 import { JwtAuthGuard } from '../../../../common/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../../../../common/guards/permissions.guard';
 import { RequirePermissions } from '../../../../common/decorators/permissions.decorator';
@@ -120,18 +121,8 @@ export class StaffPickupsController {
 
   @Get()
   @RequirePermissions('pickup.read')
-  list(
-    @Query('status') status?: PhysicalGoldPickupStatus,
-    @Query('customerId') customerId?: string,
-    @Query('limit') limit?: string,
-    @Query('offset') offset?: string,
-  ) {
-    return this.pickupService.listStaff({
-      status,
-      customerId,
-      limit: limit ? parseInt(limit, 10) : undefined,
-      offset: offset ? parseInt(offset, 10) : undefined,
-    });
+  list(@Query() query: ListStaffPickupsDto) {
+    return this.pickupService.listStaff(query);
   }
 
   @Get(':id')

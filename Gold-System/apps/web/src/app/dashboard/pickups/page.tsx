@@ -3,7 +3,15 @@
 import { CancelPickupModal, CANCEL_PICKUP_SUCCESS } from '@/components/pickups/CancelPickupModal';
 import { Toast } from '@/components/dashboard/customer-widgets';
 import { pickupActionsFor } from '@/lib/pickup-workflow';
-import { useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import {
+  EMPTY_PICKUP_FILTERS,
+  pickupListHref,
+  readPickupFilters,
+  type PickupListFilters,
+} from '@/lib/pickup-list-filters';
+import { Input } from '@/components/ui/input';
 import Link from 'next/link';
 import useSWR from 'swr';
 import { Printer } from 'lucide-react';
@@ -36,20 +44,55 @@ const STATUS_OPTIONS = [
 ];
 
 export default function StaffPickupsPage() {
+  return (
+    <Suspense fallback={null}>
+      <StaffPickupsList />
+    </Suspense>
+  );
+}
+
+function StaffPickupsList() {
   const { user } = useAuth();
   const canRead = hasPermission(user?.permissions, 'pickup.read');
   const canCancel = hasPermission(user?.permissions, 'pickup.cancel');
   const [rejectPickup, setRejectPickup] = useState<PhysicalGoldPickup | null>(null);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const [status, setStatus] = useState('');
-  const [appliedStatus, setAppliedStatus] = useState('');
-  const [page, setPage] = useState(1);
+  const router = useRouter();
+  const queryString = useSearchParams().toString();
+  const initial = useMemo(() => readPickupFilters(new URLSearchParams(queryString)), [queryString]);
+  const [draft, setDraft] = useState(initial.filters);
+  const [applied, setApplied] = useState(initial.filters);
+  const [page, setPage] = useState(initial.page);
+  useEffect(() => {
+    setDraft(initial.filters);
+    setApplied(initial.filters);
+    setPage(initial.page);
+  }, [initial]);
+  const go = (filters: PickupListFilters, nextPage = 1) => {
+    const next = { ...filters, search: filters.search.trim() };
+    if (next.dateRange !== 'custom') {
+      next.from = '';
+      next.to = '';
+    }
+    setDraft(next);
+    setApplied(next);
+    setPage(nextPage);
+    router.replace(pickupListHref(next, nextPage), { scroll: false });
+  };
+  const listHref = pickupListHref(applied, page);
+  const detailHref = (id: string) =>
+    `/dashboard/pickups/${id}${listHref.includes('?') ? `?returnTo=${encodeURIComponent(listHref)}` : ''}`;
   const [dialog, setDialog] = useState<{ pickupId: string; autoPrint: boolean } | null>(null);
   const limit = 20;
 
-  const list = useSWR(canRead ? ['staff-pickups', appliedStatus, page] : null, () =>
+  const list = useSWR(canRead ? ['staff-pickups', applied, page] : null, () =>
     staffPickupsApi.list({
-      status: appliedStatus || undefined,
+      search: applied.search || undefined,
+      status: applied.status || undefined,
+      dateRange: applied.dateRange || undefined,
+      from: applied.dateRange === 'custom' ? applied.from : undefined,
+      to: applied.dateRange === 'custom' ? applied.to : undefined,
+      actionRequired: applied.actionRequired || undefined,
       limit,
       offset: (page - 1) * limit,
     }),
@@ -62,7 +105,7 @@ export default function StaffPickupsPage() {
       key: 'number',
       header: 'شماره',
       render: (row) => (
-        <Link href={`/dashboard/pickups/${row.id}`} className="font-medium" dir="ltr">
+        <Link href={detailHref(row.id)} className="font-medium" dir="ltr">
           {toPersianDigits(row.pickupNumber)}
         </Link>
       ),
@@ -110,7 +153,7 @@ export default function StaffPickupsPage() {
             className="bg-emerald-600 text-white hover:bg-emerald-700"
             aria-label={`اقدام روی درخواست ${row.pickupNumber}`}
           >
-            <Link href={`/dashboard/pickups/${row.id}`}>اقدام</Link>
+            <Link href={detailHref(row.id)}>اقدام</Link>
           </Button>
           <Button
             size="sm"
@@ -149,31 +192,80 @@ export default function StaffPickupsPage() {
     },
   ];
 
-  const totalPages = list.data ? Math.max(1, Math.ceil(list.data.meta.total / limit)) : 1;
+  const totalPages = list.data
+    ? Math.max(1, Math.ceil(list.data.meta.total / list.data.meta.limit))
+    : 1;
 
   return (
-    <div className="space-y-4">
+    <div dir="rtl" className="space-y-4">
       <PageHeader
         title="تحویل حضوری طلا"
         description="درخواست‌های تحویل قالب آبشده در فروشگاه را آماده‌سازی و ثبت تحویل کنید."
       />
       <FilterBar
         fields={[
+          { key: 'search', label: 'جستجو', placeholder: 'شماره درخواست، نام مشتری یا موبایل' },
+          { key: 'status', label: 'وضعیت', type: 'select', options: STATUS_OPTIONS },
           {
-            key: 'status',
-            label: 'وضعیت',
+            key: 'dateRange',
+            label: 'بازه ثبت درخواست',
             type: 'select',
-            options: STATUS_OPTIONS,
+            options: [
+              { value: 'today', label: 'امروز' },
+              { value: 'last7', label: '۷ روز گذشته' },
+              { value: 'last30', label: '۳۰ روز گذشته' },
+              { value: 'custom', label: 'بازه دلخواه' },
+            ],
           },
         ]}
-        values={{ status }}
-        onChange={(key, value) => {
-          if (key === 'status') setStatus(value);
-        }}
-        onSubmit={() => {
-          setAppliedStatus(status);
-          setPage(1);
-        }}
+        values={draft}
+        onChange={(key, value) => setDraft((current) => ({ ...current, [key]: value }))}
+        onSubmit={() => go(draft)}
+        onReset={() => go(EMPTY_PICKUP_FILTERS)}
+        resetLabel="پاک کردن فیلترها"
+        extra={
+          <>
+            <label className="flex min-h-10 items-center gap-2 self-end text-sm">
+              <input
+                type="checkbox"
+                checked={draft.actionRequired === 'true'}
+                onChange={(event) =>
+                  setDraft((current) => ({
+                    ...current,
+                    actionRequired: event.target.checked ? 'true' : '',
+                  }))
+                }
+              />
+              فقط درخواست‌های نیازمند اقدام
+            </label>
+            {draft.dateRange === 'custom' ? (
+              <>
+                <Input
+                  label="از تاریخ"
+                  type="date"
+                  dir="ltr"
+                  required
+                  value={draft.from}
+                  max={draft.to || undefined}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, from: event.target.value }))
+                  }
+                />
+                <Input
+                  label="تا تاریخ"
+                  type="date"
+                  dir="ltr"
+                  required
+                  value={draft.to}
+                  min={draft.from || undefined}
+                  onChange={(event) =>
+                    setDraft((current) => ({ ...current, to: event.target.value }))
+                  }
+                />
+              </>
+            ) : null}
+          </>
+        }
       />
       {list.error ? <ApiErrorState error={list.error} onRetry={() => void list.mutate()} /> : null}
       <Toast message={feedback} onClose={() => setFeedback(null)} />
@@ -181,9 +273,11 @@ export default function StaffPickupsPage() {
         columns={columns}
         rows={list.data?.data ?? []}
         isLoading={list.isLoading}
-        page={page}
+        page={list.data ? Math.floor(list.data.meta.offset / list.data.meta.limit) + 1 : page}
+        pageSize={list.data?.meta.limit ?? limit}
         totalPages={totalPages}
-        onPageChange={setPage}
+        onPageChange={(nextPage) => go(applied, nextPage)}
+        emptyMessage="درخواست تحویلی با این فیلترها یافت نشد"
       />
       <PickupDetailsModal
         pickupId={dialog?.pickupId ?? null}

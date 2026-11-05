@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import { FormEvent, useEffect, useMemo, useState } from 'react';
 import useSWR from 'swr';
 import { Button } from '@/components/ui/button';
@@ -229,7 +231,7 @@ export function ScopedLimitsPanel({
           </p>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full min-w-[720px] text-right text-sm">
+          <NumberedTable className="w-full min-w-[720px] text-right text-sm">
             <thead className="text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-3 font-medium">گروه</th>
@@ -295,7 +297,7 @@ export function ScopedLimitsPanel({
                 );
               })}
             </tbody>
-          </table>
+          </NumberedTable>
         </CardContent>
       </Card>
 
@@ -346,7 +348,7 @@ export function ScopedLimitsPanel({
           ) : null}
 
           <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full min-w-[720px] text-right text-sm">
+            <NumberedTable className="w-full min-w-[720px] text-right text-sm">
               <thead className="text-xs text-muted-foreground">
                 <tr>
                   <th className="px-3 py-3 font-medium">مشتری</th>
@@ -411,7 +413,7 @@ export function ScopedLimitsPanel({
                   ))
                 )}
               </tbody>
-            </table>
+            </NumberedTable>
           </div>
         </CardContent>
       </Card>

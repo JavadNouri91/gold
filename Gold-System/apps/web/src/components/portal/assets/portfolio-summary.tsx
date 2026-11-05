@@ -2,8 +2,7 @@ import Link from 'next/link';
 import { FileText } from 'lucide-react';
 import type { CurrentPrice } from '@/lib/api';
 import { addDecimal, isZeroDecimal } from '@/lib/decimal-string';
-import { ownedGoldGrams } from '@/lib/asset-chart-range';
-import { isRegisteredHolding, type PortfolioPosition } from '@/lib/customer-portfolio';
+import { type PortfolioPosition } from '@/lib/customer-portfolio';
 import { moneyTone, toneClass } from '@/lib/portfolio-display';
 import { cn, formatDateTime, formatWholeMoney, formatWeight, toPersianDigits } from '@/lib/utils';
 import { pendingPickupValueRial } from './asset-composition';
@@ -31,13 +30,18 @@ export function PortfolioSummary({
   onRefreshPrice?: () => void;
   availableRial?: string | null;
 }) {
-  const holding = isRegisteredHolding(position) ? position : null;
-  const pendingRial = pendingPickupValueRial(holding?.reservedPickupGrams, price?.normalizedValue) ?? '0';
-  const goldRial = holding?.marketValueRial && !isZeroDecimal(holding.marketValueRial) ? holding.marketValueRial : '0';
+  const holding = position;
+  const pendingRial = position?.pendingDeliveryValueRial ??
+    pendingPickupValueRial(position?.reservedPickupGrams, price?.normalizedValue) ?? '0';
+  const goldRial = position?.confirmedMarketValueRial ?? '0';
   const cashRial = availableRial && !isZeroDecimal(availableRial) ? availableRial : '0';
-  const totalRial = addDecimal(addDecimal(cashRial, goldRial), pendingRial);
-  const goldGrams = ownedGoldGrams(holding?.weightGrams, holding?.reservedPickupGrams);
-  const goldValueRial = addDecimal(goldRial, pendingRial);
+  const purchaseRial = position?.pendingPurchaseAmountRial ?? '0';
+  const totalRial = addDecimal(
+    addDecimal(addDecimal(cashRial, goldRial), pendingRial),
+    purchaseRial,
+  );
+  const goldGrams = holding?.confirmedWeightGrams ?? holding?.weightGrams ?? '0';
+  const goldValueRial = goldRial;
   const pnlTone = moneyTone(holding?.unrealizedPnlRial);
   const hasPnl = holding?.unrealizedPnlRial != null && !isZeroDecimal(holding.unrealizedPnlRial);
 
@@ -71,11 +75,15 @@ export function PortfolioSummary({
                 ) : null}
               </p>
             ) : (
-              <p className="mt-2 text-xs leading-5 text-[#6B7280]">سود و زیان تحقق‌نیافته در دسترس نیست</p>
+              <p className="mt-2 text-xs leading-5 text-[#6B7280]">
+                سود و زیان تحقق‌نیافته در دسترس نیست
+              </p>
             )}
             <div className="mt-auto space-y-1 pt-4 text-xs leading-5 text-[#6B7280]">
               <p>توان خرید (نقدی): {formatWholeMoney(cashRial)}</p>
-              <p>ارزش طلا: {formatWholeMoney(goldValueRial)}</p>
+              <p>ارزش طلای تأییدشده در کیف پول: {formatWholeMoney(goldValueRial)}</p>
+              <p>ارزش طلای در انتظار تحویل: {formatWholeMoney(pendingRial)}</p>
+              <p>مبلغ سفارش‌های در انتظار تأیید: {formatWholeMoney(purchaseRial)}</p>
             </div>
           </>
         )}
@@ -88,13 +96,26 @@ export function PortfolioSummary({
         {holdingLoading ? (
           <AssetSkeleton className="mt-3 h-10 w-32" />
         ) : holdingError ? (
-          <p className="mt-3 text-sm leading-7 text-[#6B7280]">موجودی طلا در حال حاضر قابل دریافت نیست.</p>
-        ) : holding && !isZeroDecimal(goldGrams) ? (
+          <p className="mt-3 text-sm leading-7 text-[#6B7280]">
+            موجودی طلا در حال حاضر قابل دریافت نیست.
+          </p>
+        ) : holding &&
+        (!isZeroDecimal(goldGrams) ||
+          !isZeroDecimal(holding.reservedPickupGrams) ||
+          !isZeroDecimal(holding.pendingPurchaseGrams ?? '0')) ? (
           <>
             <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight text-[#202124]">
               {formatWeight(goldGrams)}
             </p>
             <p className="mt-2 text-sm text-[#6B7280]">معادل {formatWholeMoney(goldValueRial)}</p>
+            {!isZeroDecimal(holding.reservedPickupGrams) ? (
+              <p className="mt-1 text-xs text-[#6B7280]">
+                طلای در انتظار تحویل: {formatWeight(holding.reservedPickupGrams)}
+              </p>
+            ) : null}
+            {!isZeroDecimal(holding.pendingPurchaseGrams ?? '0') ? (
+              <p className="mt-1 text-xs text-[#6B7280]">طلای خریداری‌شده در انتظار تأیید: {formatWeight(holding.pendingPurchaseGrams ?? '0')}</p>
+            ) : null}
             <Link
               href="/portal/pickups/new"
               className="mt-auto inline-flex min-h-11 items-center gap-2 pt-4 text-sm font-semibold text-[#C8922E]"
@@ -105,7 +126,9 @@ export function PortfolioSummary({
           </>
         ) : (
           <>
-            <p className="mt-3 text-sm leading-7 text-[#202124]">هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است.</p>
+            <p className="mt-3 text-sm leading-7 text-[#202124]">
+              هنوز طلای آبشده‌ای در دارایی شما ثبت نشده است.
+            </p>
             <Link
               href="/portal/orders/new?side=buy"
               className="mt-auto inline-flex min-h-11 items-center pt-4 text-sm font-semibold text-[#C8922E]"
@@ -124,7 +147,9 @@ export function PortfolioSummary({
           <AssetSkeleton className="mt-3 h-10 w-36" />
         ) : priceError || !price?.normalizedValue ? (
           <>
-            <p className="mt-3 text-sm leading-7 text-[#6B7280]">قیمت لحظه‌ای در حال حاضر قابل دریافت نیست.</p>
+            <p className="mt-3 text-sm leading-7 text-[#6B7280]">
+              قیمت لحظه‌ای در حال حاضر قابل دریافت نیست.
+            </p>
             <button
               type="button"
               onClick={onRefreshPrice}
@@ -138,7 +163,9 @@ export function PortfolioSummary({
             <p className="mt-3 text-2xl font-bold tabular-nums tracking-tight text-[#202124]">
               {formatWholeMoney(price.normalizedValue)}
             </p>
-            <p className="mt-2 text-xs leading-5 text-[#6B7280]">آخرین بروزرسانی: {formatDateTime(price.capturedAt)}</p>
+            <p className="mt-2 text-xs leading-5 text-[#6B7280]">
+              آخرین بروزرسانی: {formatDateTime(price.capturedAt)}
+            </p>
             <p className="mt-auto inline-flex items-center gap-1.5 pt-4 text-xs font-medium text-[#202124]">
               <span
                 className={`h-2 w-2 rounded-full ${price.validityStatus === 'VALID' ? 'bg-[#16A34A]' : 'bg-amber-500'}`}

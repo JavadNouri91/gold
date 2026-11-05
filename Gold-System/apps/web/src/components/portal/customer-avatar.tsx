@@ -9,11 +9,13 @@ export function CustomerAvatar({
   name,
   size = 'h-9 w-9',
   className,
+  avatarPath = '/customers/me/avatar',
 }: {
-  customer?: CustomerProfile | null;
+  customer?: Pick<CustomerProfile, 'hasAvatar' | 'updatedAt'> | null;
   name: string;
   size?: string;
   className?: string;
+  avatarPath?: string;
 }) {
   const [src, setSrc] = useState<string | null>(null);
 
@@ -24,7 +26,7 @@ export function CustomerAvatar({
     }
     let cancelled = false;
     let objectUrl: string | null = null;
-    fetchBlob('/customers/me/avatar')
+    fetchBlob(avatarPath)
       .then((blob) => {
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
@@ -37,7 +39,7 @@ export function CustomerAvatar({
       cancelled = true;
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [customer?.hasAvatar, customer?.updatedAt]);
+  }, [customer?.hasAvatar, customer?.updatedAt, avatarPath]);
 
   if (src) {
     return (

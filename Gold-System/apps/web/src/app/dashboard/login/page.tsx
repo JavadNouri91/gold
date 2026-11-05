@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
-import { isValidMobile, latinMobile, toPersianDigits } from '@/lib/utils';
+import { isValidMobile, latinMobile, toLatinDigits, toPersianDigits } from '@/lib/utils';
 import { isStaffUser } from '@/lib/permissions';
 import { firstStaffRoute } from '@/lib/nav';
 import { Button } from '@/components/ui/button';
@@ -52,7 +52,7 @@ export default function StaffLoginPage() {
     setIsLoading(true);
     try {
       const mobile = latinMobile(data.mobile);
-      const result = await login(mobile, data.password);
+      const result = await login(mobile, toLatinDigits(data.password));
       if (result.requiresOtp) {
         sessionStorage.setItem('staff_login_mobile', mobile);
         router.push('/dashboard/otp');
@@ -160,6 +160,7 @@ export default function StaffLoginPage() {
                   required: 'رمز عبور الزامی است',
                   minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
                 })}
+                value={toPersianDigits(watch('password'))}
               />
               <div className="flex justify-start">
                 <button

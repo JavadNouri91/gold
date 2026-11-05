@@ -1,4 +1,4 @@
-import type { ActivitySeriesPoint, CurrentPrice } from '@/lib/api';
+import type { CurrentPrice, PortfolioGoldHistoryPoint } from '@/lib/api';
 import type { AssetChartRange } from '@/lib/asset-chart-range';
 import type { PortfolioPosition } from '@/lib/customer-portfolio';
 import { AssetComposition } from './asset-composition';
@@ -33,7 +33,7 @@ export function AssetsPage({
   availableRial?: string | null;
   range: AssetChartRange;
   onRangeChange: (range: AssetChartRange) => void;
-  valuePoints?: ActivitySeriesPoint[];
+  valuePoints?: PortfolioGoldHistoryPoint[];
   valueLoading?: boolean;
   valueError?: boolean;
   onRetryValue?: () => void;
@@ -71,9 +71,10 @@ export function AssetsPage({
             onRangeChange={onRangeChange}
             points={valuePoints}
             livePriceRial={price?.normalizedValue}
-            weightGrams={position?.weightGrams}
+            weightGrams={position?.ownedGoldGrams ?? position?.weightGrams}
             reservedPickupGrams={position?.reservedPickupGrams}
             availableRial={availableRial}
+            pendingPurchaseRial={position?.pendingPurchaseAmountRial}
             loading={valueLoading}
             error={valueError}
             onRetry={onRetryValue}

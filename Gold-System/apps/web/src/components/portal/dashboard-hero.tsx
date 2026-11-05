@@ -2,7 +2,7 @@
 
 import { addDecimal } from '@/lib/decimal-string';
 import { readAvailableCredit } from '@/lib/credit-view';
-import { isRegisteredHolding, type PortfolioPosition } from '@/lib/customer-portfolio';
+import { type PortfolioPosition } from '@/lib/customer-portfolio';
 import type { CustomerAccount } from '@/lib/api';
 import { cn, formatWholeMoney, toPersianDigits } from '@/lib/utils';
 
@@ -11,9 +11,11 @@ export function netWorthRial(
   position?: PortfolioPosition | null,
 ): string | null {
   const cash = account ? readAvailableCredit(account) : null;
-  const gold = position != null && isRegisteredHolding(position) ? position.marketValueRial : null;
-  if (cash && gold) return addDecimal(cash, gold);
-  return cash ?? gold ?? null;
+  const gold = position?.confirmedMarketValueRial ?? position?.marketValueRial ?? null;
+  const delivery = position?.pendingDeliveryValueRial;
+  const pending = position?.pendingPurchaseAmountRial;
+  if (cash == null && gold == null && delivery == null && pending == null) return null;
+  return addDecimal(addDecimal(addDecimal(cash ?? '0', gold ?? '0'), delivery ?? '0'), pending ?? '0');
 }
 
 export function DashboardHero({
@@ -24,7 +26,9 @@ export function DashboardHero({
   position?: PortfolioPosition | null;
 }) {
   const total = netWorthRial(account, position);
-  const change = position != null && isRegisteredHolding(position) ? position.changePercent : null;
+  const change = position?.confirmedWeightGrams && position.confirmedWeightGrams !== '0.000000'
+    ? position.changePercent
+    : null;
   const pnl = parsePnl(change);
 
   return (
@@ -36,6 +40,10 @@ export function DashboardHero({
         </p>
         <p className="mt-0.5 truncate text-[11px] text-slate-500 sm:text-xs">
           کل دارایی‌ها (ریالی + ارزش طلا)
+        </p>
+        <p className="mt-1 text-[11px] text-slate-500">
+          مبلغ سفارش‌های در انتظار تأیید:{' '}
+          {formatWholeMoney(position?.pendingPurchaseAmountRial ?? '0')}
         </p>
       </div>
     </section>

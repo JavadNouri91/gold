@@ -6,6 +6,8 @@ import StaffPickupDetailPage from '@/app/dashboard/pickups/[id]/page';
 import { ApiClientError } from '@/lib/api';
 import { signIn } from './auth-state';
 
+let mockReturnQuery = '';
+
 /** Fresh SWR cache per render so tests never share cached data. */
 function renderPage() {
   return render(
@@ -21,6 +23,7 @@ jest.mock('@/lib/auth', () => ({
 
 jest.mock('next/navigation', () => ({
   useParams: () => ({ id: 'p1' }),
+  useSearchParams: () => new URLSearchParams(mockReturnQuery),
 }));
 
 jest.mock('@/lib/print', () => ({
@@ -130,6 +133,7 @@ function makePickup(status: string, overrides: Record<string, unknown> = {}) {
 
 describe('pickup detail page', () => {
   beforeEach(() => {
+    mockReturnQuery = '';
     signIn(['pickup.read', 'pickup.prepare', 'pickup.deliver', 'pickup.cancel']);
     api.staffPickupsApi.getById.mockResolvedValue(makePickup('REQUESTED'));
     api.staffPickupsApi.markPreparing.mockResolvedValue(makePickup('PREPARING'));
@@ -141,6 +145,13 @@ describe('pickup detail page', () => {
 
   afterEach(() => {
     jest.clearAllMocks();
+  });
+
+  it('returns to the filtered list and page from the request header', async () => {
+    const listHref = '/dashboard/pickups?search=PU&status=READY&page=2';
+    mockReturnQuery = new URLSearchParams({ returnTo: listHref }).toString();
+    renderPage();
+    expect(await screen.findByRole('link', { name: 'بازگشت به فهرست تحویل‌ها' })).toHaveAttribute('href', listHref);
   });
 
   it('renders the requested state with header, summary and start form', async () => {

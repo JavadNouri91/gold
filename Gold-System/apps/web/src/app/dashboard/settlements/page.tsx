@@ -93,6 +93,7 @@ export default function SettlementsPage() {
           rows={report.data?.settlements ?? []}
           isLoading={report.isLoading}
           page={page}
+          pageSize={20}
           totalPages={report.data ? Math.max(1, Math.ceil((report.data.totalSettled + report.data.totalPending) / 20)) : 1}
           onPageChange={setPage}
         />

@@ -207,6 +207,14 @@ export class OrdersController {
     return this.activityService.summary(user.userId, query);
   }
 
+  @Get('portfolio/history')
+  async portfolioHistory(
+    @CurrentUser() user: CurrentUserData,
+    @Query() query: CustomerActivityQueryDto,
+  ) {
+    return { series: await this.activityService.portfolioHistory(user.userId, query) };
+  }
+
   /**
    * GET /orders/activity
    * Paginated transactions for the same customer and filters as the summary.

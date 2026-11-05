@@ -16,6 +16,12 @@ import type { PortfolioPosition } from '@/lib/customer-portfolio';
 import { EmptyNote } from './assets-ui';
 
 const SLICE_META = [
+  {
+    id: 'pending-purchase',
+    label: 'مبلغ سفارش‌های در انتظار تأیید',
+    color: '#F97316',
+    labelColor: '#FFFFFF',
+  },
   { id: 'buying-power', label: 'توان خرید', color: '#2563EB', labelColor: '#FFFFFF' },
   { id: 'melted-gold', label: 'ارزش ریالی طلای آب شده', color: '#EAB308', labelColor: '#202124' },
   { id: 'pending-pickup', label: 'طلای در انتظار تحویل', color: '#C026D3', labelColor: '#FFFFFF' },
@@ -48,8 +54,14 @@ export function assetCompositionSlices(
   availableRial: string | null | undefined,
   meltedGoldRial: string | null | undefined,
   pendingPickupRial: string | null | undefined,
+  pendingPurchaseRial?: string | null,
 ): AssetCompositionSlice[] {
-  const amounts = [positiveAmount(availableRial), positiveAmount(meltedGoldRial), positiveAmount(pendingPickupRial)];
+  const amounts = [
+    positiveAmount(pendingPurchaseRial),
+    positiveAmount(availableRial),
+    positiveAmount(meltedGoldRial),
+    positiveAmount(pendingPickupRial),
+  ];
   let total = '0';
   for (const amount of amounts) {
     if (amount != null) total = addDecimal(total, amount);
@@ -76,8 +88,14 @@ export function AssetComposition({
   livePriceRial?: string | null;
 }) {
   const [hidden, setHidden] = useState(false);
-  const pendingRial = pendingPickupValueRial(position?.reservedPickupGrams, livePriceRial);
-  const slices = assetCompositionSlices(availableRial, position?.marketValueRial, pendingRial);
+  const pendingRial = position?.pendingDeliveryValueRial ??
+    pendingPickupValueRial(position?.reservedPickupGrams, livePriceRial);
+  const slices = assetCompositionSlices(
+    availableRial,
+    position?.confirmedMarketValueRial ?? position?.marketValueRial,
+    pendingRial,
+    position?.pendingPurchaseAmountRial,
+  );
   const total = slices.reduce((sum, slice) => addDecimal(sum, slice.amountRial), '0');
   const hasValue = !isZeroDecimal(total);
   const summary = slices.map((slice) => `${slice.label} ${formatShare(slice.share)}`).join('، ');
@@ -105,7 +123,11 @@ export function AssetComposition({
           onClick={() => setHidden((value) => !value)}
           className="inline-flex h-11 w-11 items-center justify-center rounded-full text-[#9CA3AF] hover:bg-[#F8F9FA] hover:text-[#6B7280]"
         >
-          {hidden ? <EyeOff className="h-5 w-5" aria-hidden /> : <Eye className="h-5 w-5" aria-hidden />}
+          {hidden ? (
+            <EyeOff className="h-5 w-5" aria-hidden />
+          ) : (
+            <Eye className="h-5 w-5" aria-hidden />
+          )}
         </button>
       </header>
 
@@ -125,7 +147,9 @@ export function AssetComposition({
                 <p
                   className={cn(
                     'mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold',
-                    profit.tone === 'positive' ? 'bg-[#E8F8EE] text-[#15803D]' : 'bg-red-50 text-[#DC2626]',
+                    profit.tone === 'positive'
+                      ? 'bg-[#E8F8EE] text-[#15803D]'
+                      : 'bg-red-50 text-[#DC2626]',
                   )}
                 >
                   {profit.label}
@@ -149,10 +173,25 @@ export function AssetComposition({
                       aria-hidden
                     />
                     <span className="min-w-0">
-                      <span className={cn('block text-sm font-medium', muted ? 'text-[#9CA3AF]' : 'text-[#202124]')}>
+                      <span
+                        className={cn(
+                          'block text-sm font-medium',
+                          muted ? 'text-[#9CA3AF]' : 'text-[#202124]',
+                        )}
+                      >
                         {slice.label}
                       </span>
-                      {slice.id === 'melted-gold' && position?.weightGrams && !isZeroDecimal(position.weightGrams) ? (
+                      {slice.id === 'melted-gold' &&
+                      position?.confirmedWeightGrams &&
+                      !isZeroDecimal(position.confirmedWeightGrams) ? (
+                        <span className="mt-0.5 block text-xs text-[#9CA3AF]">
+                          {hidden ? '(••••)' : `(معادل ${formatWeight(position.confirmedWeightGrams)} طلا)`}
+                        </span>
+                      ) : null}
+                      {slice.id === 'melted-gold' &&
+                      !position?.confirmedWeightGrams &&
+                      position?.weightGrams &&
+                      !isZeroDecimal(position.weightGrams) ? (
                         <span className="mt-0.5 block text-xs text-[#9CA3AF]">
                           {hidden ? '(••••)' : `(معادل ${formatWeight(position.weightGrams)} طلا)`}
                         </span>
@@ -234,7 +273,10 @@ function CompositionDonut({
   total: string;
   summary: string;
 }) {
-  const unitsTotal = slices.reduce((sum, slice) => sum + positiveUnits(slice.amountRial), BigInt(0));
+  const unitsTotal = slices.reduce(
+    (sum, slice) => sum + positiveUnits(slice.amountRial),
+    BigInt(0),
+  );
   const wedges = donutWedges(slices, unitsTotal);
 
   return (
@@ -245,7 +287,9 @@ function CompositionDonut({
         role="img"
         aria-label={`نمودار دایره‌ای ترکیب دارایی. ارزش کل ${formatWholeMoney(total)}. ${summary}`}
       >
-        {wedges.length === 0 ? <circle cx={PIE_CX} cy={PIE_CY} r={PIE_OUTER} fill="#E5E7EB" /> : null}
+        {wedges.length === 0 ? (
+          <circle cx={PIE_CX} cy={PIE_CY} r={PIE_OUTER} fill="#E5E7EB" />
+        ) : null}
         {wedges.map((wedge) =>
           wedge.full ? (
             <g key={wedge.id}>
@@ -265,7 +309,12 @@ function CompositionDonut({
         )}
         {wedges.map((wedge) => {
           if (wedge.share == null || wedge.share < 8) return null;
-          const point = polar(PIE_CX, PIE_CY, (PIE_OUTER + PIE_INNER) / 2, wedge.full ? 0 : wedge.midAngle);
+          const point = polar(
+            PIE_CX,
+            PIE_CY,
+            (PIE_OUTER + PIE_INNER) / 2,
+            wedge.full ? 0 : wedge.midAngle,
+          );
           return (
             <text
               key={`${wedge.id}-share`}
@@ -282,7 +331,10 @@ function CompositionDonut({
           );
         })}
       </svg>
-      <div className="pointer-events-none absolute inset-0 flex items-center justify-center" aria-hidden>
+      <div
+        className="pointer-events-none absolute inset-0 flex items-center justify-center"
+        aria-hidden
+      >
         <GoldIngotIcon />
       </div>
     </div>
@@ -321,7 +373,9 @@ function donutWedges(slices: AssetCompositionSlice[], total: bigint) {
   return visible.map((slice, index) => {
     const units = positiveUnits(slice.amountRial);
     const sweep =
-      index === visible.length - 1 ? 360 - startAngle : Number((units * BigInt(36000)) / total) / 100;
+      index === visible.length - 1
+        ? 360 - startAngle
+        : Number((units * BigInt(36000)) / total) / 100;
     const endAngle = startAngle + sweep;
     const path = donutSlicePath(PIE_CX, PIE_CY, PIE_OUTER, PIE_INNER, startAngle, endAngle);
     const wedge = {

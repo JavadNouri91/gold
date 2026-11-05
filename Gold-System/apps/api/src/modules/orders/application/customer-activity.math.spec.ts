@@ -255,7 +255,11 @@ describe('customer activity analytics', () => {
       ]),
     ).toEqual({
       weightGrams: '20.000000',
+      confirmedWeightGrams: '0.000000',
+      ownedGoldGrams: '0.000000',
       reservedPickupGrams: '0.000000',
+      pendingPurchaseGrams: '0.000000',
+      pendingPurchaseAmountRial: '0.00',
       purityRatio: '0.750000',
       averageBuyPriceRial: '50000000.00',
       totalBuyValueRial: '1500000000.00',
@@ -266,7 +270,14 @@ describe('customer activity analytics', () => {
   it('subtracts committed pickup grams from available holding', () => {
     expect(
       computeCustomerHolding(
-        [row({ id: 'buy', side: 'BUY', weightGrams: '30.000000', totalAmountRial: '1500000000.00' })],
+        [
+          row({
+            id: 'buy',
+            side: 'BUY',
+            weightGrams: '30.000000',
+            totalAmountRial: '1500000000.00',
+          }),
+        ],
         { pickupReservedGrams: '5.000000', pickupCommittedGrams: '12.000000' },
       ),
     ).toMatchObject({
@@ -285,5 +296,155 @@ describe('activityBucketKey', () => {
     expect(activityBucketKey(instant, 'month')).toMatch(/^M:\d{4}-\d{2}$/);
     expect(activityBucketKey(instant, 'quarter')).toMatch(/^Q:\d{4}-\d{2}$/);
     expect(activityBucketKey(instant, 'day')).not.toBe(activityBucketKey(instant, 'week'));
+  });
+});
+
+describe('pending purchase holdings', () => {
+  it('combines only paid pending purchase weights', () => {
+    expect(
+      computeCustomerHolding([
+        row({ id: 'first', status: 'UNDER_REVIEW', weightGrams: '2', reservedAmountRial: '100' }),
+        row({ id: 'second', status: 'QUOTED', weightGrams: '3', reservedAmountRial: '180' }),
+        row({ id: 'unpaid', status: 'SUBMITTED', weightGrams: '20', reservedAmountRial: '0' }),
+        row({ id: 'sell', side: 'SELL', status: 'UNDER_REVIEW', weightGrams: '1' }),
+      ]),
+    ).toMatchObject({
+      pendingPurchaseGrams: '5.000000',
+      pendingPurchaseAmountRial: '280.00',
+      weightGrams: '0.000000',
+    });
+  });
+  it.each(['SUBMITTED', 'QUOTED', 'ASSIGNED', 'UNDER_REVIEW', 'REVISION_REQUESTED'])(
+    'keeps %s paid orders separate from confirmed gold and average cost',
+    (status) => {
+      const result = computeCustomerHolding([
+        row({ id: 'confirmed', weightGrams: '2', totalAmountRial: '100' }),
+        row({
+          id: 'pending',
+          status,
+          weightGrams: '3',
+          totalAmountRial: '180',
+          reservedAmountRial: '180',
+        }),
+      ]);
+      expect(result).toMatchObject({
+        weightGrams: '2.000000',
+        averageBuyPriceRial: '50.00',
+        pendingPurchaseGrams: '3.000000',
+        pendingPurchaseAmountRial: '180.00',
+      });
+    },
+  );
+
+  it('moves an approved purchase into holdings once on repeated reads', () => {
+    const rows = [
+      row({
+        status: 'APPROVED',
+        weightGrams: '3',
+        totalAmountRial: '180',
+        reservedAmountRial: '180',
+      }),
+    ];
+    const expected = {
+      weightGrams: '3.000000',
+      pendingPurchaseGrams: '0.000000',
+      pendingPurchaseAmountRial: '0.00',
+    };
+    expect(computeCustomerHolding(rows)).toMatchObject(expected);
+    expect(computeCustomerHolding(rows)).toMatchObject(expected);
+  });
+
+  it('uses a confirmed trade as the source of truth even if the order status lags', () => {
+    expect(
+      computeCustomerHolding([
+        row({
+          status: 'APPROVED',
+          weightGrams: '4',
+          trade: {
+            id: 'trade-1',
+            tradeNumber: 'TRD-1',
+            status: 'CONFIRMED',
+            totalAmountRial: '200',
+            weightGrams: '4',
+            unitPriceRial: '50',
+            wageAmount: null,
+            taxAmount: null,
+            confirmedAt: null,
+            quotationId: null,
+          },
+        }),
+      ]),
+    ).toMatchObject({ weightGrams: '4.000000', pendingPurchaseGrams: '0.000000' });
+  });
+
+  it('keeps confirmed holdings separate from open sell and pickup reservations', () => {
+    const trade = (id: string, side: 'BUY' | 'SELL', weightGrams: string): ActivityOrderInput =>
+      row({
+        id,
+        status: 'COMPLETED',
+        side,
+        weightGrams,
+        trade: {
+          id: `trade-${id}`,
+          tradeNumber: `TRD-${id}`,
+          status: 'CONFIRMED',
+          totalAmountRial: '100',
+          weightGrams,
+          unitPriceRial: '100',
+          wageAmount: null,
+          taxAmount: null,
+          confirmedAt: null,
+          quotationId: null,
+        },
+      });
+    const holding = computeCustomerHolding(
+      [
+        trade('buy', 'BUY', '3.813'),
+        row({ id: 'pending-sell', status: 'QUOTED', side: 'SELL', weightGrams: '2' }),
+      ],
+      { pickupReservedGrams: '2', pickupCommittedGrams: '2' },
+    );
+
+    expect(holding.weightGrams).toBe('0.000000');
+    expect(holding.confirmedWeightGrams).toBe('1.813000');
+    expect(holding.ownedGoldGrams).toBe('3.813000');
+  });
+
+  it('counts the 5g pending purchase in neither confirmed wallet nor owned gold', () => {
+    const holding = computeCustomerHolding(
+      [
+        row({ id: 'approved-buy', status: 'COMPLETED', side: 'BUY', weightGrams: '3.813', trade: {
+          id: 'trade-final', tradeNumber: 'TRD-1', status: 'CONFIRMED', totalAmountRial: '1000',
+          weightGrams: '3.813', unitPriceRial: '250', wageAmount: null, taxAmount: null,
+          confirmedAt: null, quotationId: null,
+        } }),
+        row({ id: 'pending-buy', status: 'QUOTED', side: 'BUY', weightGrams: '5', reservedAmountRial: '1333082250' }),
+      ],
+      { pickupReservedGrams: '2', pickupCommittedGrams: '2' },
+    );
+    expect(holding).toMatchObject({
+      weightGrams: '1.813000', confirmedWeightGrams: '1.813000', ownedGoldGrams: '3.813000',
+      pendingPurchaseGrams: '5.000000', pendingPurchaseAmountRial: '1333082250.00',
+    });
+  });
+
+  it.each(['DRAFT', 'REJECTED', 'CANCELLED'])(
+    'excludes %s purchases from pending and confirmed balances',
+    (status) => {
+      expect(computeCustomerHolding([row({ status, reservedAmountRial: '180' })])).toMatchObject({
+        weightGrams: '0.000000',
+        pendingPurchaseGrams: '0.000000',
+        pendingPurchaseAmountRial: '0.00',
+        averageBuyPriceRial: null,
+      });
+    },
+  );
+
+  it('does not let a pending purchase fund a sell or pickup', () => {
+    expect(
+      computeCustomerHolding([
+        row({ status: 'UNDER_REVIEW', weightGrams: '100', reservedAmountRial: '1000' }),
+      ]).weightGrams,
+    ).toBe('0.000000');
   });
 });

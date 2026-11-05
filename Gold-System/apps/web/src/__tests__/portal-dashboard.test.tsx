@@ -13,8 +13,98 @@ import { GoldPriceChart } from '../components/portal/gold-price-chart';
 import { DashboardHero } from '../components/portal/dashboard-hero';
 import { demoPriceSeries, DEMO_ACTIVE_ORDERS, DEMO_RECENT_TRADES } from '../lib/portal-demo';
 import { toPersianDigits } from '../lib/utils';
+import { toPortfolioPosition } from '../lib/customer-portfolio';
+import { netWorthRial } from '../components/portal/dashboard-hero';
+import { assetCompositionSlices } from '../components/portal/assets/asset-composition';
 
 const mockPortfolio = jest.fn();
+
+describe('pending purchase asset breakdown', () => {
+  const position = toPortfolioPosition(
+    {
+      weightGrams: '0',
+      pendingPurchaseGrams: '3',
+      pendingPurchaseAmountRial: '1800000',
+      purityRatio: null,
+      averageBuyPriceRial: null,
+      totalBuyValueRial: null,
+      totalSellValueRial: null,
+    },
+    '700000',
+  );
+
+  it('shows pending-only weight separately from confirmed holdings', () => {
+    render(<PortfolioCard position={position} />);
+    expect(screen.getByText('طلای در انتظار تأیید').closest('div')).toHaveTextContent('۳ گرم');
+    expect(screen.getByText('موجودی طلای تأییدشده').closest('div')).toHaveTextContent('۰ گرم');
+    expect(screen.getByText('ارزش روز طلای تأییدشده').closest('div')).not.toHaveTextContent(
+      '۲۱۰,۰۰۰',
+    );
+    expect(screen.getByText('میانگین خرید')).toBeInTheDocument();
+  });
+
+  it('shows confirmed holdings and market value when active reservations reduce sellable weight', () => {
+    const positionWithReservations = toPortfolioPosition(
+      {
+        weightGrams: '0',
+        confirmedWeightGrams: '3.813',
+        pendingPurchaseGrams: '5',
+        pendingPurchaseAmountRial: '1800000',
+        purityRatio: '0.750000',
+        averageBuyPriceRial: '266616450',
+        totalBuyValueRial: '1016608523.85',
+        totalSellValueRial: null,
+      },
+      '300000000',
+    );
+    render(<PortfolioCard position={positionWithReservations} />);
+    expect(screen.getByText('موجودی طلای تأییدشده').closest('div')).toHaveTextContent(
+      toPersianDigits('3.813 گرم'),
+    );
+    expect(screen.getByText('ارزش روز طلای تأییدشده').closest('div')).toHaveTextContent(
+      '۱۱۴,۳۹۰,۰۰۰ تومان',
+    );
+  });
+
+  it('counts the paid amount once without valuing pending gold at market price', () => {
+    expect(position?.marketValueRial).toBeNull();
+    expect(netWorthRial(null, position)).toBe('1800000');
+    const slices = assetCompositionSlices('200000', '0', '0', position?.pendingPurchaseAmountRial);
+    expect(slices.find((slice) => slice.id === 'pending-purchase')?.amountRial).toBe('1800000');
+    expect(slices.reduce((total, slice) => total + Number(slice.amountRial), 0)).toBe(2000000);
+  });
+
+  it.each([undefined, '0', '0.000000'])(
+    'hides the pending row for absent or zero weight (%s)',
+    (grams) => {
+      render(<PortfolioCard position={{ ...position!, pendingPurchaseGrams: grams }} />);
+      expect(screen.queryByText('طلای در انتظار تأیید')).not.toBeInTheDocument();
+    },
+  );
+
+  it('hides pending weight without a paid reservation', () => {
+    render(<PortfolioCard position={{ ...position!, pendingPurchaseAmountRial: '0.00' }} />);
+    expect(screen.queryByText('طلای در انتظار تأیید')).not.toBeInTheDocument();
+  });
+
+  it('removes the pending row when refreshed balances reflect a resolved order', () => {
+    const { rerender } = render(<PortfolioCard position={position} />);
+    expect(screen.getByText('طلای در انتظار تأیید')).toBeInTheDocument();
+    rerender(
+      <PortfolioCard
+        position={{
+          ...position!,
+          weightGrams: '3',
+          confirmedWeightGrams: '3',
+          pendingPurchaseGrams: '0',
+          pendingPurchaseAmountRial: '0',
+        }}
+      />,
+    );
+    expect(screen.queryByText('طلای در انتظار تأیید')).not.toBeInTheDocument();
+    expect(screen.getByText('موجودی طلای تأییدشده').closest('div')).toHaveTextContent('۳ گرم');
+  });
+});
 
 jest.mock('@/lib/api', () => {
   const actual = jest.requireActual<typeof import('@/lib/api')>('@/lib/api');
@@ -68,11 +158,13 @@ describe('KycStatusCard', () => {
   });
 });
 
-
 describe('QuickActions', () => {
   it('links to existing portal routes', () => {
     render(<QuickActions />);
-    expect(screen.getByText('واریز و برداشت').closest('a')).toHaveAttribute('href', '/portal/payments');
+    expect(screen.getByText('واریز و برداشت').closest('a')).toHaveAttribute(
+      'href',
+      '/portal/payments',
+    );
     expect(screen.getByText('خرید سریع طلا').closest('a')).toHaveAttribute(
       'href',
       '/portal/orders/new?side=buy',
@@ -107,6 +199,7 @@ describe('DashboardHero', () => {
         }}
         position={{
           weightGrams: '10.000000',
+          confirmedWeightGrams: '10.000000',
           reservedPickupGrams: '0',
           purityLabel: '750',
           averageBuyPriceRial: null,

@@ -84,6 +84,15 @@ export interface ActivitySeriesPoint {
   unclassifiedGrams: string;
 }
 
+export interface PortfolioGoldHistoryPoint {
+  key: string;
+  buyGrams: string;
+  sellGrams: string;
+  deliveredPickupGrams: string;
+  availableRialChange: string;
+  pendingPurchaseRialChange: string;
+}
+
 export interface ActivityTransaction {
   id: string;
   orderNumber: string;
@@ -111,8 +120,14 @@ export interface ActivityTransaction {
 export interface CustomerHolding {
   /** Available melted-gold grams (booked buy−sell minus non-cancelled pickups). */
   weightGrams: string;
+  /** Finalized gold currently held in the wallet, excluding active delivery claims. */
+  confirmedWeightGrams: string;
+  /** Finalized gold still owned, including active delivery claims. */
+  ownedGoldGrams: string;
   /** Grams in REQUESTED / PREPARING / READY pickups (still reserved, not delivered). */
   reservedPickupGrams: string;
+  pendingPurchaseGrams: string;
+  pendingPurchaseAmountRial: string;
   purityRatio: string | null;
   averageBuyPriceRial: string | null;
   totalBuyValueRial: string | null;
@@ -121,7 +136,11 @@ export interface CustomerHolding {
 
 export const EMPTY_CUSTOMER_HOLDING: CustomerHolding = {
   weightGrams: '0.000000',
+  confirmedWeightGrams: '0.000000',
+  ownedGoldGrams: '0.000000',
   reservedPickupGrams: '0.000000',
+  pendingPurchaseGrams: '0.000000',
+  pendingPurchaseAmountRial: '0.00',
   purityRatio: null,
   averageBuyPriceRial: null,
   totalBuyValueRial: null,
@@ -427,22 +446,74 @@ export function computeCustomerHolding(
   rows: ActivityOrderInput[],
   opts?: { pickupReservedGrams?: Decimal.Value; pickupCommittedGrams?: Decimal.Value },
 ): CustomerHolding {
-  const computed = computeCustomerActivity(rows, { bucket: 'month', page: 1, limit: 10 });
+  // BUY ownership starts at approval; pending SELL orders continue to hold gold.
+  const approved = new Set(['APPROVED', 'TRADE_CREATED', 'SETTLING', 'COMPLETED']);
+  const pendingStatuses = new Set([
+    'SUBMITTED',
+    'QUOTED',
+    'ASSIGNED',
+    'UNDER_REVIEW',
+    'REVISION_REQUESTED',
+  ]);
+  const pending = rows.filter(
+    (row) =>
+      row.side === 'BUY' &&
+      pendingStatuses.has(row.status) &&
+      new Decimal(row.reservedAmountRial ?? 0).gt(0) &&
+      (!row.trade || row.trade.status === 'PENDING_CONFIRMATION'),
+  );
+  const confirmedTradeStatuses = new Set(['CONFIRMED', 'SETTLING', 'COMPLETED']);
+  const confirmedTrades = rows.filter(
+    (row) => row.trade && confirmedTradeStatuses.has(row.trade.status) && row.side !== null,
+  );
+  const confirmedBuyWeight = confirmedTrades
+    .filter((row) => row.side === 'BUY')
+    .reduce((sum, row) => sum.plus(row.trade!.weightGrams), new Decimal(0));
+  const confirmedSellWeight = confirmedTrades
+    .filter((row) => row.side === 'SELL')
+    .reduce((sum, row) => sum.plus(row.trade!.weightGrams), new Decimal(0));
+  const reservedPickup = new Decimal(opts?.pickupReservedGrams ?? 0);
+  // Open pickup requests remain owned gold; only delivered pickups leave the virtual balance.
+  const deliveredPickup = Decimal.max(
+    new Decimal(opts?.pickupCommittedGrams ?? 0).minus(opts?.pickupReservedGrams ?? 0),
+    0,
+  );
+  const ownedGold = Decimal.max(
+    confirmedBuyWeight.minus(confirmedSellWeight).minus(deliveredPickup),
+    0,
+  );
+  const confirmedWalletGold = Decimal.max(
+    ownedGold.minus(reservedPickup),
+    0,
+  );
+  const owned = rows.filter(
+    (row) =>
+      row.side !== 'BUY' ||
+      (row.trade ? confirmedTradeStatuses.has(row.trade.status) : approved.has(row.status)),
+  );
+  const computed = computeCustomerActivity(owned, { bucket: 'month', page: 1, limit: 10 });
   const buyWeight = new Decimal(computed.buy.grams);
   const sellWeight = new Decimal(computed.sell.grams);
   const bookedNet = Decimal.max(buyWeight.minus(sellWeight), 0);
-  const reservedPickup = new Decimal(opts?.pickupReservedGrams ?? 0);
   const committedPickup = new Decimal(opts?.pickupCommittedGrams ?? 0);
   const available = Decimal.max(bookedNet.minus(committedPickup), 0);
   const buyAmount = new Decimal(computed.buy.amountRial);
   const sellAmount = new Decimal(computed.sell.amountRial);
   const purities = new Set(
-    rows
+    owned
       .filter((row) => isBookedActivity(row) && row.side === 'BUY')
       .map((row) => purityKey(row.purityRatio)),
   );
   return {
     weightGrams: grams(available),
+    confirmedWeightGrams: grams(confirmedWalletGold),
+    ownedGoldGrams: grams(ownedGold),
+    pendingPurchaseGrams: grams(
+      pending.reduce((sum, row) => sum.plus(row.weightGrams), new Decimal(0)),
+    ),
+    pendingPurchaseAmountRial: money(
+      pending.reduce((sum, row) => sum.plus(row.reservedAmountRial ?? 0), new Decimal(0)),
+    ),
     reservedPickupGrams: grams(Decimal.max(reservedPickup, 0)),
     purityRatio: purities.size === 1 ? [...purities][0] : null,
     averageBuyPriceRial: buyWeight.gt(0) ? money(buyAmount.div(buyWeight)) : null,

@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import Link from 'next/link';
 import { useState, type ReactNode } from 'react';
 import useSWR from 'swr';
@@ -456,7 +458,7 @@ function RecentTrades({ trades }: { trades: DashboardSummary['recentTrades'] }) 
         <p className="px-5 py-8 text-sm text-slate-500">معامله‌ای ثبت نشده است.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <NumberedTable className="min-w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-500">
                 <th className="px-4 py-2 text-right font-medium">شناسه</th>
@@ -497,7 +499,7 @@ function RecentTrades({ trades }: { trades: DashboardSummary['recentTrades'] }) 
                 </tr>
               ))}
             </tbody>
-          </table>
+          </NumberedTable>
         </div>
       )}
     </article>
@@ -527,7 +529,7 @@ function RecentPayments({ payments }: { payments: DashboardSummary['recentPaymen
         <p className="px-5 py-8 text-sm text-slate-500">پرداختی ثبت نشده است.</p>
       ) : (
         <div className="overflow-x-auto">
-          <table className="min-w-full text-sm">
+          <NumberedTable className="min-w-full text-sm">
             <thead>
               <tr className="text-xs text-slate-500">
                 <th className="px-4 py-2 text-right font-medium">مشتری</th>
@@ -578,7 +580,7 @@ function RecentPayments({ payments }: { payments: DashboardSummary['recentPaymen
                 </tr>
               ))}
             </tbody>
-          </table>
+          </NumberedTable>
         </div>
       )}
     </article>

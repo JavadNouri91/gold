@@ -12,7 +12,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
-import type { ActivitySeriesPoint } from '@/lib/api';
+import type { PortfolioGoldHistoryPoint } from '@/lib/api';
 import {
   ASSET_CHART_RANGES,
   ownedGoldGrams,
@@ -46,17 +46,19 @@ export function PortfolioValueChart({
   weightGrams,
   reservedPickupGrams,
   availableRial,
+  pendingPurchaseRial,
   loading,
   error,
   onRetry,
 }: {
   range: AssetChartRange;
   onRangeChange: (range: AssetChartRange) => void;
-  points?: ActivitySeriesPoint[];
+  points?: PortfolioGoldHistoryPoint[];
   livePriceRial?: string | null;
   weightGrams?: string | null;
   reservedPickupGrams?: string | null;
   availableRial?: string | null;
+  pendingPurchaseRial?: string | null;
   loading?: boolean;
   error?: boolean;
   onRetry?: () => void;
@@ -67,6 +69,7 @@ export function PortfolioValueChart({
     livePriceRial,
     ownedGoldGrams(weightGrams, reservedPickupGrams),
     availableRial,
+    pendingPurchaseRial ?? undefined,
   );
   const last = series[series.length - 1];
   const compared = rangeChange(series[0], last);
@@ -125,7 +128,7 @@ export function PortfolioValueChart({
             </span>
           </p>
           <p className="mt-1 text-xs leading-5 text-[#6B7280]">
-            دو خط روند در بازه {label}: ارزش ریالی موجودی با قیمت لحظه‌ای به‌اضافه توان خرید، و وزن طلا.
+            ارزش کل دارایی با قیمت لحظه‌ای طلا و مانده ریالی، همراه وزن طلای تأییدشده و در انتظار تحویل؛ خریدهای تأییدنشده فقط به مبلغ پرداخت‌شده شمرده می‌شوند.
           </p>
           <div className="mt-2 flex flex-wrap gap-3 text-xs">
             <button

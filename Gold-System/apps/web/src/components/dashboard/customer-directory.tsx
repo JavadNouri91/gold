@@ -11,7 +11,6 @@ import {
   Crown,
   Download,
   Eye,
-  FileSpreadsheet,
   MoreHorizontal,
   ShieldAlert,
   UserRound,
@@ -29,7 +28,6 @@ import { ApiErrorState, SkeletonBlock } from '@/components/dashboard/states';
 import { ConfirmDialog } from '@/components/dashboard/confirm-dialog';
 import {
   CustomerEditDialog,
-  CustomerImportDialog,
   Toast,
   TypeBadge,
   accountStatusOf,
@@ -43,10 +41,10 @@ import { Input } from '@/components/ui/input';
 import { MobileNumber } from '@/components/ui/mobile-input';
 import { Modal } from '@/components/ui/modal';
 import { ApiClientError } from '@/lib/api';
+import { CustomerAvatar } from '@/components/portal/customer-avatar';
 import {
   CUSTOMER_ACCOUNT_STATUS_LABELS,
   CUSTOMER_FINANCIAL_LABELS,
-  CUSTOMER_SEGMENT_LABELS,
   CUSTOMER_TYPE_LABELS,
   CUSTOMER_VERIFICATION_LABELS,
   cn,
@@ -108,7 +106,6 @@ interface Filters {
   search: string;
   type: string;
   accountStatus: string;
-  segment: string;
   financialStatus: string;
   verificationStatus: string;
   page: number;
@@ -119,7 +116,6 @@ const EMPTY_FILTERS: Filters = {
   search: '',
   type: '',
   accountStatus: '',
-  segment: '',
   financialStatus: '',
   verificationStatus: '',
   page: 1,
@@ -133,7 +129,6 @@ function parseFilters(params: URLSearchParams): Filters {
     search: params.get('search') ?? '',
     type: params.get('type') ?? '',
     accountStatus: params.get('accountStatus') ?? '',
-    segment: params.get('segment') ?? '',
     financialStatus: params.get('financialStatus') ?? '',
     verificationStatus: params.get('verificationStatus') ?? '',
     page: Number.isFinite(page) && page > 0 ? page : 1,
@@ -147,7 +142,6 @@ function writeFilters(filters: Filters): string {
     ['search', filters.search],
     ['type', filters.type],
     ['accountStatus', filters.accountStatus],
-    ['segment', filters.segment],
     ['financialStatus', filters.financialStatus],
     ['verificationStatus', filters.verificationStatus],
   ];
@@ -165,7 +159,6 @@ function queryFromFilters(filters: Filters) {
     search: filters.search ? toLatinDigits(filters.search) : undefined,
     type: filters.type || undefined,
     accountStatus: filters.accountStatus || undefined,
-    segment: filters.segment || undefined,
     financialStatus: filters.financialStatus || undefined,
     verificationStatus: filters.verificationStatus || undefined,
     page: filters.page,
@@ -290,7 +283,6 @@ export function CustomerDirectory() {
   const [editing, setEditing] = useState<StaffCustomer | null>(null);
   const [statusTarget, setStatusTarget] = useState<{ customer: StaffCustomer; next: string } | null>(null);
   const [columnsOpen, setColumnsOpen] = useState(false);
-  const [importOpen, setImportOpen] = useState(false);
   const [bulkBlockOpen, setBulkBlockOpen] = useState(false);
   const [bulkTypeOpen, setBulkTypeOpen] = useState(false);
   const [bulkSmsOpen, setBulkSmsOpen] = useState(false);
@@ -312,7 +304,6 @@ export function CustomerDirectory() {
   const filterKey = [
     applied.type,
     applied.accountStatus,
-    applied.segment,
     applied.financialStatus,
     applied.verificationStatus,
   ].join('\0');
@@ -455,9 +446,13 @@ export function CustomerDirectory() {
       header: 'نام مشتری',
       render: (row) => (
         <Link href={`/dashboard/customers/${row.id}`} className="flex items-center gap-2 font-medium">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gold-100 text-xs text-gold-800 dark:bg-gold-900/40 dark:text-gold-300">
-            {(row.firstName || row.fullName).slice(0, 1)}
-          </span>
+          <CustomerAvatar
+            customer={{ hasAvatar: Boolean(row.hasAvatar), updatedAt: row.updatedAt }}
+            name={row.fullName || `${row.firstName} ${row.lastName}`}
+            avatarPath={`/customers/${row.id}/avatar`}
+            size="h-8 w-8"
+            className="shrink-0"
+          />
           <span className="min-w-0">
             <span className="block truncate">{row.fullName || `${row.firstName} ${row.lastName}`}</span>
             <span className="mt-0.5 block">
@@ -763,12 +758,6 @@ export function CustomerDirectory() {
                 void summary.mutate();
               }}
             />
-            {canManage ? (
-              <Button variant="outline" onClick={() => setImportOpen(true)}>
-                <FileSpreadsheet className="me-2 h-4 w-4" />
-                ورودی Excel
-              </Button>
-            ) : null}
             <Button variant="outline" onClick={() => void exportFile()}>
               <Download className="me-2 h-4 w-4" />
               خروجی Excel
@@ -846,19 +835,15 @@ export function CustomerDirectory() {
             label="نوع مشتری"
             value={draft.type}
             onChange={(type) => applySelect({ type })}
-            items={options(CUSTOMER_TYPE_LABELS)}
+            items={options(CUSTOMER_TYPE_LABELS).filter(
+              (item) => item.value !== 'WHOLESALE' && item.value !== 'CORPORATE',
+            )}
           />
           <SelectFilter
             label="وضعیت حساب"
             value={draft.accountStatus}
             onChange={(accountStatus) => applySelect({ accountStatus })}
             items={options(CUSTOMER_ACCOUNT_STATUS_LABELS).filter((item) => item.value !== 'DEBTOR')}
-          />
-          <SelectFilter
-            label="سطح مشتری"
-            value={draft.segment}
-            onChange={(segment) => applySelect({ segment })}
-            items={options(CUSTOMER_SEGMENT_LABELS)}
           />
           {canFinance ? (
             <SelectFilter
@@ -892,7 +877,7 @@ export function CustomerDirectory() {
         page={list.data?.meta.page ?? applied.page}
         totalPages={list.data?.meta.totalPages ?? 1}
         total={list.data?.meta.total}
-        pageSize={applied.limit}
+        pageSize={list.data?.meta.limit ?? applied.limit}
         onPageChange={(page) => go({ ...applied, page })}
         onPageSizeChange={(limit) => go({ ...applied, limit, page: 1 })}
         emptyMessage="مشتری‌ای با این فیلتر پیدا نشد"
@@ -1038,18 +1023,6 @@ export function CustomerDirectory() {
           ))}
         </div>
       </Modal>
-      <CustomerImportDialog
-        open={importOpen}
-        onClose={() => setImportOpen(false)}
-        onImported={(message) => {
-          setToast(message);
-          setImportOpen(false);
-        }}
-        onFinished={() => {
-          void list.mutate();
-          void summary.mutate();
-        }}
-      />
       <Toast message={toast} onClose={() => setToast(null)} />
     </div>
   );

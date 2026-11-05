@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import { jalaaliMonthLength, toGregorian } from 'jalaali-js';
 import { ChevronLeft, ChevronRight, Copy, Plus, Scale, Trash2 } from 'lucide-react';
 import { ApiErrorState, SkeletonBlock } from '@/components/dashboard/states';
@@ -386,7 +388,7 @@ export function WeeklyPanel({
               {sessions.length === 0 ? (
                 <p className="text-sm text-muted-foreground">بازه‌ای ثبت نشده است.</p>
               ) : (
-                <table className="w-full min-w-[680px] text-right text-sm">
+                <NumberedTable className="w-full min-w-[680px] text-right text-sm">
                   <thead className="text-xs text-muted-foreground">
                     <tr>
                       <th className="px-2 py-2 font-medium">عنوان</th>
@@ -424,7 +426,7 @@ export function WeeklyPanel({
                       </tr>
                     ))}
                   </tbody>
-                </table>
+                </NumberedTable>
               )}
             </CardContent>
           </Card>
@@ -469,7 +471,7 @@ export function LimitsPanel({
           </p>
         </CardHeader>
         <CardContent className="overflow-x-auto p-0">
-          <table className="w-full min-w-[720px] text-right text-sm">
+          <NumberedTable className="w-full min-w-[720px] text-right text-sm">
             <thead className="text-xs text-muted-foreground">
               <tr>
                 <th className="px-3 py-3 font-medium">روز</th>
@@ -500,7 +502,7 @@ export function LimitsPanel({
                 ))
               )}
             </tbody>
-          </table>
+          </NumberedTable>
         </CardContent>
       </Card>
       <ScopedLimitsPanel canEdit={canEdit} busy={busy} onBusy={onBusy} onNotice={onNotice} />
@@ -542,7 +544,7 @@ export function HolidaysPanel({
           {rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">در این ماه موردی ثبت نشده است.</p>
           ) : (
-            <table className="w-full min-w-[520px] text-right text-sm">
+            <NumberedTable className="w-full min-w-[520px] text-right text-sm">
               <thead className="text-xs text-muted-foreground">
                 <tr>
                   <th className="px-2 py-2 font-medium">تاریخ</th>
@@ -569,7 +571,7 @@ export function HolidaysPanel({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </NumberedTable>
           )}
         </CardContent>
       </Card>
@@ -612,7 +614,7 @@ export function AuditPanel({
     <Card>
       <CardHeader><CardTitle className="text-base">تاریخچه تغییرات</CardTitle></CardHeader>
       <CardContent className="overflow-x-auto p-0">
-        <table className="w-full min-w-[760px] text-right text-sm">
+        <NumberedTable className="w-full min-w-[760px] text-right text-sm">
           <thead className="text-xs text-muted-foreground">
             <tr>
               <th className="px-3 py-3 font-medium">زمان</th>
@@ -640,7 +642,7 @@ export function AuditPanel({
               </tr>
             ))}
           </tbody>
-        </table>
+        </NumberedTable>
       </CardContent>
     </Card>
   );

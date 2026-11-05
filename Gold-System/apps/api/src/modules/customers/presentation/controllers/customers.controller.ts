@@ -221,6 +221,16 @@ export class CustomersController {
     return this.service.checkEmailAvailable(email ?? '');
   }
 
+  @Get(':id/avatar')
+  @ApiBearerAuth()
+  @RequirePermissions('customer.read')
+  @Header('Cache-Control', 'private, no-store')
+  @ApiOperation({ summary: 'Read a customer profile photo for the staff directory' })
+  async customerAvatar(@Param('id') id: string) {
+    const file = await this.service.readCustomerAvatar(id);
+    return new StreamableFile(file.buffer, { type: file.mimeType, length: file.buffer.length });
+  }
+
   @Get(':id/workspace')
   @ApiBearerAuth()
   @RequirePermissions('customer.read')

@@ -1,5 +1,7 @@
 'use client';
 
+import { NumberedTable } from '@/components/dashboard/numbered-table';
+
 import { useEffect, useId, useRef, useState } from 'react';
 import useSWR from 'swr';
 import { ChevronDown } from 'lucide-react';
@@ -406,7 +408,7 @@ function RoleSection({ onSaved, onError }: { onSaved: () => void; onError: (erro
           <p className="text-sm text-muted-foreground">نقشی در سامانه ثبت نشده است.</p>
         ) : null}
         <div className="hidden overflow-x-auto md:block">
-          <table className="min-w-full text-sm">
+          <NumberedTable className="min-w-full text-sm">
             <thead>
               <tr className="bg-muted/50 text-muted-foreground">
                 {['نقش', 'سقف نشست', 'رفتار ورود', 'پیش‌فرض', 'عملیات'].map((header) => (
@@ -438,7 +440,7 @@ function RoleSection({ onSaved, onError }: { onSaved: () => void; onError: (erro
                 </tr>
               ))}
             </tbody>
-          </table>
+          </NumberedTable>
         </div>
         <ul className="space-y-3 md:hidden">
           {(roles.data ?? []).map((role) => (

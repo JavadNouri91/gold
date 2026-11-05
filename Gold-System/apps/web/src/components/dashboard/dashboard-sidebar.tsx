@@ -59,7 +59,8 @@ export function DashboardSidebar({
     <SidebarShell open={open} onClose={onClose}>
       <SidebarBrand subtitle="داشبورد داخلی" onClose={onClose} />
 
-      <nav className="flex-1 space-y-4 overflow-y-auto px-3 py-3" aria-label="منوی داخلی">
+      <div className="min-h-0 flex-1 overflow-y-auto">
+      <nav className="space-y-4 px-3 py-3" aria-label="منوی داخلی">
         {groups.map((group, groupIndex) => (
           <div key={group} className="space-y-1">
             <p className="px-3 pb-1 pt-1 text-xs font-medium text-muted-foreground">{group}</p>
@@ -144,12 +145,14 @@ export function DashboardSidebar({
       </nav>
 
       <SidebarLogout
+        className="mt-0"
         onClick={() =>
           void logout().then(() => {
             window.location.href = '/dashboard/login';
           })
         }
       />
+      </div>
     </SidebarShell>
   );
 }
