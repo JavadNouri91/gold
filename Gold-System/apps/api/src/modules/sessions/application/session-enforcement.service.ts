@@ -133,6 +133,7 @@ export class SessionEnforcementService {
         throw new UnauthorizedException('تأیید ورود منقضی یا نامعتبر است. دوباره وارد شوید.');
       }
       await this.lockUser(tx, ticket.userId);
+      await this.assertAccountEligible(tx, ticket.userId);
       const policy = await this.loadPolicy(tx, ticket.userId);
       const chosen = await tx.refreshToken.findFirst({
         where: {
@@ -222,6 +223,7 @@ export class SessionEnforcementService {
         throw new UnauthorizedException('تأیید ورود منقضی یا نامعتبر است. دوباره وارد شوید.');
       }
       await this.lockUser(tx, ticket.userId);
+      await this.assertAccountEligible(tx, ticket.userId);
       const { live: active, revoked: timeLimitRevocations } = await this.listActive(
         tx,
         ticket.userId,
@@ -229,7 +231,11 @@ export class SessionEnforcementService {
       );
       if (active.length > 0) {
         await tx.refreshToken.updateMany({
-          where: { id: { in: active.map((session) => session.id) }, userId: ticket.userId, revokedAt: null },
+          where: {
+            id: { in: active.map((session) => session.id) },
+            userId: ticket.userId,
+            revokedAt: null,
+          },
           data: { revokedAt: new Date() },
         });
       }
@@ -310,7 +316,11 @@ export class SessionEnforcementService {
       );
       if (expiresAt <= new Date()) {
         await this.markRevoked(tx, current.id);
-        return { kind: 'timed_out' as const, reason: 'max_duration' as const, sessionId: current.id };
+        return {
+          kind: 'timed_out' as const,
+          reason: 'max_duration' as const,
+          sessionId: current.id,
+        };
       }
       await tx.refreshToken.update({
         where: { id: current.id },
@@ -469,6 +479,7 @@ export class SessionEnforcementService {
 
   private async admit(tx: Tx, input: OpenSessionInput, limits: GlobalSessionTimeLimits) {
     await this.lockUser(tx, input.userId);
+    await this.assertAccountEligible(tx, input.userId);
     const policy = await this.loadPolicy(tx, input.userId);
     const { live: active, revoked: timeLimitRevocations } = await this.listActive(
       tx,
@@ -595,7 +606,9 @@ export class SessionEnforcementService {
     }
   }
 
-  private async reconcileTimedOutSessions<T extends { id: string; userId: string; createdAt: Date; lastActivityAt: Date }>(
+  private async reconcileTimedOutSessions<
+    T extends { id: string; userId: string; createdAt: Date; lastActivityAt: Date },
+  >(
     tx: Tx,
     rows: T[],
     limits: GlobalSessionTimeLimits,
@@ -675,6 +688,19 @@ export class SessionEnforcementService {
           }
         : fallback,
     });
+  }
+
+  private async assertAccountEligible(tx: Tx, userId: string) {
+    const user = await tx.user.findUnique({ where: { id: userId }, include: { customer: true } });
+    if (
+      !user ||
+      user.status !== 'ACTIVE' ||
+      (user.customer &&
+        (['BLOCKED', 'SUSPENDED'].includes(user.customer.status) ||
+          user.customer.accountStatus === 'BLOCKED'))
+    ) {
+      throw new UnauthorizedException('Account is unavailable');
+    }
   }
 
   private async lockUser(tx: Tx, userId: string): Promise<void> {

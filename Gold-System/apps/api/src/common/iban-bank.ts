@@ -46,7 +46,16 @@ export function normalizeIban(value: string): string {
 
 export function isValidIranianIban(value: string): boolean {
   const iban = normalizeIban(value);
-  return /^IR\d{24}$/.test(iban);
+  if (!/^IR\d{24}$/.test(iban)) return false;
+  // ISO 13616 mod-97 check: move the first four characters to the end and
+  // expand letters (I=18, R=27). Stream digits to avoid large integers.
+  const rearranged = `${iban.slice(4)}IR${iban.slice(2, 4)}`;
+  let remainder = 0;
+  for (const char of rearranged) {
+    const expanded = /[A-Z]/.test(char) ? String(char.charCodeAt(0) - 55) : char;
+    for (const digit of expanded) remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  return remainder === 1;
 }
 
 export function ibanBankCode(value: string): string | null {

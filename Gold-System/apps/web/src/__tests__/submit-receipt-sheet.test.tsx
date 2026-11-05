@@ -21,6 +21,19 @@ describe('SubmitReceiptButton deposit modal', () => {
     expect(screen.getByText(/شماره شبا/)).toBeInTheDocument();
   });
 
+  it('renders the transfer-method heading and choices as Persian text, not Unicode escape sequences', () => {
+    render(<SubmitReceiptButton onSubmitted={jest.fn()} />);
+    fireEvent.click(screen.getByRole('button', { name: /افزایش اعتبار/ }));
+
+    const dialog = screen.getByRole('dialog');
+    expect(screen.getByRole('heading', { name: '\u0631\u0648\u0634 \u0627\u0646\u062a\u0642\u0627\u0644 \u0648\u062c\u0647 *' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '\u06a9\u0627\u0631\u062a \u0628\u0647 \u06a9\u0627\u0631\u062a' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '\u062d\u0633\u0627\u0628 \u0628\u0647 \u062d\u0633\u0627\u0628' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '\u067e\u0627\u06cc\u0627' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '\u0633\u0627\u062a\u0646\u0627' })).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/\\u[0-9a-f]{4}/i);
+  });
+
   it('accepts a receipt dropped onto the file area', async () => {
     render(<SubmitReceiptButton onSubmitted={jest.fn()} />);
     fireEvent.click(screen.getByRole('button', { name: 'افزایش اعتبار' }));

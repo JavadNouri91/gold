@@ -14,7 +14,7 @@ export class CustomerResponseDto {
   firstName: string;
   lastName: string;
   fullName: string;
-  nationalId: string;
+  nationalId: string | null;
   mobile: string;
   email: string | null;
   dateOfBirth: Date | null;

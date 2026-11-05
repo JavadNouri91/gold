@@ -1,6 +1,7 @@
 {
   "extends": "@gold/tsconfig/nextjs.json",
   "compilerOptions": {
+    "target": "ES2022",
     "paths": {
       "@/*": [
         "./src/*"
@@ -17,7 +18,8 @@
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next-dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

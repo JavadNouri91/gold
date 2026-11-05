@@ -212,8 +212,13 @@ export class CustomerRepository {
    */
   async nextCustomerNumber(tx?: Prisma.TransactionClient): Promise<string> {
     const client = tx ?? this.prisma;
-    const count = await client.customer.count();
-    const seq = count + 1;
+    // The shared creation helper holds the customer-number advisory lock.
+    // MAX preserves numbering when legacy customers have been deleted.
+    const rows = await client.$queryRaw<Array<{ next: bigint }>>`
+      SELECT COALESCE(MAX(CAST(SUBSTRING(customer_number FROM 6) AS BIGINT)), 0) + 1 AS next
+      FROM customers WHERE customer_number ~ '^CUST-[0-9]+$'
+    `;
+    const seq = rows[0].next;
     return `CUST-${String(seq).padStart(6, '0')}`;
   }
 

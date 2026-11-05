@@ -1,24 +1,9 @@
 'use client';
 
-/**
- * Auth Context
- *
- * Provides authentication state to the entire portal.
- * Stores tokens in localStorage; all auth operations go through authApi.
- *
- * SECURITY NOTE: localStorage is acceptable for an MVP SPA. In production,
- * access tokens should be stored in memory and refresh tokens in httpOnly
- * cookies. Backend authorization remains the security boundary.
- */
+/** Shared portal authentication: memory-only access token and HttpOnly refresh cookie. */
 
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-} from 'react';
-import { authApi, tokenStore, type OtpResponse } from './api';
+import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
+import { authApi, tokenStore, refreshSession, type OtpResponse } from './api';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -36,6 +21,7 @@ interface AuthState {
 }
 
 interface AuthContextValue extends AuthState {
+  applySession: (response: OtpResponse) => void;
   login: (mobile: string, password: string) => Promise<{ requiresOtp: boolean }>;
   verifyOtp: (mobile: string, code: string) => Promise<void>;
   confirmSession: (confirmationToken: string, revokeSessionId: string) => Promise<void>;
@@ -49,39 +35,27 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 const USER_KEY = 'gold_user';
 
-function loadStoredUser(): AuthUser | null {
-  if (typeof window === 'undefined') return null;
-  try {
-    const raw = localStorage.getItem(USER_KEY);
-    return raw ? (JSON.parse(raw) as AuthUser) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storeUser(user: AuthUser) {
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(USER_KEY, JSON.stringify(user));
-}
-
-// ─── Provider ─────────────────────────────────────────────────────────────────
-
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Hydrate from storage on mount
   useEffect(() => {
-    const storedUser = loadStoredUser();
-    const accessToken = tokenStore.getAccess();
-    if (storedUser && accessToken) {
-      setUser(storedUser);
-    } else {
-      // Clear stale state
-      tokenStore.clear();
-      localStorage.removeItem(USER_KEY);
-    }
-    setIsLoading(false);
+    let active = true;
+    tokenStore.clear();
+    localStorage.removeItem(USER_KEY);
+    refreshSession()
+      .then((result) => {
+        if (active) setUser(result.user);
+      })
+      .catch(() => {
+        if (active) setUser(null);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   const applySession = useCallback((resp: OtpResponse) => {
@@ -93,35 +67,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       roles: resp.user.roles,
       permissions: resp.user.permissions,
     };
-    storeUser(authUser);
     setUser(authUser);
   }, []);
 
-  const login = useCallback(async (mobile: string, password: string) => {
-    const result = await authApi.login(mobile, password);
-    if (result.accessToken && result.refreshToken && result.user) {
-      applySession({
-        accessToken: result.accessToken,
-        refreshToken: result.refreshToken,
-        expiresIn: result.expiresIn ?? 0,
-        user: result.user,
-      });
-      return { requiresOtp: false };
-    }
-    return { requiresOtp: result.requiresOtp ?? true };
-  }, [applySession]);
+  const login = useCallback(
+    async (mobile: string, password: string) => {
+      const result = await authApi.login(mobile, password);
+      if (result.accessToken && result.user) {
+        applySession({
+          accessToken: result.accessToken,
+          refreshToken: result.refreshToken,
+          expiresIn: result.expiresIn ?? 0,
+          user: result.user,
+        });
+        return { requiresOtp: false };
+      }
+      return { requiresOtp: result.requiresOtp ?? true };
+    },
+    [applySession],
+  );
 
-  const verifyOtp = useCallback(async (mobile: string, code: string) => {
-    applySession(await authApi.verifyOtp(mobile, code));
-  }, [applySession]);
+  const verifyOtp = useCallback(
+    async (mobile: string, code: string) => {
+      applySession(await authApi.verifyOtp(mobile, code));
+    },
+    [applySession],
+  );
 
-  const confirmSession = useCallback(async (confirmationToken: string, revokeSessionId: string) => {
-    applySession(await authApi.confirmSession(confirmationToken, revokeSessionId));
-  }, [applySession]);
+  const confirmSession = useCallback(
+    async (confirmationToken: string, revokeSessionId: string) => {
+      applySession(await authApi.confirmSession(confirmationToken, revokeSessionId));
+    },
+    [applySession],
+  );
 
-  const closeOtherSessions = useCallback(async (confirmationToken: string) => {
-    applySession(await authApi.closeOtherSessions(confirmationToken));
-  }, [applySession]);
+  const closeOtherSessions = useCallback(
+    async (confirmationToken: string) => {
+      applySession(await authApi.closeOtherSessions(confirmationToken));
+    },
+    [applySession],
+  );
 
   const logout = useCallback(async () => {
     try {
@@ -138,6 +123,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value: AuthContextValue = {
     user,
+    applySession,
     isLoading,
     isAuthenticated: !!user,
     login,

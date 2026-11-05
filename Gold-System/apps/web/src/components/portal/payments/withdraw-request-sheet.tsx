@@ -2,14 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import {
-  ArrowUpRight,
-  CheckCircle2,
-  Plus,
-  ShieldCheck,
-  Wallet,
-  X,
-} from 'lucide-react';
+import { ArrowUpRight, CheckCircle2, Plus, ShieldCheck, Wallet, X } from 'lucide-react';
 import { nextPayaCycleLabel } from '@/lib/paya-cycle';
 import { tomanAmountWordsLabel } from '@/lib/toman-words';
 import { DAILY_PAYA_LIMIT_RIAL } from '@/lib/verified-bank-accounts';
@@ -18,12 +11,7 @@ import {
   percentOfAvailableToman,
   remainingAfterWithdrawRial,
 } from '@/lib/withdraw-amount';
-import {
-  ApiClientError,
-  customerApi,
-  paymentsApi,
-  type CustomerBankAccount,
-} from '@/lib/api';
+import { ApiClientError, customerApi, paymentsApi, type CustomerBankAccount } from '@/lib/api';
 import { formatIbanDisplay } from '@/lib/iban-bank';
 import { BankLogo } from '@/components/portal/profile/bank-logo';
 import {
@@ -110,6 +98,7 @@ export function WithdrawRequestModal({
   const [amount, setAmount] = useState('');
   const [otp, setOtp] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [kycRequired, setKycRequired] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(busy);
   busyRef.current = busy;
@@ -180,7 +169,11 @@ export function WithdrawRequestModal({
   const sendOtp = () => {
     setError(null);
     if (!canRequestOtp) {
-      setError(exceeds ? 'مبلغ واردشده از موجودی قابل برداشت بیشتر است.' : 'مبلغ و حساب مقصد را بررسی کنید.');
+      setError(
+        exceeds
+          ? 'مبلغ واردشده از موجودی قابل برداشت بیشتر است.'
+          : 'مبلغ و حساب مقصد را بررسی کنید.',
+      );
       return;
     }
     setBusy(true);
@@ -217,9 +210,12 @@ export function WithdrawRequestModal({
         onRequested?.();
       })
       .catch((err: unknown) => {
+        setKycRequired(err instanceof ApiClientError && err.code === 'KYC_REQUIRED');
         setBusy(false);
         setError(
-          err instanceof ApiClientError || err instanceof Error ? err.message : 'ثبت درخواست برداشت انجام نشد.',
+          err instanceof ApiClientError || err instanceof Error
+            ? err.message
+            : 'ثبت درخواست برداشت انجام نشد.',
         );
       });
   };
@@ -229,7 +225,12 @@ export function WithdrawRequestModal({
   return (
     <>
       <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-6">
-        <button type="button" className="absolute inset-0 z-0 bg-black/45" aria-label="بستن" onClick={close} />
+        <button
+          type="button"
+          className="absolute inset-0 z-0 bg-black/45"
+          aria-label="بستن"
+          onClick={close}
+        />
         <div
           role="dialog"
           aria-modal="true"
@@ -242,12 +243,16 @@ export function WithdrawRequestModal({
                 <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-emerald-50 text-emerald-700">
                   <ArrowUpRight className="h-5 w-5" aria-hidden />
                 </span>
-                <h2 id="withdraw-modal-title" className="text-base font-bold text-gray-900 sm:text-lg">
+                <h2
+                  id="withdraw-modal-title"
+                  className="text-base font-bold text-gray-900 sm:text-lg"
+                >
                   درخواست برداشت وجه
                 </h2>
               </div>
               <p className="mt-2 text-sm leading-7 text-gray-500">
-                مبلغ به شبای تأییدشده بنام خودتان واریز می‌شود. مبلغ درخواستی بلافاصله رزرو و از موجودی قابل برداشت کسر می‌گردد.
+                مبلغ به شبای تأییدشده بنام خودتان واریز می‌شود. مبلغ درخواستی بلافاصله رزرو و از
+                موجودی قابل برداشت کسر می‌گردد.
               </p>
             </div>
             <button
@@ -261,6 +266,11 @@ export function WithdrawRequestModal({
           </header>
 
           <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+            {kycRequired && (
+              <Link href="/portal/profile#kyc" className="mb-3 block text-sm underline">
+                مشاهده و تکمیل احراز هویت
+              </Link>
+            )}
             {step === 'form' ? (
               <FormStep
                 availableRial={availableRial}
@@ -287,7 +297,9 @@ export function WithdrawRequestModal({
                 selected={selected}
                 amountLabel={latinAmount ? formatMoney(tomanToRial(latinAmount)) : '—'}
                 otp={otp}
-                onOtp={(value) => setOtp(toPersianDigits(value.replace(/[^\d۰-۹٠-٩]/g, '').slice(0, 6)))}
+                onOtp={(value) =>
+                  setOtp(toPersianDigits(value.replace(/[^\d۰-۹٠-٩]/g, '').slice(0, 6)))
+                }
                 error={error}
               />
             ) : null}
@@ -304,7 +316,10 @@ export function WithdrawRequestModal({
             {step === 'form' ? (
               <>
                 <p className="mb-3 flex items-start gap-2 text-xs leading-6 text-gray-500">
-                  <ShieldCheck className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" aria-hidden />
+                  <ShieldCheck
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600"
+                    aria-hidden
+                  />
                   برداشت وجه صرفاً به حساب‌های تاییدشده بنام کاربر انجام می‌پذیرد.
                 </p>
                 <button
@@ -314,7 +329,11 @@ export function WithdrawRequestModal({
                   className="inline-flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600"
                 >
                   <ShieldCheck className="h-5 w-5" aria-hidden />
-                  {busy ? (SMS_DELIVERY_ENABLED ? 'در حال ارسال…' : 'در حال آماده‌سازی…') : 'تأیید و ارسال کد امنیتی پیامکی (OTP)'}
+                  {busy
+                    ? SMS_DELIVERY_ENABLED
+                      ? 'در حال ارسال…'
+                      : 'در حال آماده‌سازی…'
+                    : 'تأیید و ارسال کد امنیتی پیامکی (OTP)'}
                 </button>
                 {SMS_DELIVERY_ENABLED ? null : (
                   <p className="mt-2 text-xs leading-6 text-amber-700" role="status">
@@ -336,7 +355,10 @@ export function WithdrawRequestModal({
                 </button>
                 <button
                   type="button"
-                  disabled={busy || (SMS_DELIVERY_ENABLED && toLatinDigits(otp).replace(/\D/g, '').length < 5)}
+                  disabled={
+                    busy ||
+                    (SMS_DELIVERY_ENABLED && toLatinDigits(otp).replace(/\D/g, '').length < 5)
+                  }
                   onClick={confirmOtp}
                   className="inline-flex min-h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-emerald-600 text-sm font-bold text-white hover:bg-emerald-700 disabled:opacity-45"
                 >
@@ -524,7 +546,9 @@ function BankAccountOption({
       onClick={onSelect}
       className={cn(
         'flex w-full items-center gap-3 rounded-2xl border p-3 text-right transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-600',
-        selected ? 'border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500' : 'border-gray-200 bg-white hover:bg-gray-50',
+        selected
+          ? 'border-emerald-500 bg-emerald-50/70 ring-1 ring-emerald-500'
+          : 'border-gray-200 bg-white hover:bg-gray-50',
       )}
     >
       <BankLogo iban={account.iban} />
@@ -591,7 +615,9 @@ function Row({
   return (
     <div className="flex items-center justify-between gap-3">
       <dt className="text-gray-500">{label}</dt>
-      <dd className={cn('font-semibold text-gray-900', bold && 'text-base', valueClass)}>{value}</dd>
+      <dd className={cn('font-semibold text-gray-900', bold && 'text-base', valueClass)}>
+        {value}
+      </dd>
     </div>
   );
 }
@@ -666,8 +692,10 @@ function DoneStep({
       <h3 className="mt-4 text-base font-bold text-gray-900">درخواست برداشت ثبت شد</h3>
       <p className="mx-auto mt-2 max-w-sm text-sm leading-7 text-gray-500">
         مبلغ {amountLabel}
-        {selected ? ` به ${selected.bankName ?? 'حساب بانکی'} (${formatIbanDisplay(selected.iban)})` : ''} رزرو شد و
-        پس از تأیید مالی در سیکل پایا واریز می‌شود.
+        {selected
+          ? ` به ${selected.bankName ?? 'حساب بانکی'} (${formatIbanDisplay(selected.iban)})`
+          : ''}{' '}
+        رزرو شد و پس از تأیید مالی در سیکل پایا واریز می‌شود.
       </p>
     </div>
   );

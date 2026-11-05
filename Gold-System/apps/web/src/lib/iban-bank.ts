@@ -130,3 +130,14 @@ export function formatIbanDisplay(value: string): string {
   const grouped = formatIbanDigitGroups(value);
   return grouped ? `IR${grouped}` : 'IR';
 }
+
+export function isValidIranianIban(value: string): boolean {
+  const compact = toLatinDigits(value).toUpperCase().replace(/\s/g, '');
+  if (!/^IR\d{24}$/.test(compact)) return false;
+  let remainder = 0;
+  for (const ch of `${compact.slice(4)}${compact.slice(0, 4)}`) {
+    const expanded = /[A-Z]/.test(ch) ? String(ch.charCodeAt(0) - 55) : ch;
+    for (const digit of expanded) remainder = (remainder * 10 + Number(digit)) % 97;
+  }
+  return remainder === 1;
+}

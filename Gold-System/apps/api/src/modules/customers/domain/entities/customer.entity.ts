@@ -24,7 +24,7 @@ export class CustomerEntity {
 
   readonly firstName: string;
   readonly lastName: string;
-  readonly nationalId: string;
+  readonly nationalId: string | null;
   readonly mobile: string;
   readonly email: string | null;
   readonly dateOfBirth: Date | null;
@@ -67,7 +67,7 @@ export class CustomerEntity {
     userId: string | null;
     firstName: string;
     lastName: string;
-    nationalId: string;
+    nationalId: string | null;
     mobile: string;
     email: string | null;
     dateOfBirth: Date | null;

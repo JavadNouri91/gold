@@ -118,7 +118,7 @@ export function CustomerEditDialog({
       firstName: customer.firstName,
       lastName: customer.lastName,
       mobile: customer.mobile,
-      nationalId: customer.nationalId,
+      nationalId: customer.nationalId ?? '',
       email: customer.email ?? '',
       address: customer.address ?? '',
     });

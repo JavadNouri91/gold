@@ -1,3 +1,4 @@
+import { RequireApprovedKyc } from '../../../../common/guards/approved-kyc.guard';
 import {
   BadRequestException,
   Body,
@@ -144,6 +145,7 @@ export class PaymentController {
   @Post('receipts')
   @RequireAnyPermission('payment.read', 'customer.payment.read_own')
   @UseInterceptors(FileInterceptor('file', { limits: { fileSize: MAX_RECEIPT_BYTES } }))
+  @RequireApprovedKyc()
   submitReceipt(
     @CurrentUser() user: CurrentUserData,
     @UploadedFile() file: Express.Multer.File | undefined,
@@ -170,10 +172,8 @@ export class PaymentController {
    */
   @Post('withdrawals')
   @RequireAnyPermission('payment.read', 'customer.payment.read_own')
-  submitWithdrawal(
-    @CurrentUser() user: CurrentUserData,
-    @Body() dto: CreateWithdrawalDto,
-  ) {
+  @RequireApprovedKyc()
+  submitWithdrawal(@CurrentUser() user: CurrentUserData, @Body() dto: CreateWithdrawalDto) {
     if (!dto.amount || !dto.bankAccountId) {
       throw new BadRequestException('اطلاعات برداشت ناقص است.');
     }
@@ -194,7 +194,13 @@ export class PaymentController {
     @Request() req: { user: { userId?: string; sub?: string } },
     @UploadedFile() file: Express.Multer.File | undefined,
     @Body()
-    body: { customerId?: string; method?: string; amount?: string; referenceNumber?: string; notes?: string },
+    body: {
+      customerId?: string;
+      method?: string;
+      amount?: string;
+      referenceNumber?: string;
+      notes?: string;
+    },
   ) {
     if (!file || file.size <= 0) throw new BadRequestException('فایل رسید انتخاب نشده است.');
     if (!body.customerId || !body.method || !body.amount) {

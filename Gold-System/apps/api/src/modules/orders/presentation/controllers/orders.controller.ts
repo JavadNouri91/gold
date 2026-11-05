@@ -1,3 +1,4 @@
+import { RequireApprovedKyc } from '../../../../common/guards/approved-kyc.guard';
 import {
   Body,
   Controller,
@@ -62,6 +63,7 @@ export class OrdersController {
    */
   @Post()
   @HttpCode(HttpStatus.CREATED)
+  @RequireApprovedKyc()
   async createOrder(@CurrentUser() user: CurrentUserData, @Body() dto: CreateOrderDto) {
     return this.ordersService.createOrder(user.userId, dto);
   }
@@ -77,6 +79,7 @@ export class OrdersController {
    */
   @Post(':id/submit')
   @HttpCode(HttpStatus.OK)
+  @RequireApprovedKyc()
   async submitOrder(@CurrentUser() user: CurrentUserData, @Param('id') orderId: string) {
     return this.ordersService.submitOrder(user.userId, orderId);
   }

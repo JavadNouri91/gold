@@ -15,7 +15,13 @@ import {
   Store,
   X,
 } from 'lucide-react';
-import { kycApi, type KycDocumentDisplayStatus, type KycPhase, type OwnKycDocument, type OwnKycOverview } from '@/lib/api';
+import {
+  kycApi,
+  type KycDocumentDisplayStatus,
+  type KycPhase,
+  type OwnKycDocument,
+  type OwnKycOverview,
+} from '@/lib/api';
 import { PERSONAL_PHOTO_TYPE } from '@/lib/kyc-portrait-matte';
 import {
   DOCUMENT_STATUS_LABEL,
@@ -31,6 +37,9 @@ import {
 import { cn, toPersianDigits } from '@/lib/utils';
 import { Modal } from '@/components/ui/modal';
 import { KycUploadDialog } from '@/components/portal/kyc/kyc-upload-dialog';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { toLatinDigits } from '@/lib/utils';
 
 const HISTORY_PAGE = 8;
 
@@ -88,6 +97,9 @@ export function KycExperience({
   const [deleteTarget, setDeleteTarget] = useState<OwnKycDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [historyCount, setHistoryCount] = useState(HISTORY_PAGE);
+  const [nationalId, setNationalId] = useState('');
+  const [identityBusy, setIdentityBusy] = useState(false);
+  const [identityError, setIdentityError] = useState('');
   const hero = heroCopy(overview);
   const review = reviewCopy(overview);
   const action = primaryCta(overview.phase);
@@ -131,6 +143,47 @@ export function KycExperience({
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[1400px] space-y-4">
+      {!overview.identityComplete && (
+        <form
+          className="space-y-3 rounded-xl border bg-card p-4"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            setIdentityBusy(true);
+            setIdentityError('');
+            try {
+              await kycApi.completeIdentity(nationalId);
+              await onChanged();
+            } catch (err) {
+              setIdentityError(err instanceof Error ? err.message : 'ثبت اطلاعات انجام نشد.');
+            } finally {
+              setIdentityBusy(false);
+            }
+          }}
+        >
+          <Input
+            label="کد ملی"
+            required
+            dir="ltr"
+            inputMode="numeric"
+            maxLength={10}
+            value={toPersianDigits(nationalId)}
+            onChange={(event) =>
+              setNationalId(toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 10))
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            پس از ثبت، اصلاح کد ملی از طریق پشتیبانی انجام می‌شود.
+          </p>
+          {identityError && (
+            <p role="alert" className="text-sm text-red-600">
+              {identityError}
+            </p>
+          )}
+          <Button type="submit" isLoading={identityBusy}>
+            ثبت کد ملی
+          </Button>
+        </form>
+      )}
       <header className="hidden lg:block">
         <h2 className="text-xl font-bold text-[#202124]">احراز هویت (KYC)</h2>
         <p className="mt-1 max-w-xl text-sm leading-6 text-[#6B7280]">
@@ -158,7 +211,9 @@ export function KycExperience({
             {overview.submittedAt ? (
               <p className="mt-3 text-xs text-[#6B7280]">
                 تاریخ ارسال:{' '}
-                <span className="font-semibold text-[#202124]">{formatKycDateTime(overview.submittedAt)}</span>
+                <span className="font-semibold text-[#202124]">
+                  {formatKycDateTime(overview.submittedAt)}
+                </span>
               </p>
             ) : null}
           </div>
@@ -174,11 +229,20 @@ export function KycExperience({
         ) : null}
       </section>
 
-      <section className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm" aria-label="مراحل احراز هویت">
+      <section
+        className="overflow-hidden rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm"
+        aria-label="مراحل احراز هویت"
+      >
         <ol className="relative grid grid-cols-4 gap-1">
-          <span aria-hidden className="pointer-events-none absolute start-[12.5%] end-[12.5%] top-4 h-0.5 bg-[#E5E7EB]" />
+          <span
+            aria-hidden
+            className="pointer-events-none absolute start-[12.5%] end-[12.5%] top-4 h-0.5 bg-[#E5E7EB]"
+          />
           {steps.map((step, index) => (
-            <li key={step.label} className="relative z-[1] flex min-w-0 flex-col items-center text-center">
+            <li
+              key={step.label}
+              className="relative z-[1] flex min-w-0 flex-col items-center text-center"
+            >
               <span
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-full border text-xs font-bold',
@@ -250,7 +314,10 @@ export function KycExperience({
       </section>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <section id="kyc-review" className="scroll-mt-24 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
+        <section
+          id="kyc-review"
+          className="scroll-mt-24 rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm"
+        >
           <div className="flex items-center gap-2">
             <Clock3 className="h-5 w-5 text-[#F59E0B]" aria-hidden />
             <h2 className="text-base font-bold text-[#202124]">وضعیت بررسی</h2>
@@ -261,7 +328,8 @@ export function KycExperience({
         <section className="rounded-2xl border border-[#E5E7EB] bg-white p-4 shadow-sm">
           <h2 className="text-base font-bold text-[#202124]">چرا احراز هویت لازم است؟</h2>
           <p className="mt-3 text-sm leading-7 text-[#6B7280]">
-            احراز هویت برای حفظ امنیت حساب، جلوگیری از سوءاستفاده و فعال‌سازی امکانات معاملاتی انجام می‌شود.
+            احراز هویت برای حفظ امنیت حساب، جلوگیری از سوءاستفاده و فعال‌سازی امکانات معاملاتی انجام
+            می‌شود.
           </p>
           <p className="mt-3 inline-flex items-center gap-2 text-sm font-medium text-[#202124]">
             <Lock className="h-4 w-4 text-[#C8922E]" aria-hidden />
@@ -289,7 +357,9 @@ export function KycExperience({
                 <tbody>
                   {history.map((event) => (
                     <tr key={event.id} className="border-b border-[#F3F4F6] last:border-0">
-                      <td className="whitespace-nowrap px-2 py-3 text-[#202124]">{formatKycDateTime(event.occurredAt)}</td>
+                      <td className="whitespace-nowrap px-2 py-3 text-[#202124]">
+                        {formatKycDateTime(event.occurredAt)}
+                      </td>
                       <td className="px-2 py-3 font-medium text-[#202124]">{event.title}</td>
                       <td className="px-2 py-3">
                         <HistoryStatus label={event.statusLabel} tone={event.tone} />
@@ -353,7 +423,8 @@ export function KycExperience({
           }}
         >
           <p className="text-sm leading-6 text-[#6B7280]">
-            «{deleteTarget.label}» حذف شود؟ تا قبل از شروع بررسی می‌توانید آن را بردارید و بعداً دوباره بارگذاری کنید.
+            «{deleteTarget.label}» حذف شود؟ تا قبل از شروع بررسی می‌توانید آن را بردارید و بعداً
+            دوباره بارگذاری کنید.
           </p>
           <div className="mt-4 grid grid-cols-2 gap-2">
             <button
@@ -407,7 +478,8 @@ function DocumentIcon({ type }: { type: string }) {
 
 function StatusGlyph({ status }: { status: KycDocumentDisplayStatus }) {
   if (status === 'APPROVED') return <Check className="h-3.5 w-3.5" aria-hidden />;
-  if (status === 'UNDER_REVIEW' || status === 'SUBMITTED') return <Clock3 className="h-3.5 w-3.5" aria-hidden />;
+  if (status === 'UNDER_REVIEW' || status === 'SUBMITTED')
+    return <Clock3 className="h-3.5 w-3.5" aria-hidden />;
   if (status === 'REJECTED') return <X className="h-3.5 w-3.5" aria-hidden />;
   return <AlertTriangle className="h-3.5 w-3.5" aria-hidden />;
 }
@@ -430,7 +502,9 @@ function DocumentCard({
   const showReason = (status === 'NEEDS_CORRECTION' || status === 'REJECTED') && Boolean(reason);
   const imageUploaded = Boolean(document.file?.fileMimeType.startsWith('image/'));
   return (
-    <article className={cn('flex min-w-0 flex-col rounded-2xl border p-4 shadow-sm', CARD_SHELL[status])}>
+    <article
+      className={cn('flex min-w-0 flex-col rounded-2xl border p-4 shadow-sm', CARD_SHELL[status])}
+    >
       <div className="flex items-start justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="text-[#C8922E]">
@@ -439,7 +513,12 @@ function DocumentCard({
           <h3 className="truncate text-sm font-bold text-[#202124]">{document.label}</h3>
         </div>
       </div>
-      <p className={cn('mt-3 inline-flex w-fit items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold', BADGE[status])}>
+      <p
+        className={cn(
+          'mt-3 inline-flex w-fit items-center gap-1 rounded-full px-2 py-1 text-xs font-semibold',
+          BADGE[status],
+        )}
+      >
         <StatusGlyph status={status} />
         {DOCUMENT_STATUS_LABEL[status]}
       </p>
@@ -498,7 +577,9 @@ function DocumentCard({
           </button>
         ) : null}
         {!document.file && !document.canUpload ? (
-          <p className="text-center text-xs leading-5 text-[#6B7280]">در این مرحله امکان بارگذاری نیست.</p>
+          <p className="text-center text-xs leading-5 text-[#6B7280]">
+            در این مرحله امکان بارگذاری نیست.
+          </p>
         ) : null}
       </div>
     </article>
@@ -578,7 +659,11 @@ function DocumentThumbnail({
         <div className="flex h-36 flex-col items-center justify-center gap-1 px-3 text-center">
           <FileText className="h-6 w-6 text-[#6B7280]" aria-hidden />
           <p className="max-w-full truncate text-xs text-[#6B7280]">
-            {failed ? 'پیش‌نمایش در دسترس نیست' : isImage ? 'در حال آماده‌سازی پیش‌نمایش' : fileName}
+            {failed
+              ? 'پیش‌نمایش در دسترس نیست'
+              : isImage
+                ? 'در حال آماده‌سازی پیش‌نمایش'
+                : fileName}
           </p>
         </div>
       )}
@@ -627,14 +712,25 @@ function DocumentViewer({
   }, [open, documentId]);
 
   return (
-    <Modal open={open} onClose={onClose} title={label} className="mx-4 max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto">
-      {failed ? <p className="text-sm text-[#DC2626]">مشاهده مدرک انجام نشد. لطفاً دوباره تلاش کنید.</p> : null}
+    <Modal
+      open={open}
+      onClose={onClose}
+      title={label}
+      className="mx-4 max-h-[85vh] w-[calc(100%-2rem)] max-w-2xl overflow-y-auto"
+    >
+      {failed ? (
+        <p className="text-sm text-[#DC2626]">مشاهده مدرک انجام نشد. لطفاً دوباره تلاش کنید.</p>
+      ) : null}
       {!failed && !url ? <p className="text-sm text-[#6B7280]">در حال دریافت مدرک…</p> : null}
       {url && mime.startsWith('image/') ? (
         <img src={url} alt={label} className="max-h-[70vh] w-full rounded-xl object-contain" />
       ) : null}
       {url && mime === 'application/pdf' ? (
-        <iframe title={label} src={url} className="h-[70vh] w-full rounded-xl border border-[#E5E7EB]" />
+        <iframe
+          title={label}
+          src={url}
+          className="h-[70vh] w-full rounded-xl border border-[#E5E7EB]"
+        />
       ) : null}
       {url && !mime.startsWith('image/') && mime !== 'application/pdf' ? (
         <p className="text-sm text-[#202124]">{fileName}</p>
@@ -672,7 +768,11 @@ function HistoryStatus({ label, tone }: { label: string; tone: 'done' | 'pending
 
 export function KycSkeleton() {
   return (
-    <div className="mx-auto w-full max-w-[1400px] space-y-4" aria-busy="true" aria-label="در حال دریافت احراز هویت">
+    <div
+      className="mx-auto w-full max-w-[1400px] space-y-4"
+      aria-busy="true"
+      aria-label="در حال دریافت احراز هویت"
+    >
       <div className="h-36 animate-pulse rounded-2xl bg-white" />
       <div className="h-24 animate-pulse rounded-2xl bg-white" />
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -687,7 +787,9 @@ export function KycSkeleton() {
 export function KycLoadError({ onRetry }: { onRetry: () => void }) {
   return (
     <section className="mx-auto max-w-lg rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center shadow-sm">
-      <p className="text-sm font-medium text-[#202124]">اطلاعات احراز هویت در حال حاضر قابل دریافت نیست.</p>
+      <p className="text-sm font-medium text-[#202124]">
+        اطلاعات احراز هویت در حال حاضر قابل دریافت نیست.
+      </p>
       <button
         type="button"
         className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-[#C8922E] px-5 text-sm font-semibold text-white"

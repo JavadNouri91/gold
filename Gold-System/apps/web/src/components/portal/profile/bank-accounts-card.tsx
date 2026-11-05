@@ -6,7 +6,7 @@ import { Check, CreditCard, Landmark, Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
 import { customerApi, type CustomerBankAccount } from '@/lib/api';
-import { formatIbanDisplay, ibanBankName } from '@/lib/iban-bank';
+import { ibanBankName } from '@/lib/iban-bank';
 import {
   DEMO_VERIFIED_BANK_ACCOUNTS,
   type VerifiedBankAccount,
@@ -20,6 +20,8 @@ type BankAccountView = {
   iban: string;
   bankName: string;
   accountHolder: string;
+  status: string;
+  isDefault: boolean;
 };
 
 function toView(account: CustomerBankAccount | VerifiedBankAccount): BankAccountView {
@@ -28,6 +30,8 @@ function toView(account: CustomerBankAccount | VerifiedBankAccount): BankAccount
     iban: account.iban,
     bankName: account.bankName ?? '',
     accountHolder: account.accountHolder,
+    status: 'status' in account ? account.status : 'VERIFIED',
+    isDefault: 'isDefault' in account ? Boolean(account.isDefault) : false,
   };
 }
 
@@ -74,6 +78,8 @@ export function BankAccountsCard({
             iban,
             bankName: result.bankName ?? ibanBankName(iban) ?? '',
             accountHolder: result.accountHolder,
+            status: 'PENDING',
+            isDefault: false,
           },
           ...prev,
         ];
@@ -82,7 +88,7 @@ export function BankAccountsCard({
     }
     setSaving(true);
     try {
-      await customerApi.createMyBankAccount(iban);
+      await customerApi.createMyBankAccount({ iban, bankName: result.bankName ?? undefined, cardNumber: result.cardNumber, accountNumber: result.accountNumber });
       await mutate();
     } catch (err) {
       setActionError(err instanceof Error ? err.message : 'ثبت شماره شبا انجام نشد');
@@ -142,6 +148,7 @@ export function BankAccountsCard({
                 key={account.id}
                 account={account}
                 onRemove={() => setRemoveId(account.id)}
+                onDefault={async () => { await customerApi.setDefaultMyBankAccount(account.id); await mutate(); }}
               />
             ))}
           </div>
@@ -171,7 +178,7 @@ export function BankAccountsCard({
       >
         <p className="text-sm leading-7 text-muted-foreground">
           {removeTarget
-            ? `شماره شبا ${formatIbanDisplay(removeTarget.iban)} حذف شود؟`
+            ? `حساب با شبا پایان‌یافته به ${removeTarget.iban.slice(-4)} حذف شود؟`
             : null}
         </p>
         <div className="mt-5 flex justify-end gap-2">
@@ -226,9 +233,11 @@ function EmptyBankAccounts({ onAdd }: { onAdd: () => void }) {
 function BankAccountCard({
   account,
   onRemove,
+  onDefault,
 }: {
   account: BankAccountView;
   onRemove: () => void;
+  onDefault: () => void;
 }) {
   return (
     <article className="relative rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
@@ -236,7 +245,7 @@ function BankAccountCard({
         type="button"
         onClick={onRemove}
         className="absolute left-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-400 transition-colors hover:bg-red-50 hover:text-red-600"
-        aria-label={`حذف شبا ${formatIbanDisplay(account.iban)}`}
+        aria-label={`حذف حساب بانکی با چهار رقم پایانی ${account.iban.slice(-4)}`}
       >
         <Trash2 className="h-4 w-4" aria-hidden />
       </button>
@@ -250,15 +259,17 @@ function BankAccountCard({
               {ibanBankName(account.iban) ?? account.bankName}
             </h3>
           ) : null}
-          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+          <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold', account.status === 'VERIFIED' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700')}>
             <Check className="h-3 w-3" aria-hidden />
-            تایید شده
+            {account.status === 'VERIFIED' ? 'تأیید شده' : account.status === 'REJECTED' ? 'رد شده' : 'در انتظار بررسی'}
           </span>
         </div>
         <p className="mt-3 text-xs text-slate-500">شماره شبا</p>
         <p className="mt-1 font-mono text-base font-bold tracking-wide text-slate-900" dir="ltr">
-          {formatIbanDisplay(account.iban)}
+          IR••••••••••••••••••••{account.iban.slice(-4)}
         </p>
+        {account.status === 'VERIFIED' && !account.isDefault ? <button type="button" onClick={onDefault} className="mt-3 text-xs font-semibold text-amber-700">تنظیم به‌عنوان حساب پیش‌فرض برداشت</button> : null}
+        {account.isDefault ? <p className="mt-2 text-xs font-semibold text-emerald-700">حساب پیش‌فرض برداشت</p> : null}
         <p className="mt-3 text-sm text-slate-700">
           {account.accountHolder}
           <span className="ms-2 text-xs font-normal text-slate-400">به نام کاربر</span>

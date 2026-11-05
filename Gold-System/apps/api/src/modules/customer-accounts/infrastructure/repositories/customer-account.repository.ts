@@ -43,8 +43,10 @@ export class CustomerAccountRepository {
    * All credits start at 0 — Manager grants credit separately (UC-05).
    */
   async createForCustomer(customerId: string): Promise<CustomerAccountEntity> {
-    const row = await this.prisma.customerAccount.create({
-      data: {
+    const row = await this.prisma.customerAccount.upsert({
+      where: { customerId },
+      update: {},
+      create: {
         customerId,
         status: 'ACTIVE',
         creditLimitRial: new Decimal(0),

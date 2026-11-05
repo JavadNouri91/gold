@@ -52,14 +52,17 @@ jest.mock('@/lib/api', () => {
     customerApi: {
       ...actual.customerApi,
       listMyBankAccounts: jest.fn(() => Promise.resolve([...bankAccountStore.accounts])),
-      createMyBankAccount: jest.fn(async (iban: string) => {
-        const normalized = iban.replace(/\s/g, '').toUpperCase();
+      createMyBankAccount: jest.fn(async (input: { iban: string }) => {
+        const normalized = input.iban.replace(/\s/g, '').toUpperCase();
         const created = {
           id: `ba-${normalized}`,
           iban: normalized,
           bankCode: normalized.slice(4, 7),
           bankName: 'بانک سامان',
-          accountHolder: 'علی رضایی',
+          status: 'PENDING',
+          isDefault: false,
+          cardLast4: null,
+          accountLast4: null,
           status: 'VERIFIED',
           createdAt: '2026-10-20T00:00:00.000Z',
         };
@@ -219,21 +222,21 @@ describe('PersonalInformationCard', () => {
 
 describe('ibanBankName', () => {
   it('reads the three-digit bank code after IR and the check digits', () => {
-    expect(ibanBankName('IR120560084200001234567890')).toBe('بانک سامان');
+    expect(ibanBankName('IR280560084200001234567890')).toBe('بانک سامان');
     expect(ibanBankName('IR1201200000000000003312')).toBe('بانک ملت');
     expect(ibanBankName('IR1701700000000000000001')).toBe('بانک ملی ایران');
     expect(ibanBankName('IR1299900000000000000001')).toBeNull();
   });
 
   it('maps IBAN bank codes to react-iranian-bank-logo names', () => {
-    expect(ibanBankLogoName('IR120560084200001234567890')).toBe('ir-saman');
+    expect(ibanBankLogoName('IR280560084200001234567890')).toBe('ir-saman');
     expect(ibanBankLogoName('IR1201200000000000003312')).toBe('ir-mellat');
     expect(ibanBankLogoName('IR1299900000000000000001')).toBe('unknown');
   });
 
   it('formats IBAN as IR + 2 digits, then fours, then a final pair', () => {
-    expect(formatIbanDisplay('IR120560084200001234567890')).toBe(
-      'IR12 0560 0842 0000 1234 5678 90',
+    expect(formatIbanDisplay('IR280560084200001234567890')).toBe(
+      'IR28 0560 0842 0000 1234 5678 90',
     );
   });
 });
@@ -253,15 +256,15 @@ describe('BankAccountsCard', () => {
   it('lists mock accounts and can remove one', async () => {
     const user = userEvent.setup();
     render(<BankAccountsCard showDemoAccounts />);
-    expect(screen.getByText(/IR12 0560 0842 0000 1234 8421/)).toBeInTheDocument();
+    expect(screen.getByText(/IR••••••••••••••••••••8421/)).toBeInTheDocument();
     expect(screen.getByText('بانک سامان')).toBeInTheDocument();
     expect(screen.getByLabelText('بانک سامان')).toBeInTheDocument();
     expect(screen.getByText('بانک ملت')).toBeInTheDocument();
     expect(screen.getByLabelText('بانک ملت')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'افزودن حساب بانکی جدید' })).toBeInTheDocument();
-    await user.click(screen.getAllByRole('button', { name: /حذف شبا/ })[0]!);
+    await user.click(screen.getAllByRole('button', { name: /حذف حساب بانکی/ })[0]!);
     await user.click(screen.getByRole('button', { name: 'حذف حساب' }));
-    expect(screen.queryByText(/IR12 0560 0842 0000 1234 8421/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/IR••••••••••••••••••••8421/)).not.toBeInTheDocument();
   });
 
   it('opens the add-IBAN modal and enables submit after 24 digits', async () => {
@@ -276,7 +279,7 @@ describe('BankAccountsCard', () => {
 
     await user.type(
       screen.getByLabelText('شماره شبا (IBAN)'),
-      '120560084200001234567890',
+      '280560084200001234567890',
     );
     expect(screen.getByText('بانک سامان')).toBeInTheDocument();
     expect(screen.getByText(/تطابق هویت/)).toBeInTheDocument();
@@ -285,11 +288,11 @@ describe('BankAccountsCard', () => {
 
     await user.click(submit);
     expect(await screen.findByText('شماره شبا')).toBeInTheDocument();
-    expect(screen.getByText(/IR12 0560 0842 0000 1234 5678 90/)).toBeInTheDocument();
+    expect(screen.getByText(/IR••••••••••••••••••••7890/)).toBeInTheDocument();
 
     unmount();
     render(<BankAccountsCard customerId="c-add" holderName="علی رضایی" />);
-    expect(await screen.findByText(/IR12 0560 0842 0000 1234 5678 90/)).toBeInTheDocument();
+    expect(await screen.findByText(/IR••••••••••••••••••••7890/)).toBeInTheDocument();
     await waitFor(() => {
       expect(bankAccountStore.accounts).toHaveLength(1);
     });

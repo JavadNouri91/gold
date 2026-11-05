@@ -18,6 +18,8 @@
 export enum PaymentMethod {
   BANK_TRANSFER = 'BANK_TRANSFER',
   CARD_TO_CARD = 'CARD_TO_CARD',
+  PAYA = 'PAYA',
+  SATNA = 'SATNA',
   CASH = 'CASH',
 }
 
@@ -56,6 +58,16 @@ export const PAYMENT_METHOD_DEFINITIONS: Record<PaymentMethod, PaymentMethodDefi
     method: PaymentMethod.CARD_TO_CARD,
     nameFa: 'کارت به کارت',
     requiresReference: true, // transfer confirmation required
+  },
+  [PaymentMethod.PAYA]: {
+    method: PaymentMethod.PAYA,
+    nameFa: 'پایا',
+    requiresReference: true,
+  },
+  [PaymentMethod.SATNA]: {
+    method: PaymentMethod.SATNA,
+    nameFa: 'ساتنا',
+    requiresReference: true,
   },
   [PaymentMethod.CASH]: {
     method: PaymentMethod.CASH,

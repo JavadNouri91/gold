@@ -143,7 +143,8 @@ export class NotificationService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`[NotificationService] OTP DB record creation failed: ${msg}`);
       // Still attempt SMS delivery even if DB record creation fails
-      await this.deliverSms(null, mobile, body);
+      const sent = await this.deliverSms(null, mobile, body);
+      if (!sent.success) throw new Error('Authentication SMS delivery failed');
       return;
     }
 
@@ -151,7 +152,7 @@ export class NotificationService {
     const result = await this.deliverSms(notification.id, mobile, body);
 
     if (!result.success) {
-      this.logger.error(`[NotificationService] OTP SMS delivery failed for mobile=${mobile}`);
+      throw new Error('Authentication SMS delivery failed');
     }
   }
 
@@ -329,7 +330,7 @@ export class NotificationService {
       if (result.success) {
         await this.notificationRepo.markSent(notificationId, result.providerReference ?? '');
       } else {
-        await this.notificationRepo.markFailed(notificationId, result.error ?? 'UNKNOWN_SMS_ERROR');
+        await this.notificationRepo.markFailed(notificationId, 'SMS_DELIVERY_FAILED');
       }
     }
     return { success: result.success };

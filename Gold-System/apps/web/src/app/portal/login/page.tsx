@@ -1,159 +1,321 @@
 'use client';
-import { useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useForm } from 'react-hook-form';
 import { useAuth } from '@/lib/auth';
-import { ApiClientError } from '@/lib/api';
-import { isValidMobile, latinMobile, toLatinDigits, toPersianDigits, MOBILE_PLACEHOLDER } from '@/lib/utils';
+import { ApiClientError, authApi } from '@/lib/api';
+import { isValidMobile, latinMobile, toLatinDigits, toPersianDigits } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
 import { MobileInput } from '@/components/ui/mobile-input';
 import { Alert } from '@/components/ui/alert';
 import { PasswordRecoveryForm } from '@/components/auth/password-recovery-form';
 import { ThemeCycleButton } from '@/components/theme-toggle';
 
-interface LoginForm {
-  mobile: string;
-  password: string;
-}
-
 export default function LoginPage() {
-  const { login, closeOtherSessions } = useAuth();
+  const { applySession, closeOtherSessions } = useAuth();
   const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
+  const [tab, setTab] = useState<'login' | 'register' | 'recover'>('login');
+  const [method, setMethod] = useState<'password' | 'sms'>('password');
+  const [mobile, setMobile] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [otp, setOtp] = useState('');
+  const [verifying, setVerifying] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [expires, setExpires] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const [closeToken, setCloseToken] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [mode, setMode] = useState<'login' | 'recover'>('login');
-
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<LoginForm>({
-    defaultValues: { mobile: '', password: '' },
-  });
-  register('mobile', {
-    required: 'شماره موبایل الزامی است',
-    validate: (value) => isValidMobile(value) || `فرمت شماره موبایل صحیح نیست (مثال: ${MOBILE_PLACEHOLDER})`,
-  });
-
-  const onSubmit = async (data: LoginForm) => {
-    setError(null);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCooldown((v) => Math.max(0, v - 1));
+      setExpires((v) => Math.max(0, v - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  function switchTab(next: typeof tab) {
+    setTab(next);
+    setVerifying(false);
+    setOtp('');
+    setPassword('');
+    setConfirmPassword('');
+    setError('');
+    setNotice('');
     setCloseToken(null);
-    setIsLoading(true);
+  }
+  async function submit(event?: FormEvent, resend = false) {
+    event?.preventDefault();
+    setError('');
+    setNotice('');
+    setCloseToken(null);
+    if (!isValidMobile(mobile)) {
+      setError('شماره موبایل معتبر وارد کنید.');
+      return;
+    }
+    const normalized = latinMobile(mobile);
+    setBusy(true);
     try {
-      const mobile = latinMobile(data.mobile);
-      const result = await login(mobile, toLatinDigits(data.password));
-      if (result.requiresOtp) {
-        sessionStorage.setItem('login_mobile', mobile);
-        router.push('/portal/otp');
+      if (tab === 'login' && method === 'password') {
+        applySession(await authApi.customerPassword(normalized, password));
+        router.replace('/portal/dashboard');
+      } else if (verifying && !resend) {
+        const result =
+          tab === 'register'
+            ? await authApi.verifyRegistration(normalized, otp)
+            : await authApi.verifyCustomerOtp(normalized, otp);
+        applySession(result);
+        if (tab === 'register') sessionStorage.setItem('registration_success', '1');
+        setPassword('');
+        setConfirmPassword('');
+        router.replace('/portal/dashboard');
+      } else {
+        if (tab === 'register') {
+          if (!firstName.trim() || !lastName.trim())
+            throw new Error('نام و نام خانوادگی الزامی است.');
+          if (
+            password.length < 12 ||
+            password.length > 128 ||
+            !/\p{N}/u.test(password) ||
+            !/\p{L}/u.test(password)
+          )
+            throw new Error('رمز عبور باید ۱۲ تا ۱۲۸ نویسه و شامل حرف و عدد باشد.');
+          if (password !== confirmPassword) throw new Error('تکرار رمز عبور یکسان نیست.');
+          setNotice(
+            (
+              await authApi.register({
+                firstName,
+                lastName,
+                mobile: normalized,
+                password,
+                confirmPassword,
+              })
+            ).message,
+          );
+        } else {
+          setNotice((await authApi.requestCustomerOtp(normalized)).message);
+        }
+        setVerifying(true);
+        setOtp('');
+        setCooldown(60);
+        setExpires(120);
+      }
+    } catch (err) {
+      if (err instanceof ApiClientError && err.code === 'PASSWORD_RECOVERY_REQUIRED') {
+        setPassword('');
+        setNotice(err.message);
+        setTab('recover');
         return;
       }
-      router.replace('/portal/dashboard');
-    } catch (err) {
-      if (err instanceof ApiClientError && err.code === 'SESSION_LIMIT_REACHED') {
-        const token = (err.details as { confirmationToken?: string } | undefined)?.confirmationToken;
-        if (token) setCloseToken(token);
-        setError(err.message);
-      } else if (err instanceof ApiClientError) {
-        setError(err.message);
-      } else {
-        setError('خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید.');
-      }
+      if (err instanceof ApiClientError && err.code === 'SESSION_LIMIT_REACHED')
+        setCloseToken(
+          typeof err.details?.confirmationToken === 'string' ? err.details.confirmationToken : null,
+        );
+      setError(
+        err instanceof Error && /[\u0600-\u06ff]/.test(err.message)
+          ? err.message
+          : 'ارتباط با سرور برقرار نشد.',
+      );
     } finally {
-      setIsLoading(false);
+      setBusy(false);
     }
-  };
-
+  }
   return (
-    <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-gold-50 to-white p-4">
+    <div
+      dir="rtl"
+      className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-gold-50 to-white p-4 dark:from-background dark:to-background"
+    >
       <div className="absolute left-4 top-4">
         <ThemeCycleButton />
       </div>
       <div className="w-full max-w-sm">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <div className="text-5xl mb-3">🟡</div>
-          <h1 className="text-2xl font-bold text-gold-800">سامانه طلا</h1>
-          <p className="text-sm text-muted-foreground mt-1">ورود به پورتال مشتریان</p>
+        <div className="mb-8 text-center">
+          <div className="mb-3 text-5xl">🪙</div>
+          <h1 className="text-2xl font-bold text-gold-800 dark:text-gold-400">سامانه طلا</h1>
+          <p className="mt-1 text-sm text-muted-foreground">پورتال مشتریان</p>
         </div>
-
-        {/* Form */}
-        <div className="bg-white rounded-xl shadow-sm border p-6 space-y-4">
-          <h2 className="font-semibold text-lg">
-            {mode === 'login' ? 'ورود به پورتال' : 'بازیابی رمز عبور'}
-          </h2>
-
-          {mode === 'login' ? (
+        <div className="space-y-4 rounded-xl border bg-card p-6 shadow-sm">
+          <div className="flex gap-2" role="tablist" aria-label="ورود یا ثبت‌نام">
+            {(['login', 'register'] as const).map((value) => (
+              <Button
+                key={value}
+                role="tab"
+                aria-selected={tab === value}
+                variant={tab === value ? 'default' : 'outline'}
+                className="flex-1"
+                disabled={busy}
+                onClick={() => switchTab(value)}
+              >
+                {value === 'login' ? 'ورود' : 'ثبت‌نام'}
+              </Button>
+            ))}
+          </div>
+          {tab === 'recover' ? (
+            <PasswordRecoveryForm
+              initialMobile={mobile}
+              initialNotice={notice}
+              onBack={() => switchTab('login')}
+            />
+          ) : (
             <>
               {error && <Alert variant="error">{error}</Alert>}
-              {closeToken ? (
+              {notice && <Alert variant="info">{notice}</Alert>}
+              {closeToken && (
                 <Button
-                  type="button"
-                  variant="outline"
                   className="w-full"
-                  isLoading={isLoading}
+                  disabled={busy}
                   onClick={async () => {
-                    setIsLoading(true);
-                    setError(null);
+                    setBusy(true);
                     try {
                       await closeOtherSessions(closeToken);
                       router.replace('/portal/dashboard');
                     } catch (err) {
-                      setError(err instanceof ApiClientError ? err.message : 'بستن نشست‌ها انجام نشد.');
+                      setError(err instanceof Error ? err.message : 'ورود انجام نشد.');
                     } finally {
-                      setIsLoading(false);
+                      setBusy(false);
                     }
                   }}
                 >
                   بستن همه نشست‌های دیگر
                 </Button>
-              ) : null}
-
-              <form onSubmit={handleSubmit(onSubmit)} noValidate>
-                <div className="space-y-4">
+              )}
+              <form onSubmit={(e) => void submit(e)} className="space-y-4">
+                <fieldset disabled={busy} className="space-y-4">
+                  {tab === 'register' && !verifying && (
+                    <>
+                      <Input
+                        label="نام"
+                        autoComplete="given-name"
+                        required
+                        maxLength={100}
+                        value={firstName}
+                        onChange={(e) => setFirstName(e.target.value)}
+                      />
+                      <Input
+                        label="نام خانوادگی"
+                        autoComplete="family-name"
+                        required
+                        maxLength={100}
+                        value={lastName}
+                        onChange={(e) => setLastName(e.target.value)}
+                      />
+                    </>
+                  )}
                   <MobileInput
-                    label="نام کاربری"
-                    hint="شماره موبایل"
-                    error={errors.mobile?.message}
-                    value={watch('mobile')}
-                    onValueChange={(mobile) => setValue('mobile', mobile, { shouldValidate: true })}
+                    label="شماره موبایل"
+                    value={mobile}
+                    onValueChange={setMobile}
+                    disabled={verifying}
                   />
-                  <PasswordInput
-                    label="رمز عبور"
-                    hint="برای ورود اول، کد ملی است"
-                    autoComplete="current-password"
-                    error={errors.password?.message}
-                    {...register('password', {
-                      required: 'رمز عبور الزامی است',
-                      minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
-                    })}
-                    value={toPersianDigits(watch('password'))}
-                  />
-                  <div className="flex justify-start">
-                    <button
-                      type="button"
-                      className="text-sm text-gold-700 hover:underline"
-                      onClick={() => {
-                        setError(null);
-                        setMode('recover');
-                      }}
-                    >
-                      فراموشی رمز عبور
-                    </button>
-                  </div>
-                  <Button type="submit" className="w-full" isLoading={isLoading}>
-                    ورود
+                  {!verifying && (tab === 'register' || method === 'password') && (
+                    <PasswordInput
+                      label="رمز عبور"
+                      required
+                      maxLength={128}
+                      autoComplete={tab === 'register' ? 'new-password' : 'current-password'}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                    />
+                  )}
+                  {tab === 'register' && !verifying && (
+                    <PasswordInput
+                      label="تکرار رمز عبور"
+                      required
+                      autoComplete="new-password"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                    />
+                  )}
+                  {verifying && (
+                    <>
+                      <Input
+                        label="کد تأیید"
+                        required
+                        dir="ltr"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        value={toPersianDigits(otp)}
+                        onChange={(e) =>
+                          setOtp(toLatinDigits(e.target.value).replace(/\D/g, '').slice(0, 6))
+                        }
+                      />
+                      <p aria-live="polite" className="text-xs text-muted-foreground">
+                        {expires
+                          ? `اعتبار کد: ${toPersianDigits(String(expires))} ثانیه`
+                          : 'اعتبار کد پایان یافت؛ کد جدید دریافت کنید.'}
+                      </p>
+                    </>
+                  )}
+                  <Button type="submit" className="w-full" isLoading={busy}>
+                    {verifying
+                      ? 'تأیید و ورود'
+                      : tab === 'register'
+                        ? 'ثبت‌نام و دریافت کد'
+                        : method === 'sms'
+                          ? 'دریافت کد'
+                          : 'ورود'}
                   </Button>
-                </div>
+                </fieldset>
               </form>
+              {verifying && (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    disabled={busy || cooldown > 0}
+                    onClick={() => void submit(undefined, true)}
+                  >
+                    {cooldown
+                      ? `ارسال مجدد پس از ${toPersianDigits(String(cooldown))} ثانیه`
+                      : 'ارسال مجدد کد'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => {
+                      setVerifying(false);
+                      setOtp('');
+                    }}
+                  >
+                    ویرایش اطلاعات
+                  </Button>
+                </>
+              )}
+              {tab === 'login' && (
+                <>
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => {
+                      setMethod(method === 'password' ? 'sms' : 'password');
+                      setVerifying(false);
+                      setOtp('');
+                      setPassword('');
+                      setError('');
+                      setNotice('');
+                    }}
+                  >
+                    {method === 'password' ? 'ورود با کد پیامکی' : 'ورود با رمز عبور'}
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    className="w-full"
+                    disabled={busy}
+                    onClick={() => switchTab('recover')}
+                  >
+                    فراموشی رمز عبور
+                  </Button>
+                </>
+              )}
             </>
-          ) : (
-            <PasswordRecoveryForm onBack={() => setMode('login')} />
           )}
         </div>
-
-        {mode === 'login' ? (
-          <p className="text-center text-xs text-muted-foreground mt-6">
-            نام کاربری شماره موبایل است. رمز ورود اول کد ملی است.
-          </p>
-        ) : null}
       </div>
     </div>
   );

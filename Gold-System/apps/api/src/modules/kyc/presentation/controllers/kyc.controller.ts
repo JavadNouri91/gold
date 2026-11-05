@@ -28,6 +28,7 @@ import { inlineDisposition } from '../../../../common/storage/file-disposition';
 import { KycService } from '../../application/kyc.service';
 import { KycDecisionDto } from '../../application/dto/kyc-decision.dto';
 import { SubmitDocumentDto } from '../../application/dto/submit-document.dto';
+import { CompleteIdentityDto } from '../../application/dto/complete-identity.dto';
 import { CustomerStatus, CustomerType, VerificationStatus } from '@gold/shared-types';
 import type { KycStaffBucket } from '../../domain/kyc-workflow';
 
@@ -66,6 +67,11 @@ export function normalizeUploadedMime(file: Express.Multer.File): void {
 @Controller('customers')
 export class KycController {
   constructor(private readonly kyc: KycService) {}
+
+  @Post('me/kyc/identity')
+  completeIdentity(@CurrentUser() user: CurrentUserData, @Body() dto: CompleteIdentityDto) {
+    return this.kyc.completeOwnIdentity(requireActorId(user), dto.nationalId);
+  }
 
   @Get('me/kyc')
   @ApiOperation({ summary: 'Own KYC overview: phase, required documents, and history' })

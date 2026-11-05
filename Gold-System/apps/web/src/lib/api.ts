@@ -50,31 +50,24 @@ function apiBase(): string {
 const TOKEN_KEY = 'gold_access_token';
 const REFRESH_KEY = 'gold_refresh_token';
 
+let accessTokenMemory: string | null = null;
 export const tokenStore = {
-  getAccess(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(TOKEN_KEY);
-  },
+  getAccess: () => accessTokenMemory,
   setAccess(token: string) {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(TOKEN_KEY, token);
+    accessTokenMemory = token;
   },
-  getRefresh(): string | null {
-    if (typeof window === 'undefined') return null;
-    return localStorage.getItem(REFRESH_KEY);
-  },
-  setRefresh(token: string) {
-    if (typeof window === 'undefined') return;
-    localStorage.setItem(REFRESH_KEY, token);
+  getRefresh: (): string | null => null,
+  setRefresh(_token?: string) {
+    /* Refresh credentials are HttpOnly cookies. */
   },
   clear() {
-    if (typeof window === 'undefined') return;
-    localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem(REFRESH_KEY);
+    accessTokenMemory = null;
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_KEY);
+    }
   },
 };
-
-// ─── Error ────────────────────────────────────────────────────────────────────
 
 export class ApiClientError extends Error {
   constructor(
@@ -106,8 +99,26 @@ export class ApiClientError extends Error {
 
 // ─── Core request ─────────────────────────────────────────────────────────────
 
-let isRefreshing = false;
-let refreshQueue: Array<(token: string) => void> = [];
+let refreshPromise: Promise<OtpResponse> | null = null;
+export function refreshSession(): Promise<OtpResponse> {
+  if (!refreshPromise) {
+    const refresh = () => rawRequest<OtpResponse>('/auth/refresh', { method: 'POST', body: '{}' });
+    refreshPromise = (
+      typeof navigator !== 'undefined' && navigator.locks
+        ? navigator.locks.request('gold-session-refresh', refresh)
+        : refresh()
+    )
+      .then(async (pending) => {
+        const result = await pending;
+        tokenStore.setAccess(result.accessToken);
+        return result;
+      })
+      .finally(() => {
+        refreshPromise = null;
+      });
+  }
+  return refreshPromise;
+}
 
 /** Staff dashboard and customer portal use different login screens. */
 export function sessionLoginPath(): string {
@@ -120,11 +131,12 @@ async function rawRequest<T>(path: string, options: RequestInit = {}, token?: st
   const isForm = typeof FormData !== 'undefined' && options.body instanceof FormData;
   const headers: Record<string, string> = {
     ...(isForm ? {} : { 'Content-Type': 'application/json' }),
+    'X-Auth-Request': '1',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  const res = await fetch(url, { ...options, headers });
+  const res = await fetch(url, { ...options, headers, credentials: 'include' });
 
   if (res.status === 204) return undefined as T;
 
@@ -132,9 +144,21 @@ async function rawRequest<T>(path: string, options: RequestInit = {}, token?: st
 
   if (!res.ok) {
     const err = json.error;
+    const authFallback =
+      res.status === 429
+        ? 'تعداد تلاش‌ها بیش از حد مجاز است. کمی بعد دوباره تلاش کنید.'
+        : res.status === 400 || res.status === 422
+          ? 'اطلاعات واردشده معتبر نیست.'
+          : res.status >= 500
+            ? 'ارتباط با سامانه برقرار نشد. دوباره تلاش کنید.'
+            : 'اطلاعات ورود یا کد تأیید معتبر نیست یا منقضی شده است.';
+    const message =
+      path.startsWith('/auth/') && !/[\u0600-\u06ff]/.test(err?.message ?? '')
+        ? authFallback
+        : err?.message;
     throw new ApiClientError(
       err?.code ?? 'UNKNOWN',
-      err?.message ?? 'خطای ناشناخته',
+      message ?? 'خطای ناشناخته',
       res.status,
       err?.details,
     );
@@ -163,61 +187,21 @@ export async function fetchBlob(path: string): Promise<Blob> {
 }
 
 export async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const token = tokenStore.getAccess();
-
   try {
-    return await rawRequest<T>(path, options, token ?? undefined);
+    return await rawRequest<T>(path, options, tokenStore.getAccess() ?? undefined);
   } catch (err) {
-    if (err instanceof ApiClientError && err.isUnauthorized) {
-      // Try to refresh
-      const refreshToken = tokenStore.getRefresh();
-      if (!refreshToken) {
-        tokenStore.clear();
-        if (typeof window !== 'undefined') {
-          window.location.href = sessionLoginPath();
-        }
-        throw err;
-      }
-
-      if (isRefreshing) {
-        // Queue this request until refresh completes
-        return new Promise((resolve, reject) => {
-          refreshQueue.push((newToken) => {
-            rawRequest<T>(path, options, newToken).then(resolve).catch(reject);
-          });
-        });
-      }
-
-      isRefreshing = true;
-      try {
-        const { accessToken, refreshToken: newRefresh } = await rawRequest<{
-          accessToken: string;
-          refreshToken: string;
-          expiresIn: number;
-        }>('/auth/refresh', {
-          method: 'POST',
-          body: JSON.stringify({ refreshToken }),
-        });
-        tokenStore.setAccess(accessToken);
-        tokenStore.setRefresh(newRefresh);
-        refreshQueue.forEach((cb) => cb(accessToken));
-        refreshQueue = [];
-        return rawRequest<T>(path, options, accessToken);
-      } catch {
-        tokenStore.clear();
-        if (typeof window !== 'undefined') {
-          window.location.href = sessionLoginPath();
-        }
-        throw err;
-      } finally {
-        isRefreshing = false;
-      }
+    if (!(err instanceof ApiClientError) || !err.isUnauthorized || path.startsWith('/auth/'))
+      throw err;
+    try {
+      const refreshed = await refreshSession();
+      return await rawRequest<T>(path, options, refreshed.accessToken);
+    } catch {
+      tokenStore.clear();
+      if (typeof window !== 'undefined') window.location.href = sessionLoginPath();
+      throw err;
     }
-    throw err;
   }
 }
-
-// ─── Auth ─────────────────────────────────────────────────────────────────────
 
 export interface LoginResponse {
   message: string;
@@ -230,7 +214,7 @@ export interface LoginResponse {
 
 export interface OtpResponse {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string;
   expiresIn: number;
   user: {
     id: string;
@@ -241,6 +225,45 @@ export interface OtpResponse {
 }
 
 export const authApi = {
+  register(data: {
+    firstName: string;
+    lastName: string;
+    mobile: string;
+    password: string;
+    confirmPassword: string;
+  }): Promise<{ message: string }> {
+    return rawRequest('/auth/register', { method: 'POST', body: JSON.stringify(data) });
+  },
+  verifyRegistration(mobile: string, otp: string): Promise<OtpResponse> {
+    return rawRequest('/auth/register/verify', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, otp }),
+    });
+  },
+  customerPassword(mobile: string, password: string): Promise<OtpResponse> {
+    return rawRequest('/auth/customer/password', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, password }),
+    });
+  },
+  requestCustomerOtp(mobile: string): Promise<{ message: string }> {
+    return rawRequest('/auth/customer/otp/request', {
+      method: 'POST',
+      body: JSON.stringify({ mobile }),
+    });
+  },
+  verifyCustomerOtp(mobile: string, otp: string): Promise<OtpResponse> {
+    return rawRequest('/auth/customer/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, otp }),
+    });
+  },
+  verifyPasswordReset(mobile: string, otp: string): Promise<{ resetGrant: string }> {
+    return rawRequest('/auth/password/verify', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, otp }),
+    });
+  },
   login(mobile: string, password: string): Promise<LoginResponse> {
     return rawRequest('/auth/login', {
       method: 'POST',
@@ -255,10 +278,15 @@ export const authApi = {
     });
   },
 
-  resetPassword(mobile: string, otp: string, password: string): Promise<{ message: string }> {
+  resetPassword(
+    mobile: string,
+    resetGrant: string,
+    password: string,
+    confirmPassword: string,
+  ): Promise<{ message: string }> {
     return rawRequest('/auth/password/reset', {
       method: 'POST',
-      body: JSON.stringify({ mobile, otp, password }),
+      body: JSON.stringify({ mobile, resetGrant, password, confirmPassword }),
     });
   },
 
@@ -269,11 +297,8 @@ export const authApi = {
     });
   },
 
-  refresh(refreshToken: string): Promise<OtpResponse> {
-    return rawRequest('/auth/refresh', {
-      method: 'POST',
-      body: JSON.stringify({ refreshToken }),
-    });
+  refresh(_refreshToken?: string): Promise<OtpResponse> {
+    return refreshSession();
   },
 
   logout(): Promise<{ revoked: boolean }> {
@@ -338,7 +363,7 @@ export interface CustomerProfile {
   customerNumber: string;
   firstName: string;
   lastName: string;
-  nationalId?: string;
+  nationalId?: string | null;
   mobile: string;
   email?: string | null;
   dateOfBirth?: string | null;
@@ -399,15 +424,19 @@ export const customerApi = {
     return request('/customers/me/bank-accounts');
   },
 
-  createMyBankAccount(iban: string): Promise<CustomerBankAccount> {
+  createMyBankAccount(input: { iban: string; bankName?: string; cardNumber?: string; accountNumber?: string }): Promise<CustomerBankAccount> {
     return request('/customers/me/bank-accounts', {
       method: 'POST',
-      body: JSON.stringify({ iban }),
+      body: JSON.stringify(input),
     });
   },
 
   deleteMyBankAccount(id: string): Promise<void> {
     return request(`/customers/me/bank-accounts/${id}`, { method: 'DELETE' });
+  },
+
+  setDefaultMyBankAccount(id: string): Promise<void> {
+    return request(`/customers/me/bank-accounts/${id}/default`, { method: 'PATCH' });
   },
 };
 
@@ -418,6 +447,9 @@ export interface CustomerBankAccount {
   bankName: string | null;
   accountHolder: string;
   status: string;
+  isDefault?: boolean;
+  cardLast4?: string | null;
+  accountLast4?: string | null;
   createdAt: string;
 }
 
@@ -532,6 +564,12 @@ export interface OwnKycOverview {
 }
 
 export const kycApi = {
+  completeIdentity(nationalId: string): Promise<{ saved: boolean }> {
+    return request('/customers/me/kyc/identity', {
+      method: 'POST',
+      body: JSON.stringify({ nationalId }),
+    });
+  },
   getMine(): Promise<OwnKycOverview> {
     return request('/customers/me/kyc');
   },

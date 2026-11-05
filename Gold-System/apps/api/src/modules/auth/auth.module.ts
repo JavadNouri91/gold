@@ -1,3 +1,5 @@
+import { CustomersModule } from '../customers/customers.module';
+import { AuthSecurityService } from './application/auth-security.service';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -24,11 +26,12 @@ import { SessionsModule } from '../sessions/sessions.module';
       }),
     }),
     UsersModule,
+    CustomersModule,
     AuditModule,
     NotificationsModule,
     SessionsModule,
   ],
-  providers: [AuthService, JwtStrategy, OtpRepository, RefreshTokenRepository],
+  providers: [AuthSecurityService, AuthService, JwtStrategy, OtpRepository, RefreshTokenRepository],
   controllers: [AuthController],
   exports: [AuthService],
 })

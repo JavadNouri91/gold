@@ -16,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { ApiClientError, paymentsApi } from '@/lib/api';
+import Link from 'next/link';
 import { COMPANY_BANK_ACCOUNT } from '@/lib/company-bank-account';
 import { tomanAmountWordsLabel } from '@/lib/toman-words';
 import {
@@ -43,6 +44,13 @@ const QUICK_TOMAN_CHIPS = [
 ] as const;
 
 type DepositTab = 'bank' | 'online';
+type TransferMethod = 'CARD_TO_CARD' | 'BANK_TRANSFER' | 'PAYA' | 'SATNA';
+const TRANSFER_OPTIONS: { value: TransferMethod; label: string; icon: ReactNode }[] = [
+  { value: 'CARD_TO_CARD', label: '\u06a9\u0627\u0631\u062a \u0628\u0647 \u06a9\u0627\u0631\u062a', icon: <CreditCard className="h-4 w-4" aria-hidden /> },
+  { value: 'BANK_TRANSFER', label: '\u062d\u0633\u0627\u0628 \u0628\u0647 \u062d\u0633\u0627\u0628', icon: <Landmark className="h-4 w-4" aria-hidden /> },
+  { value: 'PAYA', label: '\u067e\u0627\u06cc\u0627', icon: <Building2 className="h-4 w-4" aria-hidden /> },
+  { value: 'SATNA', label: '\u0633\u0627\u062a\u0646\u0627', icon: <Building2 className="h-4 w-4" aria-hidden /> },
+];
 
 export function SubmitReceiptButton({
   onSubmitted,
@@ -55,11 +63,13 @@ export function SubmitReceiptButton({
 }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<DepositTab>('bank');
+  const [transferMethod, setTransferMethod] = useState<TransferMethod>('BANK_TRANSFER');
   const [amount, setAmount] = useState('');
   const [reference, setReference] = useState('');
   const [file, setFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [kycRequired, setKycRequired] = useState(false);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -91,7 +101,7 @@ export function SubmitReceiptButton({
 
   const latinAmount = toLatinDigits(amount).replace(/[^\d]/g, '');
   const wordsLabel = useMemo(() => tomanAmountWordsLabel(latinAmount), [latinAmount]);
-  const canSubmitBank = Boolean(latinAmount && file && reference.trim() && !busy);
+  const canSubmitBank = Boolean(latinAmount && file && reference.trim() && transferMethod && !busy);
 
   const openSheet = () => {
     setError(null);
@@ -154,7 +164,7 @@ export function SubmitReceiptButton({
     setBusy(true);
     try {
       await paymentsApi.submitReceipt({
-        method: 'BANK_TRANSFER',
+        method: transferMethod,
         amount: normalizedAmount,
         referenceNumber: toLatinDigits(reference.trim()) || undefined,
         file,
@@ -163,6 +173,7 @@ export function SubmitReceiptButton({
       resetForm();
       onSubmitted();
     } catch (err) {
+      setKycRequired(err instanceof ApiClientError && err.code === 'KYC_REQUIRED');
       setError(err instanceof ApiClientError ? err.message : 'ثبت رسید انجام نشد.');
     } finally {
       setBusy(false);
@@ -203,12 +214,16 @@ export function SubmitReceiptButton({
                   <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-[#FFF4D6] text-[#C8922E]">
                     <Wallet className="h-5 w-5" aria-hidden />
                   </span>
-                  <h2 id="deposit-modal-title" className="text-base font-bold text-gray-900 sm:text-lg">
+                  <h2
+                    id="deposit-modal-title"
+                    className="text-base font-bold text-gray-900 sm:text-lg"
+                  >
                     افزایش اعتبار کیف پول
                   </h2>
                 </div>
                 <p className="mt-2 text-sm leading-7 text-gray-500">
-                  لطفاً مبلغ واریزی خود را مشخص کنید. برای مبالغ بالا، از انتقال بانکی (پایا/ساتنا) استفاده نمایید.
+                  لطفاً مبلغ واریزی خود را مشخص کنید. برای مبالغ بالا، از انتقال بانکی (پایا/ساتنا)
+                  استفاده نمایید.
                 </p>
               </div>
               <button
@@ -238,14 +253,32 @@ export function SubmitReceiptButton({
               </div>
 
               {error ? (
-                <p className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600" role="alert">
+                <p
+                  className="mt-3 rounded-xl bg-rose-50 px-3 py-2 text-sm text-rose-600"
+                  role="alert"
+                >
                   {error}
+                  {kycRequired && (
+                    <Link href="/portal/profile#kyc" className="mt-2 block underline">
+                      مشاهده و تکمیل احراز هویت
+                    </Link>
+                  )}
                 </p>
               ) : null}
 
               {tab === 'bank' ? (
                 <div className="mt-4 space-y-4">
                   <CompanyBankCard />
+
+                  <section aria-labelledby="transfer-method-title" className="rounded-2xl border border-gray-200 bg-white p-4">
+                    <h3 id="transfer-method-title" dir="rtl" className="text-right text-sm font-bold text-gray-800">روش انتقال وجه <span className="text-rose-500">*</span></h3>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      {TRANSFER_OPTIONS.map((option) => (
+                        <button key={option.value} type="button" aria-pressed={transferMethod === option.value} onClick={() => setTransferMethod(option.value)} className={cn('flex min-h-12 items-center justify-center gap-2 rounded-xl border px-3 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C8922E]', transferMethod === option.value ? 'border-[#C8922E] bg-[#FFF4D6] text-[#8A6410]' : 'border-gray-200 bg-white text-gray-600 hover:bg-gray-50')}>{option.icon}{option.label}</button>
+                      ))}
+                    </div>
+                    {(transferMethod === 'PAYA' || transferMethod === 'SATNA') && <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs leading-6 text-amber-800">??????? ?? ?? ????? ????? ????? ? ?????? ??? ????? ??????. ??? ???? ????????? ?\u0631\u0648\u0634 \u0627\u0646\u062a\u0642\u0627\u0644 \u0648\u062c\u0647??? ??? ??? ???????.</p>}
+                  </section>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-600">
@@ -256,7 +289,9 @@ export function SubmitReceiptButton({
                         inputMode="numeric"
                         autoComplete="off"
                         value={amount}
-                        onChange={(event) => setAmount(formatGroupedPersianInteger(event.target.value))}
+                        onChange={(event) =>
+                          setAmount(formatGroupedPersianInteger(event.target.value))
+                        }
                         aria-label="مبلغ"
                         placeholder="۰"
                       />
@@ -279,6 +314,7 @@ export function SubmitReceiptButton({
                   </div>
 
                   <label className="block text-sm font-medium text-gray-600">
+                    {transferMethod === 'CARD_TO_CARD' ? '\u0634\u0645\u0627\u0631\u0647 \u067e\u06cc\u06af\u06cc\u0631\u06cc \u06a9\u0627\u0631\u062a \u0628\u0647 \u06a9\u0627\u0631\u062a' : transferMethod === 'PAYA' ? '\u0634\u0646\u0627\u0633\u0647 \u062d\u0648\u0627\u0644\u0647 \u067e\u0627\u06cc\u0627' : transferMethod === 'SATNA' ? '\u0634\u0646\u0627\u0633\u0647 \u062d\u0648\u0627\u0644\u0647 \u0633\u0627\u062a\u0646\u0627' : '\u0634\u0645\u0627\u0631\u0647 \u067e\u06cc\u06af\u06cc\u0631\u06cc \u0627\u0646\u062a\u0642\u0627\u0644'}
                     شماره پیگیری / شماره ارجاع بانکی
                     <input
                       className={fieldClass}
@@ -308,7 +344,9 @@ export function SubmitReceiptButton({
                           )}
                         </div>
                         <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-gray-900">{file.name}</p>
+                          <p className="truncate text-sm font-semibold text-gray-900">
+                            {file.name}
+                          </p>
                           <p className="mt-0.5 text-xs text-gray-500">{fileSizeLabel(file.size)}</p>
                           <p className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-emerald-600">
                             <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
@@ -339,7 +377,8 @@ export function SubmitReceiptButton({
                           setDragging(true);
                         }}
                         onDragLeave={(event) => {
-                          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return;
+                          if (event.currentTarget.contains(event.relatedTarget as Node | null))
+                            return;
                           setDragging(false);
                         }}
                         onDrop={(event) => {
@@ -353,7 +392,9 @@ export function SubmitReceiptButton({
                         )}
                       >
                         <Upload className="h-7 w-7 text-[#C8922E]" aria-hidden />
-                        <p className="mt-2 text-sm font-semibold text-gray-900">فایل را اینجا رها کنید</p>
+                        <p className="mt-2 text-sm font-semibold text-gray-900">
+                          فایل را اینجا رها کنید
+                        </p>
                         <p className="mt-1 text-xs leading-6 text-gray-500">
                           یا برای انتخاب از دستگاه کلیک کنید. JPG، PNG، WebP یا PDF تا ۱۰ مگابایت
                         </p>
@@ -373,7 +414,12 @@ export function SubmitReceiptButton({
                   </div>
                 </div>
               ) : (
-                <OnlineGatewayPanel amount={amount} onAmountChange={setAmount} onQuickAdd={addQuickToman} wordsLabel={wordsLabel} />
+                <OnlineGatewayPanel
+                  amount={amount}
+                  onAmountChange={setAmount}
+                  onQuickAdd={addQuickToman}
+                  wordsLabel={wordsLabel}
+                />
               )}
             </div>
 
@@ -467,7 +513,9 @@ function CompanyBankCard() {
         />
         <div className="flex items-center justify-between gap-2 pt-1">
           <span className="text-xs text-slate-500">صاحب حساب</span>
-          <span className="text-sm font-medium text-slate-800">{COMPANY_BANK_ACCOUNT.accountHolder}</span>
+          <span className="text-sm font-medium text-slate-800">
+            {COMPANY_BANK_ACCOUNT.accountHolder}
+          </span>
         </div>
       </div>
     </div>
@@ -503,7 +551,10 @@ function CopyRow({
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl bg-white/80 px-3 py-2">
       <div className="min-w-0">
         <p className="text-[11px] text-slate-500">{label}</p>
-        <p className="mt-0.5 font-mono text-sm font-semibold tracking-wide text-slate-900" dir="ltr">
+        <p
+          className="mt-0.5 font-mono text-sm font-semibold tracking-wide text-slate-900"
+          dir="ltr"
+        >
           {value}
         </p>
       </div>
@@ -517,7 +568,11 @@ function CopyRow({
             : 'bg-blue-600 text-white hover:bg-blue-700',
         )}
       >
-        {copied ? <Check className="h-3.5 w-3.5" aria-hidden /> : <Copy className="h-3.5 w-3.5" aria-hidden />}
+        {copied ? (
+          <Check className="h-3.5 w-3.5" aria-hidden />
+        ) : (
+          <Copy className="h-3.5 w-3.5" aria-hidden />
+        )}
         {copied ? 'کپی شد' : buttonLabel}
       </button>
     </div>
@@ -541,7 +596,8 @@ function OnlineGatewayPanel({
         <CreditCard className="mx-auto h-8 w-8 text-[#C8922E]" aria-hidden />
         <p className="mt-2 text-sm font-bold text-gray-900">شارژ آنی از درگاه شتاب</p>
         <p className="mt-1 text-xs leading-6 text-gray-500">
-          برای مبالغ کوچک، پس از فعال‌سازی درگاه به صفحه بانک منتقل می‌شوید و اعتبار بلافاصله افزایش می‌یابد.
+          برای مبالغ کوچک، پس از فعال‌سازی درگاه به صفحه بانک منتقل می‌شوید و اعتبار بلافاصله افزایش
+          می‌یابد.
         </p>
       </div>
 

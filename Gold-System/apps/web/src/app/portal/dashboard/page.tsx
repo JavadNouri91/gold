@@ -1,5 +1,6 @@
 'use client';
 import useSWR from 'swr';
+import { useEffect, useState } from 'react';
 import { ApiClientError, customerApi, ordersApi, pricingApi, tradesApi } from '@/lib/api';
 import { toPortfolioPosition } from '@/lib/customer-portfolio';
 import { PageSpinner } from '@/components/ui/spinner';
@@ -17,6 +18,11 @@ function isNotFound(error: unknown): boolean {
 }
 
 export default function DashboardPage() {
+  const [registered, setRegistered] = useState(false);
+  useEffect(() => {
+    setRegistered(sessionStorage.getItem('registration_success') === '1');
+    sessionStorage.removeItem('registration_success');
+  }, []);
   const { error: customerError, isLoading: customerLoading } = useSWR('customer/me', () =>
     customerApi.getMe(),
   );
@@ -46,6 +52,7 @@ export default function DashboardPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1400px] space-y-4" dir="rtl">
+      {registered && <Alert variant="success">حساب کاربری شما با موفقیت ایجاد شد.</Alert>}
       {customerMissing ? (
         <Alert variant="info">پروفایل مشتری برای این حساب کاربری ثبت نشده است.</Alert>
       ) : null}

@@ -48,8 +48,7 @@ export class MelipayamakProvider implements SmsProvider {
       });
 
       if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        this.logger.error(`[Melipayamak] HTTP ${response.status}: ${text.substring(0, 200)}`);
+        this.logger.error(`[Melipayamak] HTTP ${response.status}`);
         return { success: false, error: `HTTP_${response.status}` };
       }
 
@@ -63,12 +62,11 @@ export class MelipayamakProvider implements SmsProvider {
         };
       }
 
-      this.logger.error(`[Melipayamak] API error: RetStatus=${data.RetStatus} Value=${data.Value}`);
+      this.logger.error(`[Melipayamak] API error: RetStatus=${data.RetStatus}`);
       return { success: false, error: `MELIPAYAMAK_STATUS_${data.RetStatus}` };
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`[Melipayamak] Network/timeout error: ${msg}`);
-      return { success: false, error: `NETWORK_ERROR: ${msg}` };
+    } catch {
+      this.logger.error(`[Melipayamak] Network/timeout error`);
+      return { success: false, error: 'NETWORK_ERROR' };
     }
   }
 

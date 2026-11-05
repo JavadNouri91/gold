@@ -283,7 +283,7 @@ describe('BuyGoldPage', () => {
     mockGetMe.mockResolvedValue({ ...customer, status: 'PENDING' });
     renderPage();
     expect(await screen.findByText('احراز هویت تکمیل نشده است.')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'تکمیل احراز هویت' })).toHaveAttribute('href', '/portal/kyc');
+    expect(screen.getByRole('link', { name: 'تکمیل احراز هویت' })).toHaveAttribute('href', '/portal/profile#kyc');
     expect(screen.getByRole('button', { name: 'تأیید و خرید طلا' })).toBeDisabled();
   });
 

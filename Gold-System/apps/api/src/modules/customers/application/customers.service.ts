@@ -1,3 +1,6 @@
+import { normalizeMobile } from '../../auth/domain/mobile';
+import { Prisma } from '@prisma/client';
+import { randomBytes } from 'crypto';
 import {
   Injectable,
   Logger,
@@ -40,6 +43,9 @@ export class CustomersService {
   // Creates a User record + Customer profile atomically
   // ----------------------------------------------------------------
   async register(dto: RegisterCustomerDto, ipAddress?: string): Promise<CustomerResponseDto> {
+    dto = { ...dto, mobile: normalizeMobile(dto.mobile) };
+    if (dto.password && dto.password === dto.nationalId)
+      throw new BadRequestException('رمز عبور نباید کد ملی باشد.');
     // Duplicate checks
     const existingMobile = await this.customerRepo.findByMobile(dto.mobile);
     if (existingMobile) {
@@ -87,54 +93,13 @@ export class CustomersService {
           name: `${dto.firstName} ${dto.lastName}`,
           mobile: dto.mobile,
           email: dto.email,
-          password: dto.password?.trim() || dto.nationalId,
+          password: dto.password || randomBytes(32).toString('hex'),
           roleId: customerRole.id,
         },
         tx,
       );
 
-      // Generate customer number within the same transaction
-      const customerNumber = await this.customerRepo.nextCustomerNumber(tx);
-
-      // New customers cannot be active before KYC approval.
-      const initialAccountStatus = CustomerAccountStatus.INACTIVE;
-
-      // Create Customer profile
-      const customerRow = await tx.customer.create({
-        data: {
-          customerNumber,
-          userId: user.id,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          nationalId: dto.nationalId,
-          mobile: dto.mobile,
-          email: dto.email ?? null,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-          address: dto.address ?? null,
-          type: dto.type ?? null,
-          gender: dto.gender ?? null,
-          postalCode: dto.postalCode ?? null,
-          phone: dto.phone ?? null,
-          referenceSource: dto.referrerId
-            ? (dto.referenceSource ?? 'FRIEND_REFERRAL')
-            : (dto.referenceSource ?? null),
-          referrerId: dto.referrerId ?? null,
-          companyName: dto.companyName ?? null,
-          companyNationalId: dto.companyNationalId ?? null,
-          companyEconomicId: dto.companyEconomicId ?? null,
-          contactName: dto.contactName ?? null,
-          contactTitle: dto.contactTitle ?? null,
-          secondaryMobile: dto.secondaryMobile ?? null,
-          workPhone: dto.workPhone ?? null,
-          fax: dto.fax ?? null,
-          workAddress: dto.workAddress ?? null,
-          contactNotes: dto.contactNotes ?? null,
-          province: dto.province ?? null,
-          city: dto.city ?? null,
-          status: CustomerStatus.PENDING,
-          accountStatus: initialAccountStatus,
-        },
-      });
+      const customerRow = await this.createCustomerProfile(tx, dto, user.id);
 
       return customerRow;
     });
@@ -170,6 +135,52 @@ export class CustomersService {
 
     const entity = await this.customerRepo.findById(customer.id);
     return CustomerResponseDto.fromEntity(entity!);
+  }
+
+  /** Shared creation hook: callers own the transaction and its audit record. */
+  async createCustomerProfile(
+    tx: Prisma.TransactionClient,
+    dto: Omit<RegisterCustomerDto, 'nationalId'> & { nationalId?: string | null },
+    userId: string,
+  ) {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('customer-number'))`;
+    const customerNumber = await this.customerRepo.nextCustomerNumber(tx);
+    const initialAccountStatus = CustomerAccountStatus.INACTIVE;
+    return tx.customer.create({
+      data: {
+        customerNumber,
+        userId,
+        firstName: dto.firstName,
+        lastName: dto.lastName,
+        nationalId: dto.nationalId ?? null,
+        mobile: dto.mobile,
+        email: dto.email ?? null,
+        dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+        address: dto.address ?? null,
+        type: dto.type ?? null,
+        gender: dto.gender ?? null,
+        postalCode: dto.postalCode ?? null,
+        phone: dto.phone ?? null,
+        referenceSource: dto.referrerId
+          ? (dto.referenceSource ?? 'FRIEND_REFERRAL')
+          : (dto.referenceSource ?? null),
+        referrerId: dto.referrerId ?? null,
+        companyName: dto.companyName ?? null,
+        companyNationalId: dto.companyNationalId ?? null,
+        companyEconomicId: dto.companyEconomicId ?? null,
+        contactName: dto.contactName ?? null,
+        contactTitle: dto.contactTitle ?? null,
+        secondaryMobile: dto.secondaryMobile ?? null,
+        workPhone: dto.workPhone ?? null,
+        fax: dto.fax ?? null,
+        workAddress: dto.workAddress ?? null,
+        contactNotes: dto.contactNotes ?? null,
+        province: dto.province ?? null,
+        city: dto.city ?? null,
+        status: CustomerStatus.PENDING,
+        accountStatus: initialAccountStatus,
+      },
+    });
   }
 
   // ----------------------------------------------------------------
@@ -318,6 +329,7 @@ export class CustomersService {
 
   async approve(customerId: string, actorId: string, ipAddress?: string): Promise<CustomerEntity> {
     const entity = await this.requireCustomer(customerId);
+    if (!entity.nationalId) throw new BadRequestException('ابتدا اطلاعات هویتی مشتری تکمیل شود.');
 
     if (!entity.canApprove()) {
       throw new BusinessRuleException(
@@ -399,6 +411,37 @@ export class CustomersService {
   // ----------------------------------------------------------------
   // Customer self-service: contact fields only
   // ----------------------------------------------------------------
+  async completeOwnIdentity(userId: string, nationalId: string) {
+    if (/^(\d)\1{9}$/.test(nationalId)) throw new BadRequestException('کد ملی معتبر نیست.');
+    const sum =
+      [...nationalId.slice(0, 9)].reduce((total, digit, i) => total + Number(digit) * (10 - i), 0) %
+      11;
+    if (Number(nationalId[9]) !== (sum < 2 ? sum : 11 - sum))
+      throw new BadRequestException('کد ملی معتبر نیست.');
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.customer.updateMany({
+        where: {
+          userId,
+          nationalId: null,
+          status: { in: ['PENDING', 'REJECTED'] },
+          accountStatus: { not: 'BLOCKED' },
+        },
+        data: { nationalId },
+      });
+      if (updated.count !== 1)
+        throw new BadRequestException('ثبت اطلاعات هویتی مجاز نیست. با پشتیبانی تماس بگیرید.');
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          action: 'CUSTOMER_IDENTITY_COMPLETED',
+          entityType: 'User',
+          entityId: userId,
+        },
+      });
+      return { saved: true };
+    });
+  }
+
   async updateOwnProfile(
     userId: string,
     dto: UpdateOwnProfileDto,

@@ -1,198 +1,158 @@
 'use client';
-
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { ApiClientError, authApi } from '@/lib/api';
-import { isValidMobile, latinMobile, MOBILE_PLACEHOLDER, toLatinDigits, toPersianDigits } from '@/lib/utils';
+import { FormEvent, useEffect, useState } from 'react';
+import { authApi } from '@/lib/api';
+import { isValidMobile, latinMobile, toLatinDigits, toPersianDigits } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { PasswordInput } from '@/components/ui/password-input';
-import { MobileInput, MobileNumber } from '@/components/ui/mobile-input';
+import { MobileInput } from '@/components/ui/mobile-input';
 import { Alert } from '@/components/ui/alert';
 
-interface ResetForm {
-  otp: string;
-  password: string;
-  confirmPassword: string;
-}
-
-function recoveryError(err: unknown): string {
-  if (!(err instanceof ApiClientError)) {
-    return 'خطا در ارتباط با سرور. لطفاً دوباره تلاش کنید.';
+export function PasswordRecoveryForm({
+  onBack,
+  initialMobile = '',
+  initialNotice = '',
+}: {
+  onBack: () => void;
+  initialMobile?: string;
+  initialNotice?: string;
+}) {
+  const [step, setStep] = useState<'mobile' | 'verify' | 'password' | 'done'>('mobile');
+  const [mobile, setMobile] = useState(initialMobile);
+  const [otp, setOtp] = useState('');
+  const [grant, setGrant] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmation, setConfirmation] = useState('');
+  const [cooldown, setCooldown] = useState(0);
+  const [expires, setExpires] = useState(0);
+  const [error, setError] = useState('');
+  const [notice, setNotice] = useState(initialNotice);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCooldown((v) => Math.max(0, v - 1));
+      setExpires((v) => Math.max(0, v - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+  async function send() {
+    if (!isValidMobile(mobile)) throw new Error('شماره موبایل معتبر وارد کنید.');
+    setNotice((await authApi.requestPasswordReset(latinMobile(mobile))).message);
+    setStep('verify');
+    setCooldown(60);
+    setExpires(120);
+    setOtp('');
   }
-  if (err.status === 429) {
-    return 'تعداد درخواست‌ها زیاد است. کمی بعد دوباره تلاش کنید.';
-  }
-  if (err.isValidation) {
-    return 'اطلاعات واردشده معتبر نیست.';
-  }
-  return err.message;
-}
-
-export function PasswordRecoveryForm({ onBack }: { onBack: () => void }) {
-  const [step, setStep] = useState<'mobile' | 'reset' | 'done'>('mobile');
-  const [mobile, setMobile] = useState('');
-  const [mobileError, setMobileError] = useState<string | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ResetForm>({
-    defaultValues: { otp: '', password: '', confirmPassword: '' },
-  });
-
-  const sendCode = async (nextMobile: string) => {
-    setError(null);
-    setNotice(null);
-    setIsLoading(true);
+  async function run(action: () => Promise<void>) {
+    setError('');
+    setBusy(true);
     try {
-      const result = await authApi.requestPasswordReset(nextMobile);
-      setMobile(nextMobile);
-      setNotice(result.message);
-      setStep('reset');
+      await action();
     } catch (err) {
-      setError(recoveryError(err));
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const onRequestCode = async () => {
-    if (!isValidMobile(mobile)) {
-      setMobileError(`فرمت شماره موبایل صحیح نیست (مثال: ${MOBILE_PLACEHOLDER})`);
-      return;
-    }
-    setMobileError(null);
-    await sendCode(latinMobile(mobile));
-  };
-
-  const onReset = async (data: ResetForm) => {
-    setError(null);
-    setIsLoading(true);
-    try {
-      const result = await authApi.resetPassword(
-        mobile,
-        toLatinDigits(data.otp).replace(/\D/g, ''),
-        data.password,
+      setError(
+        err instanceof Error && /[\u0600-\u06ff]/.test(err.message)
+          ? err.message
+          : 'ارتباط با سرور برقرار نشد.',
       );
-      setNotice(result.message);
-      setStep('done');
-    } catch (err) {
-      setError(recoveryError(err));
     } finally {
-      setIsLoading(false);
+      setBusy(false);
     }
-  };
-
-  if (step === 'done') {
-    return (
-      <div className="space-y-4">
-        <Alert variant="success">{notice}</Alert>
-        <Button type="button" className="w-full" onClick={onBack}>
-          بازگشت به ورود
-        </Button>
-      </div>
-    );
   }
-
-  if (step === 'reset') {
-    return (
-      <form className="space-y-4" onSubmit={handleSubmit(onReset)} noValidate>
-        <p className="text-sm text-muted-foreground">
-          کد پیامک‌شده به <MobileNumber value={mobile} /> را وارد کنید و رمز جدید بسازید.
-        </p>
-        {notice ? <Alert variant="info">{notice}</Alert> : null}
-        {error ? <Alert variant="error">{error}</Alert> : null}
-        <Input
-          label="کد تأیید"
-          placeholder="کد ۶ رقمی"
-          dir="ltr"
-          type="text"
-          inputMode="numeric"
-          autoComplete="one-time-code"
-          maxLength={8}
-          error={errors.otp?.message}
-          {...register('otp', {
-            required: 'کد تأیید الزامی است',
-            pattern: {
-              value: /^\d{4,8}$/,
-              message: 'کد تأیید باید عددی باشد',
-            },
-          })}
-          value={toPersianDigits(watch('otp') ?? '')}
-          onChange={(event) => {
-            setValue('otp', toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 8), {
-              shouldValidate: true,
-            });
-          }}
-        />
-        <PasswordInput
-          label="رمز عبور جدید"
-          autoComplete="new-password"
-          error={errors.password?.message}
-          {...register('password', {
-            required: 'رمز عبور الزامی است',
-            minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
-          })}
-        />
-        <PasswordInput
-          label="تکرار رمز عبور"
-          autoComplete="new-password"
-          error={errors.confirmPassword?.message}
-          {...register('confirmPassword', {
-            required: 'تکرار رمز عبور الزامی است',
-            validate: (value) => value === watch('password') || 'تکرار رمز عبور یکسان نیست',
-          })}
-        />
-        <Button type="submit" className="w-full" isLoading={isLoading}>
-          ذخیره رمز جدید
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full text-sm"
-          disabled={isLoading}
-          onClick={() => sendCode(mobile)}
-        >
-          ارسال دوباره کد
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          className="w-full text-sm"
-          onClick={() => {
-            setStep('mobile');
-            setError(null);
-            setNotice(null);
-          }}
-        >
-          تغییر شماره موبایل
-        </Button>
-      </form>
-    );
+  function submit(event: FormEvent) {
+    event.preventDefault();
+    void run(async () => {
+      if (step === 'mobile') return send();
+      if (step === 'verify') {
+        setGrant((await authApi.verifyPasswordReset(latinMobile(mobile), otp)).resetGrant);
+        setOtp('');
+        setStep('password');
+        return;
+      }
+      if (password !== confirmation) throw new Error('تکرار رمز عبور یکسان نیست.');
+      setNotice(
+        (await authApi.resetPassword(latinMobile(mobile), grant, password, confirmation)).message,
+      );
+      setGrant('');
+      setPassword('');
+      setConfirmation('');
+      setStep('done');
+    });
   }
-
   return (
-    <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">
-        شماره موبایل حساب را وارد کنید تا کد بازیابی برایتان پیامک شود.
-      </p>
-      {error ? <Alert variant="error">{error}</Alert> : null}
-      <MobileInput
-        label="شماره موبایل"
-        error={mobileError ?? undefined}
-        value={mobile}
-        onValueChange={(value) => {
-          setMobile(value);
-          if (mobileError) setMobileError(null);
-        }}
-      />
-      <Button type="button" className="w-full" isLoading={isLoading} onClick={onRequestCode}>
-        ارسال کد بازیابی
-      </Button>
-      <Button type="button" variant="ghost" className="w-full text-sm" onClick={onBack}>
+    <form onSubmit={submit} className="space-y-4">
+      <h2 className="font-semibold">بازیابی رمز عبور</h2>
+      {error && <Alert variant="error">{error}</Alert>}
+      {notice && <Alert variant="info">{notice}</Alert>}
+      <fieldset disabled={busy} className="space-y-4">
+        {step === 'mobile' && (
+          <MobileInput label="شماره موبایل" value={mobile} onValueChange={setMobile} />
+        )}
+        {step === 'verify' && (
+          <Input
+            label="کد تأیید"
+            required
+            dir="ltr"
+            inputMode="numeric"
+            autoComplete="one-time-code"
+            maxLength={6}
+            value={toPersianDigits(otp)}
+            onChange={(e) => setOtp(toLatinDigits(e.target.value).replace(/\D/g, '').slice(0, 6))}
+          />
+        )}
+        {step === 'password' && (
+          <>
+            <PasswordInput
+              label="رمز عبور جدید"
+              hint="۱۲ تا ۱۲۸ نویسه شامل حرف و عدد"
+              required
+              minLength={12}
+              maxLength={128}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <PasswordInput
+              label="تکرار رمز عبور"
+              required
+              autoComplete="new-password"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+            />
+          </>
+        )}
+        {step !== 'done' && (
+          <Button type="submit" className="w-full" isLoading={busy}>
+            {step === 'mobile'
+              ? 'دریافت کد بازیابی'
+              : step === 'verify'
+                ? 'تأیید کد'
+                : 'ذخیره رمز جدید'}
+          </Button>
+        )}
+      </fieldset>
+      {step === 'verify' && (
+        <p className="text-xs text-muted-foreground" aria-live="polite">
+          {expires
+            ? `اعتبار کد: ${toPersianDigits(String(expires))} ثانیه`
+            : 'اعتبار کد پایان یافت؛ کد جدید دریافت کنید.'}
+        </p>
+      )}
+      {step === 'verify' && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="w-full"
+          disabled={busy || cooldown > 0}
+          onClick={() => void run(send)}
+        >
+          {cooldown
+            ? `ارسال مجدد پس از ${toPersianDigits(String(cooldown))} ثانیه`
+            : 'ارسال مجدد کد'}
+        </Button>
+      )}
+      <Button type="button" variant="ghost" className="w-full" disabled={busy} onClick={onBack}>
         بازگشت به ورود
       </Button>
-    </div>
+    </form>
   );
 }

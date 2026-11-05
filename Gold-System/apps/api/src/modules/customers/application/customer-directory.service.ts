@@ -1,3 +1,4 @@
+import { normalizeMobile } from '../../auth/domain/mobile';
 import {
   BadRequestException,
   ConflictException,
@@ -155,7 +156,7 @@ export class CustomerDirectoryService {
         item.customerNumber,
         item.fullName,
         formatMobile(item.mobile, ''),
-        item.nationalId,
+        item.nationalId ?? '',
         item.type ?? '',
         item.accountStatus,
         item.verificationStatus,
@@ -346,6 +347,7 @@ export class CustomerDirectoryService {
   }
 
   async updateProfile(id: string, dto: UpdateCustomerDto, actorId: string, ipAddress?: string) {
+    dto = { ...dto, ...(dto.mobile ? { mobile: normalizeMobile(dto.mobile) } : {}) };
     const current = await this.prisma.customer.findUnique({ where: { id } });
     if (!current) throw new NotFoundException('مشتری پیدا نشد');
 
@@ -380,7 +382,12 @@ export class CustomerDirectoryService {
         await tx.user.update({
           where: { id: current.userId },
           data: {
-            ...(dto.mobile ? { mobile: dto.mobile.trim() } : {}),
+            ...(dto.mobile
+              ? {
+                  mobile: dto.mobile,
+                  ...(dto.mobile !== current.mobile ? { mobileVerifiedAt: null } : {}),
+                }
+              : {}),
             ...(dto.firstName || dto.lastName ? { name: `${row.firstName} ${row.lastName}` } : {}),
           },
         });
@@ -436,11 +443,14 @@ export class CustomerDirectoryService {
         orderBy: { createdAt: 'desc' },
         select: { documentType: true, status: true },
       });
-      if (!requiredKycTypes(current.type).every((requirement) =>
-        documents.some((document) =>
-          document.documentType === requirement.type && document.status === 'APPROVED',
-        ),
-      )) {
+      if (
+        !requiredKycTypes(current.type).every((requirement) =>
+          documents.some(
+            (document) =>
+              document.documentType === requirement.type && document.status === 'APPROVED',
+          ),
+        )
+      ) {
         throw new BadRequestException('پیش از فعال‌سازی حساب، همه مدارک الزامی باید تأیید شوند');
       }
     }
@@ -607,7 +617,7 @@ export class CustomerDirectoryService {
       userId: string | null;
       firstName: string;
       lastName: string;
-      nationalId: string;
+      nationalId: string | null;
       mobile: string;
       email: string | null;
       dateOfBirth: Date | null;

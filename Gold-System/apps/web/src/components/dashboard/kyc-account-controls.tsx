@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { internalCustomersApi, internalKycApi, type StaffCustomer } from '@/lib/internal-api';
 import { ApiClientError } from '@/lib/api';
 import { CUSTOMER_STATUS_LABELS, CUSTOMER_TYPE_LABELS, cn, statusLabel } from '@/lib/utils';
+import { ConfirmDialog } from './confirm-dialog';
 import { PermissionGate } from './permission-gate';
 
 const TYPE_OPTIONS = ['HOUSEHOLD', 'PARTNER', 'VIP'] as const;
@@ -33,6 +34,9 @@ export function KycAccountControls({
   documentsApproved: boolean;
   onChanged?: () => void;
 }) {
+  const [statusTarget, setStatusTarget] = useState<'ACTIVE' | 'INACTIVE' | null>(null);
+  const [changingStatus, setChangingStatus] = useState(false);
+  const [statusError, setStatusError] = useState<string | null>(null);
   const [type, setType] = useState(customer.type ?? '');
   const [assigning, setAssigning] = useState(false);
   const [activating, setActivating] = useState(false);
@@ -43,9 +47,9 @@ export function KycAccountControls({
     setType(customer.type ?? '');
   }, [customer.type]);
 
-  const isActive = customer.status === 'ACTIVE' && documentsApproved;
+  const isActive = customer.status === 'ACTIVE' && customer.accountStatus !== 'INACTIVE' && customer.accountStatus !== 'BLOCKED' && documentsApproved;
   const blocked = activationBlocked(customer.status);
-  const canActivate = documentsApproved && !isActive && !blocked;
+  const canActivate = documentsApproved && customer.status !== 'ACTIVE' && !blocked && customer.accountStatus !== 'BLOCKED';
   const canAssign = typeAssignable(customer.status);
 
   const assignGroup = async () => {
@@ -145,6 +149,61 @@ export function KycAccountControls({
                   : 'تا زمانی که همه مدارک الزامی تأیید نشوند، فعال‌سازی حساب غیرفعال می‌ماند.'}
           </p>
         </div>
+      </PermissionGate>
+
+      <PermissionGate anyOf="customer.group.assign">
+        <div className="space-y-2 rounded-md border p-4">
+          <p className="text-sm font-medium">
+            وضعیت دسترسی حساب: {customer.accountStatus === 'INACTIVE' ? 'غیرفعال' : customer.accountStatus === 'BLOCKED' ? 'مسدود' : 'فعال'}
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              disabled={changingStatus || activating || customer.accountStatus === 'ACTIVE' || !documentsApproved || !canAssign}
+              onClick={() => { setStatusError(null); setStatusTarget('ACTIVE'); }}
+            >
+              فعال کردن کاربر
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              disabled={changingStatus || activating || customer.accountStatus === 'INACTIVE'}
+              onClick={() => { setStatusError(null); setStatusTarget('INACTIVE'); }}
+            >
+              غیرفعال کردن کاربر
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">فعال کردن دسترسی حساب پس از تأیید احراز هویت و همه مدارک الزامی امکان‌پذیر است.</p>
+        </div>
+        <ConfirmDialog
+          open={statusTarget !== null}
+          title={statusTarget === 'ACTIVE' ? 'فعال کردن کاربر' : 'غیرفعال کردن کاربر'}
+          message="این تغییر روی دسترسی و امکان معامله مشتری اثر می‌گذارد و در گزارش حسابرسی ثبت می‌شود."
+          confirmLabel="ثبت وضعیت"
+          destructive={statusTarget === 'INACTIVE'}
+          requireReason
+          isLoading={changingStatus}
+          error={statusError}
+          onClose={() => { if (!changingStatus) setStatusTarget(null); }}
+          onConfirm={(reason) => {
+            if (!statusTarget || !reason || changingStatus) return;
+            setChangingStatus(true);
+            setStatusError(null);
+            setMessage(null);
+            setError(null);
+            void internalCustomersApi.setAccountStatus(customerId, statusTarget, reason)
+              .then(() => {
+                setMessage('وضعیت حساب مشتری به‌روز شد.');
+                setStatusTarget(null);
+                onChanged?.();
+              })
+              .catch((err: unknown) => {
+                setStatusError(err instanceof ApiClientError ? err.message : 'تغییر وضعیت حساب انجام نشد.');
+              })
+              .finally(() => setChangingStatus(false));
+          }}
+        />
       </PermissionGate>
 
       <PermissionGate

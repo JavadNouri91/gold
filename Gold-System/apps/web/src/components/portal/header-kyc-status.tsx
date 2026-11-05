@@ -17,7 +17,6 @@ export function HeaderKycStatus({ className }: { className?: string }) {
   const verified = kyc
     ? kyc.phase === 'VERIFIED'
     : customer.status === 'APPROVED' || customer.status === 'ACTIVE';
-  if (!kyc && !verified) return null;
   const rejected = kyc?.phase === 'REJECTED' || kyc?.phase === 'NEEDS_CORRECTION';
   const pending =
     !rejected &&

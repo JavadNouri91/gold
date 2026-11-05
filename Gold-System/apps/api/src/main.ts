@@ -1,12 +1,12 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import { Logger, ValidationPipe, VersioningType } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const compression = require('compression');
+import compression from 'compression';
 import { AppModule } from './app.module';
+import { authCsrf } from './modules/auth/presentation/auth-csrf';
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 import { TransformInterceptor } from './common/interceptors/transform.interceptor';
 import { LoggingInterceptor } from './common/interceptors/logging.interceptor';
@@ -17,6 +17,10 @@ async function bootstrap(): Promise<void> {
   });
 
   const config = app.get(ConfigService);
+  const trustedProxies = process.env.TRUSTED_PROXY_CIDRS?.split(',')
+    .map((value) => value.trim())
+    .filter(Boolean);
+  if (trustedProxies?.length) app.getHttpAdapter().getInstance().set('trust proxy', trustedProxies);
 
   // ─── Security middleware ─────────────────────────────────────
   app.use(helmet());
@@ -37,11 +41,12 @@ async function bootstrap(): Promise<void> {
   app.enableCors({
     origin: corsOrigins,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Request-ID', 'X-Auth-Request'],
     credentials: true,
   });
 
   // ─── Global prefix & versioning ──────────────────────────────
+  app.use(authCsrf(corsOrigins));
   app.setGlobalPrefix('api');
   app.enableVersioning({ type: VersioningType.URI, defaultVersion: '1' });
 
@@ -76,8 +81,8 @@ async function bootstrap(): Promise<void> {
   const port = envPort || config.get<number>('app.port') || 4001;
 
   await app.listen(port, '0.0.0.0');
-  console.log(`🟡 Gold System API running on http://0.0.0.0:${port}/api/v1`);
-  console.log(`📖 Swagger docs: http://0.0.0.0:${port}/api/docs`);
+  Logger.log(`🟡 Gold System API running on http://0.0.0.0:${port}/api/v1`);
+  Logger.log(`📖 Swagger docs: http://0.0.0.0:${port}/api/docs`);
 }
 
-bootstrap();
+void bootstrap();

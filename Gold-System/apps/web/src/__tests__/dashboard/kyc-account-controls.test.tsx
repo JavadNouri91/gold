@@ -12,6 +12,7 @@ jest.mock('@/lib/auth', () => ({
 jest.mock('@/lib/internal-api', () => ({
   internalCustomersApi: {
     assignType: jest.fn(),
+    setAccountStatus: jest.fn(),
   },
   internalKycApi: {
     activate: jest.fn(),
@@ -19,7 +20,7 @@ jest.mock('@/lib/internal-api', () => ({
 }));
 
 const { internalCustomersApi, internalKycApi } = jest.requireMock('@/lib/internal-api') as {
-  internalCustomersApi: { assignType: jest.Mock };
+  internalCustomersApi: { assignType: jest.Mock; setAccountStatus: jest.Mock };
   internalKycApi: { activate: jest.Mock };
 };
 
@@ -64,6 +65,24 @@ function makeCustomer(overrides: Partial<StaffCustomer> = {}): StaffCustomer {
 }
 
 describe('KycAccountControls', () => {
+  it.each([
+    ['ACTIVE', 'INACTIVE', 'غیرفعال کردن کاربر'],
+    ['INACTIVE', 'ACTIVE', 'فعال کردن کاربر'],
+  ])('changes account access from %s to %s', async (accountStatus, next, label) => {
+    signIn(['customer.group.assign']);
+    internalCustomersApi.setAccountStatus.mockResolvedValue({ id: 'cust-1', accountStatus: next });
+    const onChanged = jest.fn();
+    const user = userEvent.setup();
+    render(<KycAccountControls customerId="cust-1" customer={makeCustomer({ status: 'ACTIVE', accountStatus })} documentsApproved onChanged={onChanged} />);
+    await user.click(screen.getByRole('button', { name: label }));
+    const confirm = screen.getByRole('button', { name: 'ثبت وضعیت' });
+    expect(confirm).toBeDisabled();
+    await user.type(screen.getByRole('textbox'), 'Account access update');
+    await user.click(confirm);
+    await waitFor(() => expect(internalCustomersApi.setAccountStatus).toHaveBeenCalledWith('cust-1', next, 'Account access update'));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     signIn(['customer.read', 'kyc.review', 'customer.group.assign']);

@@ -1,3 +1,4 @@
+import { ApprovedKycGuard } from './common/guards/approved-kyc.guard';
 import { join } from 'path';
 import { Module } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
@@ -153,6 +154,7 @@ import { SmsModule } from './modules/sms/sms.module';
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: PermissionsGuard },
+    { provide: APP_GUARD, useClass: ApprovedKycGuard },
   ],
 })
 export class AppModule {}

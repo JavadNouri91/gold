@@ -153,6 +153,7 @@ describe('CustomersService', () => {
 
       mockPrisma.$transaction.mockImplementation(async (fn: (tx: unknown) => Promise<unknown>) => {
         const tx = {
+          $executeRaw: jest.fn(),
           user: {
             create: jest
               .fn()
@@ -187,7 +188,7 @@ describe('CustomersService', () => {
       );
     });
 
-    it('uses national ID as the portal password when none is provided', async () => {
+    it('generates an unguessable password when none is provided', async () => {
       mockCustomerRepo.findByMobile.mockResolvedValue(null);
       mockCustomerRepo.findByNationalId.mockResolvedValue(null);
       mockUsersService.findByMobile.mockResolvedValue(null);
@@ -210,6 +211,7 @@ describe('CustomersService', () => {
           mobile: dto.mobile,
         });
         return fn({
+          $executeRaw: jest.fn(),
           user: {
             create: jest
               .fn()
@@ -231,7 +233,7 @@ describe('CustomersService', () => {
       });
 
       expect(mockUsersService.createCustomerUser).toHaveBeenCalledWith(
-        expect.objectContaining({ password: dto.nationalId }),
+        expect.objectContaining({ password: expect.stringMatching(/^[a-f0-9]{64}$/) }),
         expect.anything(),
       );
     });

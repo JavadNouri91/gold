@@ -21,6 +21,8 @@ export class RoutingSmsProvider implements SmsProvider {
 
   async send(to: string, message: string): Promise<SmsDeliveryResult> {
     const config = await this.settings.resolveEffectiveConfig();
+    if (process.env.NODE_ENV === 'production' && config.provider === 'mock')
+      throw new Error('Mock SMS is disabled in production');
     const provider = this.factory.forProvider(config.provider);
     return provider.send(to, message, config);
   }

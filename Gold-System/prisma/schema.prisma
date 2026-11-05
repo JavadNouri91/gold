@@ -63,6 +63,7 @@ model User {
   name               String
   mobile             String              @unique
   email              String?             @unique
+  mobileVerifiedAt   DateTime?           @map("mobile_verified_at")
   passwordHash       String?             @map("password_hash")
   status             UserStatus          @default(ACTIVE)
   lastLoginAt        DateTime?           @map("last_login_at")
@@ -224,6 +225,7 @@ model OtpCode {
   usedAt    DateTime?  @map("used_at")
   createdAt DateTime   @default(now()) @map("created_at")
   attempts  Int        @default(0)
+  payload   Json?
   user      User?      @relation(fields: [userId], references: [id])
 
   @@index([mobile, purpose])
@@ -258,7 +260,7 @@ model Customer {
   userId           String?            @unique @map("user_id")
   firstName        String             @map("first_name")
   lastName         String             @map("last_name")
-  nationalId       String             @unique @map("national_id")
+  nationalId       String?            @unique @map("national_id")
   mobile           String             @unique
   email            String?            @unique
   dateOfBirth      DateTime?          @map("date_of_birth")
@@ -314,10 +316,13 @@ model CustomerBankAccount {
   id            String   @id @default(cuid())
   customerId    String   @map("customer_id")
   iban          String
+  cardLast4     String?  @map("card_last4")
+  accountLast4  String?  @map("account_last4")
+  isDefault     Boolean  @default(false) @map("is_default")
   bankCode      String?  @map("bank_code")
   bankName      String?  @map("bank_name")
   accountHolder String   @map("account_holder")
-  status        String   @default("VERIFIED")
+  status        String   @default("PENDING")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
   customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
@@ -1129,6 +1134,9 @@ enum VerificationStatus {
 }
 
 enum OtpPurpose {
+  REGISTRATION
+  CUSTOMER_LOGIN
+  RESET_GRANT
   LOGIN
   PASSWORD_RESET
   SENSITIVE_ACTION
@@ -1288,6 +1296,8 @@ enum PurchaseSettlementType {
 enum PaymentMethod {
   BANK_TRANSFER
   CARD_TO_CARD
+  PAYA
+  SATNA
   CASH
 }
 
@@ -1540,4 +1550,13 @@ model PhysicalGoldPickupEvent {
 
   @@index([pickupId, createdAt])
   @@map("physical_gold_pickup_events")
+}
+
+// Shared counters survive API restarts and apply across replicas.
+model AuthRateLimit {
+  key       String   @id
+  count     Int      @default(0)
+  expiresAt DateTime @map("expires_at")
+  @@index([expiresAt])
+  @@map("auth_rate_limits")
 }

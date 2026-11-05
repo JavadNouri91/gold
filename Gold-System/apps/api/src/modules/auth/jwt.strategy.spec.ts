@@ -1,3 +1,4 @@
+import { AuthSecurityService } from './application/auth-security.service';
 import { ConfigService } from '@nestjs/config';
 import { UnauthorizedException } from '@nestjs/common';
 import { JwtStrategy } from './infrastructure/strategies/jwt.strategy';
@@ -8,7 +9,11 @@ describe('JwtStrategy', () => {
 
   function strategy() {
     const config = { get: () => 'x'.repeat(32) } as unknown as ConfigService;
-    return new JwtStrategy(config, sessions as unknown as SessionEnforcementService);
+    return new JwtStrategy(
+      config,
+      sessions as unknown as SessionEnforcementService,
+      { assertAccount: jest.fn() } as unknown as AuthSecurityService,
+    );
   }
 
   beforeEach(() => {

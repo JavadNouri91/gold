@@ -1,11 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { useAuth } from '@/lib/auth';
 import { ApiClientError } from '@/lib/api';
-import { isValidMobile, latinMobile, toLatinDigits, toPersianDigits } from '@/lib/utils';
+import { isValidMobile, latinMobile, toPersianDigits } from '@/lib/utils';
 import { isStaffUser } from '@/lib/permissions';
 import { firstStaffRoute } from '@/lib/nav';
 import { Button } from '@/components/ui/button';
@@ -21,7 +21,7 @@ interface LoginForm {
 }
 
 export default function StaffLoginPage() {
-  const { login, confirmSession, closeOtherSessions } = useAuth();
+  const { user, login, confirmSession, closeOtherSessions } = useAuth();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -39,11 +39,11 @@ export default function StaffLoginPage() {
     validate: (value) => isValidMobile(value) || 'شماره موبایل معتبر نیست',
   });
 
-  const enterDashboard = () => {
-    const raw = localStorage.getItem('gold_user');
-    const permissions = raw ? (JSON.parse(raw) as { permissions?: string[] }).permissions : [];
-    router.replace(isStaffUser(permissions) ? firstStaffRoute(permissions) : '/portal/dashboard');
-  };
+  useEffect(() => {
+    if (user) {
+      router.replace(isStaffUser(user.permissions) ? firstStaffRoute(user.permissions) : '/portal/dashboard');
+    }
+  }, [user, router]);
 
   const onSubmit = async (data: LoginForm) => {
     setError(null);
@@ -52,13 +52,12 @@ export default function StaffLoginPage() {
     setIsLoading(true);
     try {
       const mobile = latinMobile(data.mobile);
-      const result = await login(mobile, toLatinDigits(data.password));
+      const result = await login(mobile, data.password);
       if (result.requiresOtp) {
         sessionStorage.setItem('staff_login_mobile', mobile);
         router.push('/dashboard/otp');
         return;
       }
-      enterDashboard();
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'SESSION_LIMIT_REACHED') {
         const token = (err.details as { confirmationToken?: string } | undefined)?.confirmationToken;
@@ -106,7 +105,6 @@ export default function StaffLoginPage() {
                   setError(null);
                   try {
                     await closeOtherSessions(closeToken);
-                    enterDashboard();
                   } catch (err) {
                     setError(err instanceof ApiClientError ? err.message : 'بستن نشست‌ها انجام نشد.');
                   } finally {
@@ -131,7 +129,6 @@ export default function StaffLoginPage() {
                       setError(null);
                       try {
                         await confirmSession(confirmation.token, session.id);
-                        enterDashboard();
                       } catch (err) {
                         setError(err instanceof ApiClientError ? err.message : 'تأیید ورود انجام نشد.');
                       } finally {
@@ -160,7 +157,7 @@ export default function StaffLoginPage() {
                   required: 'رمز عبور الزامی است',
                   minLength: { value: 8, message: 'رمز عبور باید حداقل ۸ کاراکتر باشد' },
                 })}
-                value={toPersianDigits(watch('password'))}
+                value={watch('password')}
               />
               <div className="flex justify-start">
                 <button

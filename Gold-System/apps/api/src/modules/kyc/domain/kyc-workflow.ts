@@ -94,7 +94,7 @@ export interface WorkflowCustomer {
   type: CustomerType | string | null;
   firstName: string;
   lastName: string;
-  nationalId: string;
+  nationalId: string | null;
   rejectionReason: string | null;
   createdAt: Date;
 }
@@ -208,8 +208,7 @@ export function kycStaffBucket(input: {
 }): KycStaffBucket {
   const states = input.requiredTypes.map((type) => input.latestStatusByType.get(type) ?? null);
   const allApproved =
-    states.length > 0 &&
-    states.every((status) => status === VerificationStatus.APPROVED);
+    states.length > 0 && states.every((status) => status === VerificationStatus.APPROVED);
   if (input.verificationStatus === VerificationStatus.APPROVED && allApproved) {
     return 'verified';
   }
@@ -360,7 +359,7 @@ export function buildOwnKycView(input: {
   const identityComplete = Boolean(
     input.customer.firstName.trim() &&
     input.customer.lastName.trim() &&
-    input.customer.nationalId.trim(),
+    input.customer.nationalId?.trim(),
   );
 
   const documents: OwnKycDocumentView[] = requirements.map((item) => {

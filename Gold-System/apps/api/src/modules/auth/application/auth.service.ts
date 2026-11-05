@@ -1,3 +1,9 @@
+import { BadRequestException } from '@nestjs/common';
+import { randomBytes } from 'crypto';
+import { PrismaService } from '../../../database/prisma.service';
+import { CustomersService } from '../../customers/application/customers.service';
+import { AuthSecurityService, AUTH_ERROR } from './auth-security.service';
+import { RegistrationDto } from './dto/customer-auth.dto';
 import { Injectable, Logger, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -11,7 +17,7 @@ import { SessionEnforcementService } from '../../sessions/application/session-en
 import { hashRefreshToken } from '../domain/refresh-token.hash';
 import { generateNumericOtp } from '../domain/otp-generator';
 import { JwtPayload, TokenPair } from '@gold/shared-types';
-import { BusinessRuleException } from '../../../common/exceptions/business-rule.exception';
+import { toLatinDigits } from '../../../common/digits';
 
 /**
  * Valid argon2id hash of a throwaway string.
@@ -23,9 +29,6 @@ const UNKNOWN_USER_PASSWORD_HASH =
 
 const PASSWORD_RESET_REQUEST_MESSAGE =
   'اگر شماره موبایل در سامانه ثبت شده باشد، کد بازیابی پیامک می‌شود.';
-
-const PASSWORD_RESET_CODE_MESSAGE =
-  'کد تأیید اشتباه است یا منقضی شده. لطفاً دوباره تلاش کنید.';
 
 /**
  * Auth Service
@@ -50,6 +53,9 @@ export class AuthService {
     private readonly auditService: AuditService,
     private readonly notificationService: NotificationService,
     private readonly sessions: SessionEnforcementService,
+    private readonly prisma: PrismaService,
+    private readonly customers: CustomersService,
+    private readonly security: AuthSecurityService,
   ) {}
 
   /**
@@ -58,8 +64,8 @@ export class AuthService {
   async initiateLogin(
     mobile: string,
     password: string,
-    ipAddress?: string,
-    userAgent?: string,
+    _ipAddress?: string,
+    _userAgent?: string,
   ): Promise<
     | { message: string; requiresOtp: true }
     | (TokenPair & {
@@ -73,64 +79,32 @@ export class AuthService {
     if (!result) {
       // Constant-time response to prevent user enumeration
       await argon2.verify(UNKNOWN_USER_PASSWORD_HASH, password);
-      throw new UnauthorizedException('Invalid credentials');
+      throw new UnauthorizedException(AUTH_ERROR);
     }
 
     const { user, passwordHash } = result;
 
-    if (!user.isActive()) {
-      throw new BusinessRuleException(
-        'USER_INACTIVE',
-        'Your account is not active. Please contact support.',
-      );
-    }
+    const passwordValid = await this.verifyExistingPassword(user.id, passwordHash, password);
+    if (!user.isActive()) throw new UnauthorizedException(AUTH_ERROR);
 
-    if (!passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    const passwordValid = await argon2.verify(passwordHash, password);
-    if (!passwordValid) {
-      throw new UnauthorizedException('Invalid credentials');
-    }
-
-    if (this.isLoginOtpBypassed()) {
-      this.logger.warn(`[AuthService] Login OTP bypassed for mobile=${mobile}`);
-      const signedIn = await this.usersService.findByMobile(mobile);
-      if (!signedIn) throw new UnauthorizedException('Invalid credentials');
-      const session = await this.completeLogin(signedIn, ipAddress, userAgent);
+    await this.security.assertAccount(user.id);
+    if (!passwordValid) throw new UnauthorizedException(AUTH_ERROR);
+    if (!this.requiresLoginOtp()) {
       return {
-        ...session,
+        ...(await this.completeLogin(user, _ipAddress, _userAgent)),
+        message: 'ورود موفق بود.',
         requiresOtp: false,
-        message: 'ورود بدون کد تأیید انجام شد.',
       };
     }
+    await this.sendChallenge(user.id, mobile, 'LOGIN');
+    return { message: 'کد تأیید ارسال شد.', requiresOtp: true };
+  }
 
-    // Generate and send OTP
-    const otpConfig = this.configService.get('otp');
-    const otp = generateNumericOtp(otpConfig.length);
-    const expiresAt = new Date(Date.now() + otpConfig.expiresInSeconds * 1000);
-
-    await this.otpRepository.createOrReplace({
-      userId: user.id,
-      mobile,
-      code: otp,
-      purpose: 'LOGIN',
-      expiresAt,
-    });
-
-    // Deliver OTP via NotificationService → SMS provider
-    // SECURITY: OTP plaintext is passed to sendOtp() which calls the SMS provider.
-    // The DB stores only the argon2 hash. The mock provider logs in dev/test only.
-    try {
-      await this.notificationService.sendOtp(user.id, mobile, otp);
-    } catch (err: unknown) {
-      // Notification failure MUST NOT block login flow
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`[AuthService] OTP SMS delivery failed for mobile=${mobile}: ${msg}`);
-    }
-
-    return { message: 'OTP sent to your registered mobile number', requiresOtp: true };
+  requiresLoginOtp(): boolean {
+    return !(
+      this.configService.get('app.nodeEnv') === 'development' &&
+      this.configService.get('otp').loginBypass
+    );
   }
 
   /**
@@ -139,32 +113,40 @@ export class AuthService {
    */
   async requestPasswordReset(mobile: string): Promise<{ message: string }> {
     const result = await this.usersService.findByMobileWithPassword(mobile);
-
-    if (!result?.user.isActive()) {
+    if (result?.user.isActive()) {
+      try {
+        await this.security.assertAccount(result.user.id);
+      } catch {
+        return { message: PASSWORD_RESET_REQUEST_MESSAGE };
+      }
+      await this.sendChallenge(result.user.id, mobile, 'PASSWORD_RESET');
+    } else {
       await argon2.verify(UNKNOWN_USER_PASSWORD_HASH, 'password-reset');
-      return { message: PASSWORD_RESET_REQUEST_MESSAGE };
     }
-
-    const otpConfig = this.configService.get('otp');
-    const otp = generateNumericOtp(otpConfig.length);
-    const expiresAt = new Date(Date.now() + otpConfig.expiresInSeconds * 1000);
-
-    await this.otpRepository.createOrReplace({
-      userId: result.user.id,
-      mobile,
-      code: otp,
-      purpose: 'PASSWORD_RESET',
-      expiresAt,
-    });
-
-    try {
-      await this.notificationService.sendOtp(result.user.id, mobile, otp);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      this.logger.error(`[AuthService] Password reset SMS failed for mobile=${mobile}: ${msg}`);
-    }
-
     return { message: PASSWORD_RESET_REQUEST_MESSAGE };
+  }
+
+  async verifyPasswordReset(mobile: string, otp: string) {
+    const grant = randomBytes(32).toString('hex');
+    const codeHash = await argon2.hash(grant);
+    await this.otpRepository.consume(mobile, 'PASSWORD_RESET', otp, async (tx, row) => {
+      if (!row.userId) throw new UnauthorizedException(AUTH_ERROR);
+      await this.security.assertAccount(row.userId, tx);
+      await tx.otpCode.updateMany({
+        where: { mobile, purpose: 'RESET_GRANT', usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.otpCode.create({
+        data: {
+          mobile,
+          userId: row.userId,
+          purpose: 'RESET_GRANT',
+          codeHash,
+          expiresAt: new Date(Date.now() + 300_000),
+        },
+      });
+    });
+    return { resetGrant: grant };
   }
 
   /**
@@ -173,47 +155,44 @@ export class AuthService {
    */
   async resetPassword(
     mobile: string,
-    otp: string,
+    grant: string,
     password: string,
+    confirmation = password,
   ): Promise<{ message: string }> {
-    const otpRecord = await this.otpRepository.findActive(mobile, 'PASSWORD_RESET');
-
-    if (!otpRecord) {
-      throw new UnauthorizedException(PASSWORD_RESET_CODE_MESSAGE);
-    }
-
-    const otpConfig = this.configService.get('otp');
-    if (otpRecord.attempts >= otpConfig.maxAttempts) {
-      throw new BusinessRuleException(
-        'OTP_MAX_ATTEMPTS',
-        'تعداد تلاش برای کد تأیید بیش از حد مجاز است. لطفاً کد جدید بگیرید.',
-      );
-    }
-
-    await this.otpRepository.incrementAttempts(otpRecord.id);
-
-    const isValid = await this.otpRepository.verifyCode(otpRecord, otp);
-    if (!isValid) {
-      throw new UnauthorizedException(PASSWORD_RESET_CODE_MESSAGE);
-    }
-
-    const user = await this.usersService.findByMobile(mobile);
-    if (!user?.isActive()) {
-      throw new UnauthorizedException(PASSWORD_RESET_CODE_MESSAGE);
-    }
-
-    await this.usersService.replacePassword(user.id, password);
-    await this.otpRepository.markUsed(otpRecord.id);
-    await this.refreshTokenRepository.revokeAllForUser(user.id);
-
-    await this.auditService.log({
-      actorId: user.id,
-      action: 'PASSWORD_RESET',
-      entityType: 'User',
-      entityId: user.id,
+    this.assertPassword(password, confirmation);
+    const passwordHash = await argon2.hash(password, { type: argon2.argon2id });
+    await this.otpRepository.consume(mobile, 'RESET_GRANT', grant, async (tx, row) => {
+      if (!row.userId) throw new UnauthorizedException(AUTH_ERROR);
+      await this.security.assertAccount(row.userId, tx);
+      const customer = await tx.customer.findUnique({ where: { userId: row.userId } });
+      if (customer?.nationalId === password)
+        throw new BadRequestException('رمز عبور نباید کد ملی باشد.');
+      await tx.user.update({
+        where: { id: row.userId },
+        data: { passwordHash, mobileVerifiedAt: new Date() },
+      });
+      await tx.refreshToken.updateMany({
+        where: { userId: row.userId, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
+      await tx.loginConfirmation.updateMany({
+        where: { userId: row.userId, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.otpCode.updateMany({
+        where: { mobile, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.auditLog.create({
+        data: {
+          actorId: row.userId,
+          action: 'PASSWORD_RESET',
+          entityType: 'User',
+          entityId: row.userId,
+        },
+      });
     });
-
-    return { message: 'رمز عبور با موفقیت تغییر کرد. اکنون با رمز جدید وارد شوید.' };
+    return { message: 'رمز عبور تغییر کرد. با رمز جدید وارد شوید.' };
   }
 
   /**
@@ -229,47 +208,24 @@ export class AuthService {
       user: { id: string; mobile: string; roles: string[]; permissions: string[] };
     }
   > {
-    if (this.isLoginOtpBypassed()) {
-      const user = await this.usersService.findByMobile(mobile);
-      if (!user) throw new UnauthorizedException('User not found');
-      return this.completeLogin(user, ipAddress, userAgent);
-    }
-
-    const otpRecord = await this.otpRepository.findActive(mobile, 'LOGIN');
-
-    if (!otpRecord) {
-      throw new UnauthorizedException('OTP expired or not found. Please request a new one.');
-    }
-
-    const otpConfig = this.configService.get('otp');
-
-    if (otpRecord.attempts >= otpConfig.maxAttempts) {
-      throw new BusinessRuleException(
-        'OTP_MAX_ATTEMPTS',
-        'Maximum OTP attempts exceeded. Please request a new OTP.',
-      );
-    }
-
-    await this.otpRepository.incrementAttempts(otpRecord.id);
-
-    // Verify OTP using argon2 — constant-time comparison; never plaintext equality
-    const isValid = await this.otpRepository.verifyCode(otpRecord, otp);
-    if (!isValid) {
-      throw new UnauthorizedException('Invalid OTP');
-    }
-
-    await this.otpRepository.markUsed(otpRecord.id);
-
-    const user = await this.usersService.findByMobile(mobile);
-    if (!user) throw new UnauthorizedException('User not found');
-
-    return this.completeLogin(user, ipAddress, userAgent);
+    const userId = await this.otpRepository.consume(mobile, 'LOGIN', otp, async (tx, row) => {
+      if (!row.userId) throw new UnauthorizedException(AUTH_ERROR);
+      await this.security.assertAccount(row.userId, tx);
+      await tx.user.update({ where: { id: row.userId }, data: { mobileVerifiedAt: new Date() } });
+      return row.userId;
+    });
+    return this.completeLogin(await this.usersService.findById(userId), ipAddress, userAgent);
   }
 
   /**
    * Refresh access token using a valid refresh token
    */
-  async refresh(refreshToken: string, ipAddress?: string): Promise<TokenPair> {
+  async refresh(
+    refreshToken: string,
+    ipAddress?: string,
+  ): Promise<
+    TokenPair & { user: { id: string; mobile: string; roles: string[]; permissions: string[] } }
+  > {
     const tokenHash = hashRefreshToken(refreshToken);
     const stored = await this.refreshTokenRepository.findByTokenHash(tokenHash);
 
@@ -277,6 +233,7 @@ export class AuthService {
       throw new UnauthorizedException('Refresh token is invalid or expired');
     }
 
+    await this.security.assertAccount(stored.userId);
     const user = await this.usersService.findById(stored.userId);
     const jwtConfig = this.configService.get('jwt');
     const refreshExpiresAt = this.parseExpiry(jwtConfig.refreshExpiresIn);
@@ -297,6 +254,7 @@ export class AuthService {
       accessToken,
       refreshToken: rotated,
       expiresIn: this.parseExpirySeconds(jwtConfig.accessExpiresIn),
+      user: { id: user.id, mobile: user.mobile, roles: user.roles, permissions: user.permissions },
     };
   }
 
@@ -318,6 +276,7 @@ export class AuthService {
       ipAddress: ipAddress ?? null,
       userAgent: userAgent ?? null,
     });
+    await this.security.assertAccount(opened.userId);
     const user = await this.usersService.findById(opened.userId);
     const accessToken = this.signAccessToken(
       user.id,
@@ -370,6 +329,7 @@ export class AuthService {
       ipAddress: ipAddress ?? null,
       userAgent: userAgent ?? null,
     });
+    await this.security.assertAccount(opened.userId);
     const user = await this.usersService.findById(opened.userId);
     const accessToken = this.signAccessToken(
       user.id,
@@ -464,8 +424,177 @@ export class AuthService {
 
   // ─── Private helpers ───────────────────────────────────────
 
-  private isLoginOtpBypassed(): boolean {
-    return this.configService.get('otp')?.loginBypass === true;
+  private assertPassword(password: string, confirmation: string) {
+    if (
+      password !== confirmation ||
+      password.length < 12 ||
+      password.length > 128 ||
+      !/\p{L}/u.test(password) ||
+      !/\p{N}/u.test(password)
+    ) {
+      throw new BadRequestException(
+        'رمز عبور باید ۱۲ تا ۱۲۸ نویسه و شامل حرف و عدد باشد و با تکرار آن یکسان باشد.',
+      );
+    }
+  }
+
+  private async verifyExistingPassword(
+    userId: string | null,
+    passwordHash: string | null,
+    password: string,
+  ): Promise<boolean> {
+    const exact = await argon2.verify(passwordHash || UNKNOWN_USER_PASSWORD_HASH, password);
+    if (exact) return !!passwordHash;
+    // Only existing national-ID defaults retain the digit conversion used by older forms.
+    // Customer-chosen passwords always require an exact match.
+    const latin = toLatinDigits(password);
+    if (!userId || !passwordHash || latin === password || !/^\d{10}$/.test(latin)) return false;
+    const customer = await this.prisma.customer.findUnique({
+      where: { userId },
+      select: { nationalId: true },
+    });
+    return customer?.nationalId === latin && (await argon2.verify(passwordHash, latin));
+  }
+
+  private async sendChallenge(
+    userId: string | null,
+    mobile: string,
+    purpose: string,
+    payload?: import('@prisma/client').Prisma.InputJsonValue,
+  ) {
+    const otp = generateNumericOtp(6);
+    await this.otpRepository.createOrReplace({
+      userId,
+      mobile,
+      purpose,
+      code: otp,
+      expiresAt: new Date(Date.now() + 120_000),
+      payload,
+    });
+    try {
+      await this.notificationService.sendOtp(userId, mobile, otp);
+    } catch {
+      await this.otpRepository.invalidate(mobile, purpose);
+      this.logger.warn('Authentication SMS delivery failed');
+      // Keep account existence private. The frontend never promises delivery.
+    }
+  }
+
+  async initiateRegistration(dto: RegistrationDto) {
+    this.assertPassword(dto.password, dto.confirmPassword);
+    const passwordHash = await argon2.hash(dto.password, { type: argon2.argon2id });
+    const exists = await this.usersService.findByMobile(dto.mobile);
+    const customerExists = await this.prisma.customer.findUnique({
+      where: { mobile: dto.mobile },
+      select: { id: true },
+    });
+    if (!exists && !customerExists) {
+      await this.sendChallenge(null, dto.mobile, 'REGISTRATION', {
+        firstName: dto.firstName.trim(),
+        lastName: dto.lastName.trim(),
+        passwordHash,
+      });
+    }
+    return { message: 'در صورت امکان ثبت‌نام، کد تأیید ارسال می‌شود.' };
+  }
+
+  async verifyRegistration(mobile: string, otp: string, ipAddress?: string, userAgent?: string) {
+    const userId = await this.otpRepository.consume(
+      mobile,
+      'REGISTRATION',
+      otp,
+      async (tx, row) => {
+        const data = row.payload as {
+          firstName: string;
+          lastName: string;
+          passwordHash: string;
+        } | null;
+        if (
+          !data ||
+          (await tx.user.findUnique({ where: { mobile } })) ||
+          (await tx.customer.findUnique({ where: { mobile } }))
+        )
+          throw new UnauthorizedException(AUTH_ERROR);
+        const role = await tx.role.findUniqueOrThrow({ where: { name: 'customer' } });
+        const user = await this.usersService.createCustomerUser(
+          {
+            name: `${data.firstName} ${data.lastName}`,
+            mobile,
+            passwordHash: data.passwordHash,
+            mobileVerifiedAt: new Date(),
+            roleId: role.id,
+          },
+          tx,
+        );
+        const customer = await this.customers.createCustomerProfile(
+          tx,
+          { firstName: data.firstName, lastName: data.lastName, mobile },
+          user.id,
+        );
+        await tx.customerAccount.create({ data: { customerId: customer.id } });
+        await tx.auditLog.create({
+          data: {
+            actorId: user.id,
+            action: 'CUSTOMER_REGISTERED',
+            entityType: 'Customer',
+            entityId: customer.id,
+            ipAddress,
+          },
+        });
+        return user.id;
+      },
+    );
+    return this.completeLogin(await this.usersService.findById(userId), ipAddress, userAgent);
+  }
+
+  private async customerForLogin(mobile: string) {
+    const found = await this.usersService.findByMobileWithPassword(mobile);
+    if (!found || found.user.roles.length !== 1 || found.user.roles[0] !== 'customer') return null;
+    try {
+      await this.security.assertAccount(found.user.id);
+    } catch {
+      return null;
+    }
+    return found;
+  }
+
+  async customerPasswordLogin(
+    mobile: string,
+    password: string,
+    ipAddress?: string,
+    userAgent?: string,
+  ) {
+    const found = await this.customerForLogin(mobile);
+    const valid = await this.verifyExistingPassword(
+      found?.user.id ?? null,
+      found?.passwordHash ?? null,
+      password,
+    );
+    if (!found) throw new UnauthorizedException(AUTH_ERROR);
+    if (!valid) throw new UnauthorizedException(AUTH_ERROR);
+    return this.completeLogin(found.user, ipAddress, userAgent);
+  }
+
+  async requestCustomerOtp(mobile: string) {
+    const found = await this.customerForLogin(mobile);
+    if (found) await this.sendChallenge(found.user.id, mobile, 'CUSTOMER_LOGIN');
+    return { message: 'اگر حساب مجاز باشد، کد تأیید ارسال می‌شود.' };
+  }
+
+  async verifyCustomerOtp(mobile: string, otp: string, ipAddress?: string, userAgent?: string) {
+    const id = await this.otpRepository.consume(mobile, 'CUSTOMER_LOGIN', otp, async (tx, row) => {
+      if (!row.userId) throw new UnauthorizedException(AUTH_ERROR);
+      await this.security.assertAccount(row.userId, tx);
+      const roles = await tx.userRole.findMany({
+        where: { userId: row.userId },
+        include: { role: true },
+      });
+      if (roles.length !== 1 || roles[0].role.name !== 'customer')
+        throw new UnauthorizedException(AUTH_ERROR);
+      await tx.user.update({ where: { id: row.userId }, data: { mobileVerifiedAt: new Date() } });
+      return row.userId;
+    });
+    return this.completeLogin(await this.usersService.findById(id), ipAddress, userAgent);
   }
 
   private async completeLogin(
@@ -477,6 +606,7 @@ export class AuthService {
       user: { id: string; mobile: string; roles: string[]; permissions: string[] };
     }
   > {
+    await this.security.assertAccount(user.id);
     const tokenPair = await this.issueLoginSession(
       user.id,
       user.mobile,

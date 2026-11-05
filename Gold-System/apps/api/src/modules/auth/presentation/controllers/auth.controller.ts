@@ -1,3 +1,19 @@
+import { Res, UnauthorizedException, UseInterceptors } from '@nestjs/common';
+import { Response } from 'express';
+import {
+  AuthCookieInterceptor,
+  readRefreshCookie,
+  REFRESH_COOKIE,
+  refreshCookieOptions,
+} from '../auth-cookie.interceptor';
+import { AuthSecurityService } from '../../application/auth-security.service';
+import {
+  RegistrationDto,
+  CustomerPasswordDto,
+  CustomerOtpDto,
+  MobileDto,
+  CompleteResetDto,
+} from '../../application/dto/customer-auth.dto';
 import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Req } from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
@@ -5,10 +21,7 @@ import { Request } from 'express';
 import { AuthService } from '../../application/auth.service';
 import {
   InitiateLoginDto,
-  LogoutDto,
-  RefreshTokenDto,
   RequestPasswordResetDto,
-  ResetPasswordDto,
   VerifyOtpDto,
 } from '../../application/dto/login.dto';
 import {
@@ -31,17 +44,25 @@ const AUTH_THROTTLE = { short: { limit: 5, ttl: 60_000 }, long: { limit: 10, ttl
  * POST /auth/refresh  → rotate refresh token
  * POST /auth/logout   → revoke refresh token
  */
+@UseInterceptors(AuthCookieInterceptor)
 @ApiTags('auth')
 @Controller({ path: 'auth', version: '1' })
 export class AuthController {
-  constructor(private readonly authService: AuthService) {}
+  constructor(
+    private readonly authService: AuthService,
+    private readonly security: AuthSecurityService,
+  ) {}
 
   @Public()
   @Throttle(AUTH_THROTTLE)
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Step 1: Submit credentials and receive OTP via SMS' })
-  initiateLogin(@Body() dto: InitiateLoginDto, @Req() req: Request) {
+  async initiateLogin(@Body() dto: InitiateLoginDto, @Req() req: Request) {
+    await this.security.limit(dto.mobile, req.ip || 'unknown', 'password');
+    if (this.authService.requiresLoginOtp()) {
+      await this.security.limit(dto.mobile, req.ip || 'unknown', 'send');
+    }
     return this.authService.initiateLogin(
       dto.mobile,
       dto.password,
@@ -55,7 +76,8 @@ export class AuthController {
   @Post('password/forgot')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a password-reset code to a registered mobile' })
-  requestPasswordReset(@Body() dto: RequestPasswordResetDto) {
+  async requestPasswordReset(@Body() dto: RequestPasswordResetDto, @Req() req: Request) {
+    await this.security.limit(dto.mobile, req.ip || 'unknown', 'send');
     return this.authService.requestPasswordReset(dto.mobile);
   }
 
@@ -64,8 +86,13 @@ export class AuthController {
   @Post('password/reset')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Set a new password after verifying the mobile code' })
-  resetPassword(@Body() dto: ResetPasswordDto) {
-    return this.authService.resetPassword(dto.mobile, dto.otp, dto.password);
+  resetPassword(@Body() dto: CompleteResetDto) {
+    return this.authService.resetPassword(
+      dto.mobile,
+      dto.resetGrant,
+      dto.password,
+      dto.confirmPassword,
+    );
   }
 
   @Public()
@@ -112,8 +139,10 @@ export class AuthController {
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rotate refresh token and get new access token' })
-  refresh(@Body() dto: RefreshTokenDto, @Req() req: Request) {
-    return this.authService.refresh(dto.refreshToken, req.ip);
+  refresh(@Req() req: Request) {
+    const token = readRefreshCookie(req);
+    if (!token) throw new UnauthorizedException('نشست معتبر نیست.');
+    return this.authService.refresh(token, req.ip);
   }
 
   @Get('sessions')
@@ -163,8 +192,70 @@ export class AuthController {
   @Post('logout')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Revoke refresh token (logout)' })
-  logout(@Body() dto: LogoutDto) {
-    if (!dto.refreshToken) return { revoked: false };
-    return this.authService.logout(dto.refreshToken).then(() => ({ revoked: true }));
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const token = readRefreshCookie(req);
+    res.clearCookie(REFRESH_COOKIE, refreshCookieOptions());
+    if (token) await this.authService.logout(token);
+    return { revoked: true };
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('register')
+  async register(@Body() dto: RegistrationDto, @Req() req: Request) {
+    await this.security.limit(dto.mobile, req.ip || 'unknown', 'send');
+    return this.authService.initiateRegistration(dto);
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('register/verify')
+  verifyRegistration(@Body() dto: CustomerOtpDto, @Req() req: Request) {
+    return this.authService.verifyRegistration(
+      dto.mobile,
+      dto.otp,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('customer/password')
+  async customerPassword(@Body() dto: CustomerPasswordDto, @Req() req: Request) {
+    await this.security.limit(dto.mobile, req.ip || 'unknown', 'password');
+    return this.authService.customerPasswordLogin(
+      dto.mobile,
+      dto.password,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('customer/otp/request')
+  async requestCustomerOtp(@Body() dto: MobileDto, @Req() req: Request) {
+    await this.security.limit(dto.mobile, req.ip || 'unknown', 'send');
+    return this.authService.requestCustomerOtp(dto.mobile);
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('customer/otp/verify')
+  verifyCustomerOtp(@Body() dto: CustomerOtpDto, @Req() req: Request) {
+    return this.authService.verifyCustomerOtp(
+      dto.mobile,
+      dto.otp,
+      req.ip,
+      req.headers['user-agent'],
+    );
+  }
+
+  @Public()
+  @Throttle(AUTH_THROTTLE)
+  @Post('password/verify')
+  verifyPasswordReset(@Body() dto: CustomerOtpDto) {
+    return this.authService.verifyPasswordReset(dto.mobile, dto.otp);
   }
 }

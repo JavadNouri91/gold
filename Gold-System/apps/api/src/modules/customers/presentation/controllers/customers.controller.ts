@@ -14,10 +14,18 @@ import {
   UseInterceptors,
   StreamableFile,
   Header,
+  BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { memoryStorage } from 'multer';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiConsumes, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiConsumes,
+  ApiBody,
+} from '@nestjs/swagger';
 import { Request } from 'express';
 import { CustomersService } from '../../application/customers.service';
 import { CustomerBankAccountsService } from '../../application/customer-bank-accounts.service';
@@ -33,7 +41,6 @@ import { CreateCustomerNoteDto } from '../../application/dto/customer-note.dto';
 import { ImportCustomersDto } from '../../application/dto/import-customers.dto';
 import { BulkSmsDto } from '../../application/dto/bulk-sms.dto';
 import { MAX_AVATAR_BYTES } from '../../domain/avatar-file';
-import { Public } from '../../../../common/decorators/public.decorator';
 import { RequirePermissions } from '../../../../common/decorators/permissions.decorator';
 import { CurrentUser } from '../../../../common/decorators/current-user.decorator';
 import { CurrentUserData } from '../../../../common/decorators/current-user.decorator';
@@ -48,10 +55,11 @@ export class CustomersController {
   ) {}
 
   // ----------------------------------------------------------------
-  // UC-01: Public registration
+  // Staff creation. Public self-registration uses the verified auth flow.
   // ----------------------------------------------------------------
   @Post('registration')
-  @Public()
+  @ApiBearerAuth()
+  @RequirePermissions('customer.group.assign')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'UC-01: Register a new customer' })
   @ApiResponse({ status: 201, description: 'Customer registered successfully' })
@@ -94,11 +102,7 @@ export class CustomersController {
   @RequirePermissions('customer.group.assign')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send an SMS to up to 50 selected customers' })
-  sendBulkSms(
-    @Body() dto: BulkSmsDto,
-    @CurrentUser() user: CurrentUserData,
-    @Req() req: Request,
-  ) {
+  sendBulkSms(@Body() dto: BulkSmsDto, @CurrentUser() user: CurrentUserData, @Req() req: Request) {
     return this.directory.sendBulkSms(dto, user.userId, req.ip ?? undefined);
   }
 
@@ -194,7 +198,21 @@ export class CustomersController {
     @Body() dto: CreateOwnBankAccountDto,
     @Req() req: Request,
   ) {
-    return this.bankAccounts.createMine(user.userId, dto.iban, req.ip ?? undefined);
+    return this.bankAccounts.createMine(user.userId, dto, req.ip ?? undefined);
+  }
+
+  @Patch('me/bank-accounts/:id/default')
+  @ApiBearerAuth()
+  setDefaultMyBankAccount(@CurrentUser() user: CurrentUserData, @Param('id') id: string) {
+    return this.bankAccounts.setDefault(user.userId, id);
+  }
+
+  @Patch(':id/bank-account-review')
+  @ApiBearerAuth()
+  @RequirePermissions('customer.group.assign')
+  reviewBankAccount(@Param('id') id: string, @Body() body: { status: 'VERIFIED' | 'REJECTED' }, @CurrentUser() user: CurrentUserData, @Req() req: Request) {
+    if (!['VERIFIED', 'REJECTED'].includes(body.status)) throw new BadRequestException('Invalid bank account review status');
+    return this.bankAccounts.review(id, body.status, user.userId, req.ip ?? undefined);
   }
 
   @Delete('me/bank-accounts/:id')

@@ -72,7 +72,7 @@ export class RegisterCustomerDto {
   address?: string;
 
   @ApiPropertyOptional({
-    description: 'Portal password. Defaults to national ID when omitted.',
+    description: 'Portal password. When omitted, use verified SMS password recovery.',
     example: '0012345678',
     minLength: 8,
   })
@@ -99,7 +99,10 @@ export class RegisterCustomerDto {
   @Matches(/^\d{10}$/, { message: 'postalCode must be exactly 10 digits' })
   postalCode?: string;
 
-  @ApiPropertyOptional({ description: 'Landline phone — exactly 11 digits', example: '02112345678' })
+  @ApiPropertyOptional({
+    description: 'Landline phone — exactly 11 digits',
+    example: '02112345678',
+  })
   @LatinDigits()
   @IsOptional()
   @IsString()

@@ -14,7 +14,7 @@ import {
   Wallet,
 } from 'lucide-react';
 import Link from 'next/link';
-import { customerApi, ordersApi, pricingApi, type Order } from '@/lib/api';
+import { customerApi, kycApi, ordersApi, pricingApi, type Order } from '@/lib/api';
 import {
   compareDecimal,
   floorDivide,
@@ -43,12 +43,7 @@ import { OrderRemainingSteps } from '@/components/portal/order-remaining-steps';
 import { PrintButton } from '@/components/portal/print-button';
 import { readAvailableCredit } from '@/lib/credit-view';
 import { purchaseErrorMessage } from './purchase-errors';
-import {
-  DEFAULT_PURITY,
-  QUICK_WEIGHTS,
-  TRADING_PURITIES,
-  purityLabel,
-} from './trading-purities';
+import { DEFAULT_PURITY, QUICK_WEIGHTS, TRADING_PURITIES, purityLabel } from './trading-purities';
 import { quickTomanStepsFromRial } from './quick-toman-steps';
 import {
   canonicalWeight,
@@ -79,6 +74,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   const { mutate } = useSWRConfig();
   const selling = side === 'sell';
   const [weight, setWeight] = useState('');
+  const [inputMode, setInputMode] = useState<'weight' | 'amount'>('weight');
   const purity = DEFAULT_PURITY;
   const [quote, setQuote] = useState<HeldQuote | null>(null);
   const [accepted, setAccepted] = useState(false);
@@ -93,6 +89,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   const calcSeq = useRef(0);
   const skipAuto = useRef<string | null>(null);
   const [allInWeight, setAllInWeight] = useState<string | null>(null);
+  const [maxAffordableWeight, setMaxAffordableWeight] = useState<string | null>(null);
   const [pricingAll, setPricingAll] = useState(false);
   const [selectedQuickRial, setSelectedQuickRial] = useState<string | null>(null);
   /** Latin whole-toman digits for the buy amount field. */
@@ -115,8 +112,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   }, [countdownActive]);
 
   const grams = canonicalWeight(weight);
-  const inputsMatch =
-    quote != null && grams === quote.weightGrams && purity === quote.purityRatio;
+  const inputsMatch = quote != null && grams === quote.weightGrams && purity === quote.purityRatio;
   const liveSnapshot = price.data?.snapshotId;
   const priceMoved = Boolean(quote && liveSnapshot && liveSnapshot !== quote.view.snapshotId);
   const countdown = formatCountdown(quote?.expiresAt, now);
@@ -126,6 +122,8 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
   const tradingReady =
     customer.data?.status === 'ACTIVE' &&
     (customer.data.accountStatus == null || customer.data.accountStatus === 'ACTIVE');
+  const { data: kycOverview } = useSWR('kyc/me', () => kycApi.getMine());
+  const kycPending = kycOverview?.phase === 'SUBMITTED' || kycOverview?.phase === 'UNDER_REVIEW';
   const kycBlocked = customer.data != null && !tradingReady;
   const accountBlocked = tradingReady && account.data != null && account.data.status !== 'ACTIVE';
 
@@ -321,6 +319,29 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
     return { grams: nextGrams, view };
   }
 
+  useEffect(() => {
+    if (selling || !available || isZeroDecimal(available) || !price.data?.snapshotId) {
+      setMaxAffordableWeight(null);
+      return;
+    }
+    const seq = calcSeq.current;
+    let cancelled = false;
+    void weightForTargetRial(available, seq, {
+      emptyMessage: 'موجودی برای خرید حداقل وزن مجاز کافی نیست.',
+    })
+      .then((result) => {
+        if (!cancelled && seq === calcSeq.current) setMaxAffordableWeight(result?.grams ?? null);
+      })
+      .catch(() => {
+        if (!cancelled) setMaxAffordableWeight(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // This display-only estimate is recalculated when the wallet or executable price changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [available, selling, liveSnapshot, customer.data?.type]);
+
   async function spendAllRial() {
     if (!available || isZeroDecimal(available) || kycBlocked || accountBlocked) return;
     amountDrive.current = false;
@@ -359,10 +380,7 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
     }
   }
 
-  async function applyQuickRial(
-    targetRial: string,
-    options?: { fromAmountField?: boolean },
-  ) {
+  async function applyQuickRial(targetRial: string, options?: { fromAmountField?: boolean }) {
     if (kycBlocked || accountBlocked) return;
     if (selling && !sellableGrams) return;
     if (!options?.fromAmountField) amountDrive.current = false;
@@ -488,50 +506,33 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
         سامانه طلا — {selling ? 'پیش‌فاکتور فروش' : 'پیش‌فاکتور خرید'}
       </p>
       <TradeSideTabs side={side} />
-      <LivePriceCard
-        loading={price.isLoading && !price.data}
-        error={Boolean(price.error) || (price.data != null && price.data.validityStatus !== 'VALID')}
-        value={price.data?.normalizedValue}
-        capturedAt={price.data?.capturedAt}
-        now={now}
-        refreshing={price.isValidating}
-        onRefresh={() => void price.mutate()}
-        selling={selling}
-        availableRial={available}
-        sellableGrams={sellableGrams}
-        sellMaxRial={sellMaxRial}
-      />
-
       {error ? (
-        <p role="alert" className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#DC2626] print:hidden">
+        <p
+          role="alert"
+          className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-[#DC2626] print:hidden"
+        >
           {error}
         </p>
       ) : null}
 
-      {kycBlocked ? <KycBlock /> : null}
+      {kycBlocked ? <KycBlock pending={kycPending} /> : null}
       {accountBlocked ? <AccountBlock /> : null}
 
-      <div className="mt-4 grid grid-cols-1 items-start gap-4 print:mt-0 print:grid-cols-1 lg:grid-cols-2">
-        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm print:hidden md:p-6">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-bold text-gray-900">
-                {selling ? 'مشخصات فروش' : 'مشخصات خرید'}
-              </h2>
-              <p className="mt-1 text-xs leading-6 text-gray-500">
-                {selling
-                  ? 'وزن یا مبلغ فروش را وارد کنید؛ نوار لغزان موجودی طلا را کم و زیاد می‌کند.'
-                  : 'وزن یا مبلغ خرید را وارد کنید؛ محاسبه به‌صورت زنده انجام می‌شود.'}
-              </p>
-            </div>
-            <span
-              className={cn(
-                'inline-flex h-9 items-center rounded-full px-3 text-xs font-semibold',
-                selling ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800',
-              )}
-            >
-              {purityLabel(DEFAULT_PURITY)}
-            </span>
+      <div className="mt-4 grid grid-cols-1 items-start gap-4 print:mt-0 print:grid-cols-1 lg:grid-cols-[1.5fr_1fr]">
+        <section className="min-w-0 rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 print:hidden md:p-6">
+          <div className="mt-1">
+            <LivePriceCard
+              loading={price.isLoading && !price.data}
+              error={
+                Boolean(price.error) ||
+                (price.data != null && price.data.validityStatus !== 'VALID')
+              }
+              value={price.data?.normalizedValue}
+              capturedAt={price.data?.capturedAt}
+              now={now}
+              refreshing={price.isValidating}
+              onRefresh={() => void price.mutate()}
+            />
           </div>
 
           <div className="mt-5 space-y-5">
@@ -552,152 +553,242 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
 
             {selling && !sellableGrams ? null : (
               <>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <div>
-                    <label
-                      htmlFor={selling ? 'sell-weight' : 'buy-weight'}
-                      className="text-sm font-medium text-gray-900"
-                    >
-                      وزن طلا (گرم)
-                    </label>
-                    <div className="mt-1.5 flex h-12 items-center gap-1 rounded-2xl border border-gray-100 bg-white px-1.5 focus-within:ring-2 focus-within:ring-amber-400">
-                      <button
-                        type="button"
-                        aria-label="کاهش وزن"
-                        disabled={kycBlocked || accountBlocked || !isPositiveWeight(grams)}
-                        onClick={() => {
-                          amountDrive.current = false;
-                          setAllInWeight(null);
-                          setSelectedQuickRial(null);
-                          const next = decreaseWeightByGram(grams || '0');
-                          setWeight(next ?? '');
-                          setAccepted(false);
-                        }}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-50 disabled:opacity-40"
-                      >
-                        <Minus className="h-4 w-4" aria-hidden />
-                      </button>
-                      <input
-                        id={selling ? 'sell-weight' : 'buy-weight'}
-                        inputMode="decimal"
-                        autoComplete="off"
-                        enterKeyHint="done"
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-[12rem_minmax(0,1fr)] sm:items-start">
+                  {available != null || (selling && holding.data != null) ? (
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-3 text-sm dark:border-emerald-900 dark:bg-emerald-950/40">
+                      <div className="flex items-center gap-2 font-semibold text-emerald-800 dark:text-emerald-300">
+                        <Wallet className="h-4 w-4" aria-hidden />
+                        {selling ? 'موجودی قابل فروش' : 'موجودی شما'}
+                      </div>
+                      <p
+                        className="mt-2 font-bold text-emerald-900 dark:text-emerald-200"
                         dir="ltr"
-                        value={weight ? toPersianDigits(weight) : ''}
-                        placeholder="مثال: ۵"
-                        onChange={(event) => {
-                          const next = normalizeWeightInput(event.target.value);
-                          const nextGrams = canonicalWeight(next);
-                          amountDrive.current = false;
-                          setAllInWeight(null);
-                          setSelectedQuickRial(null);
-                          if (
-                            selling &&
-                            sellableGrams &&
-                            isPositiveWeight(nextGrams) &&
-                            compareDecimal(nextGrams, sellableGrams) > 0
-                          ) {
-                            setWeight(sellableGrams);
-                          } else {
-                            setWeight(next);
-                          }
-                          setAccepted(false);
-                        }}
-                        className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-gray-900 outline-none"
-                      />
+                      >
+                        {selling
+                          ? `${formatWeight(sellableGrams ?? '0')} گرم`
+                          : formatWholeToman(available)}
+                      </p>
+                      {!selling ? (
+                        <>
+                          <div className="my-2 border-t border-emerald-200/70 dark:border-emerald-800" />
+                          <p className="text-xs text-emerald-800/80 dark:text-emerald-300/80">
+                            حداکثر قابل خرید
+                          </p>
+                          <p className="mt-1 font-bold text-emerald-900 dark:text-emerald-200">
+                            {maxAffordableWeight
+                              ? `${formatWeight(maxAffordableWeight)} گرم`
+                              : isZeroDecimal(available ?? '0')
+                                ? '۰ گرم'
+                                : 'در حال محاسبه…'}
+                          </p>
+                          <button
+                            type="button"
+                            disabled={
+                              !maxAffordableWeight || pricingAll || kycBlocked || accountBlocked
+                            }
+                            onClick={() => void spendAllRial()}
+                            className="mt-2 h-9 rounded-lg border border-emerald-200 px-3 text-xs font-semibold text-emerald-800 disabled:opacity-40 dark:border-emerald-800 dark:text-emerald-300"
+                          >
+                            خرید با همه دارایی ریالی
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={pricingAll || kycBlocked || accountBlocked}
+                          onClick={sellAllGold}
+                          className="mt-2 h-9 rounded-lg border border-emerald-200 px-3 text-xs font-semibold text-emerald-800 disabled:opacity-40 dark:border-emerald-800 dark:text-emerald-300"
+                        >
+                          فروش همه طلای موجود
+                        </button>
+                      )}
+                    </div>
+                  ) : null}
+                  <div className="min-w-0">
+                    <div
+                      className="grid min-w-0 grid-cols-2 rounded-xl bg-gray-100 p-0.5 dark:bg-slate-800"
+                      role="group"
+                      aria-label="حالت ورود سفارش"
+                    >
                       <button
                         type="button"
-                        aria-label="افزایش وزن"
-                        disabled={
-                          kycBlocked ||
-                          accountBlocked ||
-                          (selling &&
-                            sellableGrams != null &&
-                            isPositiveWeight(grams) &&
-                            compareDecimal(grams, sellableGrams) >= 0)
-                        }
-                        onClick={() => {
-                          amountDrive.current = false;
-                          setAllInWeight(null);
-                          setSelectedQuickRial(null);
-                          const bumped = increaseWeightByGram(grams || '0');
-                          if (
-                            selling &&
-                            sellableGrams &&
-                            compareDecimal(bumped, sellableGrams) > 0
-                          ) {
-                            setWeight(sellableGrams);
-                          } else {
-                            setWeight(bumped);
-                          }
-                          setAccepted(false);
-                        }}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                        aria-pressed={inputMode === 'weight'}
+                        onClick={() => setInputMode('weight')}
+                        className={cn(
+                          'h-9 rounded-lg px-1.5 text-xs font-semibold transition-colors',
+                          inputMode === 'weight'
+                            ? 'bg-white text-emerald-800 shadow-sm dark:bg-slate-700 dark:text-emerald-300'
+                            : 'text-gray-600 dark:text-slate-300',
+                        )}
                       >
-                        <Plus className="h-4 w-4" aria-hidden />
+                        بر اساس وزن (گرم)
+                      </button>
+                      <button
+                        type="button"
+                        aria-pressed={inputMode === 'amount'}
+                        onClick={() => setInputMode('amount')}
+                        className={cn(
+                          'h-9 rounded-lg px-1.5 text-xs font-semibold transition-colors',
+                          inputMode === 'amount'
+                            ? 'bg-white text-emerald-800 shadow-sm dark:bg-slate-700 dark:text-emerald-300'
+                            : 'text-gray-600 dark:text-slate-300',
+                        )}
+                      >
+                        بر اساس مبلغ (تومان)
                       </button>
                     </div>
-                    {weight && !isPositiveWeight(weight) ? (
-                      <p className="mt-1 text-xs text-red-600">وزن باید عددی بزرگ‌تر از صفر باشد.</p>
-                    ) : null}
-                    {selling && sellableGrams ? (
-                      <p className="mt-1 text-xs text-gray-500">حداکثر {formatWeight(sellableGrams)}</p>
-                    ) : null}
-                  </div>
-                  <div>
-                    <label
-                      htmlFor={selling ? 'sell-amount' : 'buy-amount'}
-                      className="text-sm font-medium text-gray-900"
-                    >
-                      مبلغ (تومان)
-                    </label>
-                    <div className="mt-1.5 flex h-12 items-center gap-1.5 rounded-2xl border border-gray-100 bg-white px-3 focus-within:ring-2 focus-within:ring-amber-400">
-                      <input
-                        id={selling ? 'sell-amount' : 'buy-amount'}
-                        inputMode="numeric"
-                        autoComplete="off"
-                        enterKeyHint="done"
-                        dir="ltr"
-                        value={tomanDraft ? formatGroupedPersianInteger(tomanDraft) : ''}
-                        placeholder="مثال: ۲۰,۰۰۰,۰۰۰"
-                        onChange={(event) => {
-                          amountDrive.current = true;
-                          setAllInWeight(null);
-                          setSelectedQuickRial(null);
-                          setTomanDraft(toLatinDigits(event.target.value).replace(/\D/g, ''));
-                          setAccepted(false);
-                        }}
-                        className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-gray-900 outline-none"
-                      />
-                      <button
-                        type="button"
-                        aria-label={selling ? 'فروش همه طلای موجود' : 'خرید با همه دارایی ریالی'}
-                        aria-pressed={allInWeight != null && grams === allInWeight}
-                        title={selling ? 'فروش همه طلای موجود' : 'خرید با همه دارایی ریالی'}
-                        disabled={
-                          pricingAll ||
-                          kycBlocked ||
-                          accountBlocked ||
-                          (selling
-                            ? !sellableGrams
-                            : !available || isZeroDecimal(available))
-                        }
-                        onClick={() => (selling ? sellAllGold() : void spendAllRial())}
-                        className={cn(
-                          'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border disabled:opacity-40',
-                          allInWeight != null && grams === allInWeight
-                            ? selling
-                              ? 'border-rose-600 bg-rose-50 text-rose-800'
-                              : 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                            : 'border-gray-100 text-gray-700',
-                        )}
-                      >
-                        {selling ? (
-                          <Coins className="h-4 w-4" aria-hidden />
-                        ) : (
-                          <Wallet className="h-4 w-4" aria-hidden />
-                        )}
-                      </button>
+                    <div className="mt-4 grid grid-cols-1 gap-3">
+                      <div className={inputMode === 'weight' ? '' : 'hidden'}>
+                        <label
+                          htmlFor={selling ? 'sell-weight' : 'buy-weight'}
+                          className="text-sm font-medium text-gray-900"
+                        >
+                          وزن طلا (گرم)
+                        </label>
+                        <div className="mt-1.5 flex h-12 items-center gap-1 rounded-2xl border border-gray-200 bg-white px-1.5 focus-within:ring-2 focus-within:ring-amber-400 dark:border-slate-700 dark:bg-slate-950">
+                          <button
+                            type="button"
+                            aria-label="کاهش وزن"
+                            disabled={kycBlocked || accountBlocked || !isPositiveWeight(grams)}
+                            onClick={() => {
+                              amountDrive.current = false;
+                              setAllInWeight(null);
+                              setSelectedQuickRial(null);
+                              const next = decreaseWeightByGram(grams || '0');
+                              setWeight(next ?? '');
+                              setAccepted(false);
+                            }}
+                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                          >
+                            <Minus className="h-4 w-4" aria-hidden />
+                          </button>
+                          <input
+                            id={selling ? 'sell-weight' : 'buy-weight'}
+                            inputMode="decimal"
+                            autoComplete="off"
+                            enterKeyHint="done"
+                            dir="ltr"
+                            value={weight ? toPersianDigits(weight) : ''}
+                            placeholder="مثال: ۵"
+                            onChange={(event) => {
+                              const next = normalizeWeightInput(event.target.value);
+                              const nextGrams = canonicalWeight(next);
+                              amountDrive.current = false;
+                              setAllInWeight(null);
+                              setSelectedQuickRial(null);
+                              if (
+                                selling &&
+                                sellableGrams &&
+                                isPositiveWeight(nextGrams) &&
+                                compareDecimal(nextGrams, sellableGrams) > 0
+                              ) {
+                                setWeight(sellableGrams);
+                              } else {
+                                setWeight(next);
+                              }
+                              setAccepted(false);
+                            }}
+                            className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-gray-900 outline-none"
+                          />
+                          <button
+                            type="button"
+                            aria-label="افزایش وزن"
+                            disabled={
+                              kycBlocked ||
+                              accountBlocked ||
+                              (selling &&
+                                sellableGrams != null &&
+                                isPositiveWeight(grams) &&
+                                compareDecimal(grams, sellableGrams) >= 0)
+                            }
+                            onClick={() => {
+                              amountDrive.current = false;
+                              setAllInWeight(null);
+                              setSelectedQuickRial(null);
+                              const bumped = increaseWeightByGram(grams || '0');
+                              if (
+                                selling &&
+                                sellableGrams &&
+                                compareDecimal(bumped, sellableGrams) > 0
+                              ) {
+                                setWeight(sellableGrams);
+                              } else {
+                                setWeight(bumped);
+                              }
+                              setAccepted(false);
+                            }}
+                            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+                          >
+                            <Plus className="h-4 w-4" aria-hidden />
+                          </button>
+                        </div>
+                        {weight && !isPositiveWeight(weight) ? (
+                          <p className="mt-1 text-xs text-red-600">
+                            وزن باید عددی بزرگ‌تر از صفر باشد.
+                          </p>
+                        ) : null}
+                        {selling && sellableGrams ? (
+                          <p className="mt-1 text-xs text-gray-500">
+                            حداکثر {formatWeight(sellableGrams)}
+                          </p>
+                        ) : null}
+                      </div>
+                      <div className={inputMode === 'amount' ? '' : 'hidden'}>
+                        <label
+                          htmlFor={selling ? 'sell-amount' : 'buy-amount'}
+                          className="text-sm font-medium text-gray-900"
+                        >
+                          مبلغ (تومان)
+                        </label>
+                        <div className="mt-1.5 flex h-12 items-center gap-1.5 rounded-2xl border border-gray-200 bg-white px-3 focus-within:ring-2 focus-within:ring-amber-400 dark:border-slate-700 dark:bg-slate-950">
+                          <input
+                            id={selling ? 'sell-amount' : 'buy-amount'}
+                            inputMode="numeric"
+                            autoComplete="off"
+                            enterKeyHint="done"
+                            dir="ltr"
+                            value={tomanDraft ? formatGroupedPersianInteger(tomanDraft) : ''}
+                            placeholder="مثال: ۲۰,۰۰۰,۰۰۰"
+                            onChange={(event) => {
+                              amountDrive.current = true;
+                              setAllInWeight(null);
+                              setSelectedQuickRial(null);
+                              setTomanDraft(toLatinDigits(event.target.value).replace(/\D/g, ''));
+                              setAccepted(false);
+                            }}
+                            className="h-full min-w-0 flex-1 bg-transparent text-center text-base text-gray-900 outline-none"
+                          />
+                          <button
+                            type="button"
+                            aria-label={
+                              selling ? 'فروش همه طلای موجود' : 'خرید با همه دارایی ریالی'
+                            }
+                            aria-pressed={allInWeight != null && grams === allInWeight}
+                            title={selling ? 'فروش همه طلای موجود' : 'خرید با همه دارایی ریالی'}
+                            disabled={
+                              pricingAll ||
+                              kycBlocked ||
+                              accountBlocked ||
+                              (selling ? !sellableGrams : !available || isZeroDecimal(available))
+                            }
+                            onClick={() => (selling ? sellAllGold() : void spendAllRial())}
+                            className={cn(
+                              'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border disabled:opacity-40',
+                              allInWeight != null && grams === allInWeight
+                                ? selling
+                                  ? 'border-rose-600 bg-rose-50 text-rose-800'
+                                  : 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                : 'border-gray-100 text-gray-700',
+                            )}
+                          >
+                            {selling ? (
+                              <Coins className="h-4 w-4" aria-hidden />
+                            ) : (
+                              <Wallet className="h-4 w-4" aria-hidden />
+                            )}
+                          </button>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -711,6 +802,10 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
                     weightLabel={isPositiveWeight(grams) ? grams : null}
                     disabled={pricingAll || kycBlocked || accountBlocked}
                     onChange={(next) => {
+                      if (!selling && next >= availableTomanMax && available) {
+                        void spendAllRial();
+                        return;
+                      }
                       amountDrive.current = true;
                       setAllInWeight(null);
                       setSelectedQuickRial(null);
@@ -720,45 +815,58 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
                   />
                 ) : null}
 
-                <div className="min-w-0">
-                  <p className="text-sm font-medium text-gray-900">مقدار سریع</p>
-                  <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
-                    {QUICK_WEIGHTS.map((value) => {
-                      const selected = grams === value;
-                      const overHolding =
-                        selling &&
-                        sellableGrams != null &&
-                        compareDecimal(value, sellableGrams) > 0;
-                      return (
-                        <button
-                          key={value}
-                          type="button"
-                          aria-pressed={selected}
-                          disabled={overHolding || kycBlocked || accountBlocked}
-                          onClick={() => {
-                            amountDrive.current = false;
-                            setAllInWeight(null);
-                            setSelectedQuickRial(null);
-                            setWeight(value);
-                            setAccepted(false);
-                          }}
-                          className={cn(
-                            'h-11 shrink-0 rounded-full border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
-                            selected
-                              ? selling
-                                ? 'border-rose-600 bg-rose-50 text-rose-800'
-                                : 'border-emerald-600 bg-emerald-50 text-emerald-800'
-                              : 'border-gray-100 bg-white text-gray-900',
-                          )}
-                        >
-                          {toPersianDigits(value)} گرم
-                        </button>
-                      );
-                    })}
+                {inputMode === 'weight' ? (
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-gray-900">مقدار سریع</p>
+                    <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
+                      {QUICK_WEIGHTS.map((value) => {
+                        const selected = grams === value;
+                        const overHolding =
+                          selling &&
+                          sellableGrams != null &&
+                          compareDecimal(value, sellableGrams) > 0;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            aria-pressed={selected}
+                            disabled={overHolding || kycBlocked || accountBlocked}
+                            onClick={() => {
+                              amountDrive.current = false;
+                              setAllInWeight(null);
+                              setSelectedQuickRial(null);
+                              setWeight(value);
+                              setAccepted(false);
+                            }}
+                            className={cn(
+                              'h-11 shrink-0 rounded-full border px-4 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50',
+                              selected
+                                ? selling
+                                  ? 'border-rose-600 bg-rose-50 text-rose-800'
+                                  : 'border-emerald-600 bg-emerald-50 text-emerald-800'
+                                : 'border-gray-100 bg-white text-gray-900',
+                            )}
+                          >
+                            {toPersianDigits(value)} گرم
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
-                {quickAmounts.length > 0 ? (
+                {!selling && activeQuote && !calculating && creditShort && shortfall ? (
+                  <div
+                    role="alert"
+                    className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+                  >
+                    <p className="font-bold">موجودی تومان کافی نیست.</p>
+                    <p className="mt-1">ارزش این وزن از دارایی ریالی شما بیشتر است.</p>
+                    <p className="mt-1">کمبود: {formatWholeToman(shortfall)}</p>
+                  </div>
+                ) : null}
+
+                {inputMode === 'amount' && quickAmounts.length > 0 ? (
                   <div className="min-w-0">
                     <p className="text-sm font-medium text-gray-900">مبلغ سریع (تومان)</p>
                     <div className="mt-2 flex gap-2 overflow-x-auto pb-1">
@@ -823,20 +931,17 @@ export function BuyGoldPage({ side = 'buy' }: { side?: TradeSide }) {
             />
           ) : null}
 
-          {activeQuote && !calculating && creditShort && shortfall ? (
-            <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm print:hidden">
-              <p className="font-medium">ارزش این وزن از دارایی ریالی شما بیشتر است.</p>
-              <p className="mt-1">کمبود: {formatWholeToman(shortfall)}</p>
-              <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-amber-700">
-                مشاهده دارایی ریالی
-              </Link>
-            </div>
-          ) : null}
           {activeQuote && !calculating && goldShort && goldShortfall ? (
-            <div role="alert" className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm print:hidden">
+            <div
+              role="alert"
+              className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600 shadow-sm print:hidden"
+            >
               <p className="font-medium">وزن انتخاب‌شده از موجودی طلای شما بیشتر است.</p>
               <p className="mt-1">کمبود: {formatWeight(goldShortfall)}</p>
-              <Link href="/portal/assets" className="mt-2 inline-flex h-11 items-center font-medium text-amber-700">
+              <Link
+                href="/portal/assets"
+                className="mt-2 inline-flex h-11 items-center font-medium text-amber-700"
+              >
                 مشاهده دارایی طلا
               </Link>
             </div>
@@ -898,7 +1003,9 @@ function weightToMilli(value: string): number | null {
 function milliToWeight(milli: number): string {
   if (milli <= 0) return '0';
   const whole = Math.floor(milli / 1000);
-  const rem = String(milli % 1000).padStart(3, '0').replace(/0+$/, '');
+  const rem = String(milli % 1000)
+    .padStart(3, '0')
+    .replace(/0+$/, '');
   return rem ? `${whole}.${rem}` : String(whole);
 }
 
@@ -953,14 +1060,14 @@ function BalanceSlider({
           </span>
         </p>
       </div>
-      <div className="relative mt-4">
+      <div className="relative mt-7 px-2">
         {weightLabel ? (
           <div
             className={cn(
-              'pointer-events-none absolute -top-7 -translate-x-1/2 rounded-full px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm',
+              'pointer-events-none absolute -top-7 max-w-[40%] -translate-x-1/2 truncate rounded-full px-2 py-0.5 text-[11px] font-semibold text-white shadow-sm',
               selling ? 'bg-rose-600' : 'bg-emerald-600',
             )}
-            style={{ left: `${percent}%` }}
+            style={{ left: `clamp(20%, ${percent}%, 80%)` }}
             dir="ltr"
           >
             {formatWeight(weightLabel)}
@@ -976,7 +1083,21 @@ function BalanceSlider({
           disabled={disabled}
           dir="ltr"
           aria-valuetext={`${percent} درصد`}
-          onChange={(event) => onChange(Number(event.target.value) || 0)}
+          onChange={(event) => {
+            const next = Number(event.target.value) || 0;
+            const nextPercent = max > 0 ? (next / max) * 100 : 0;
+            const nearestMark = marks.reduce(
+              (nearest, mark) =>
+                Math.abs(mark - nextPercent) < Math.abs(nearest - nextPercent) ? mark : nearest,
+              marks[0]!,
+            );
+            const snapThreshold = Math.max(2, (sliderStep(max) / max) * 100);
+            const snapped =
+              Math.abs(nearestMark - nextPercent) <= snapThreshold
+                ? Math.round((max * nearestMark) / 100)
+                : next;
+            onChange(snapped);
+          }}
           className={cn(
             'h-2 w-full cursor-pointer disabled:cursor-not-allowed disabled:opacity-50',
             selling ? 'accent-rose-600' : 'accent-emerald-600',
@@ -992,7 +1113,10 @@ function BalanceSlider({
   );
 }
 
-function feeLines(view: PricingView, selling?: boolean): { key: string; label: string; value: string }[] {
+function feeLines(
+  view: PricingView,
+  selling?: boolean,
+): { key: string; label: string; value: string }[] {
   if (view.charges.length > 0) {
     return view.charges.map((charge) => ({
       key: `${charge.code}-${charge.side}`,
@@ -1034,8 +1158,7 @@ function InvoiceCard({
   return (
     <section
       className={cn(
-        'rounded-2xl border p-4 shadow-sm print:border-gray-300 print:bg-white md:p-5',
-        selling ? 'border-rose-100 bg-rose-50/40' : 'border-emerald-100 bg-emerald-50/40',
+        'rounded-2xl border border-gray-100 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-900 print:border-gray-300 print:bg-white md:p-5',
       )}
     >
       <div className="flex items-center justify-between gap-3">
@@ -1051,24 +1174,40 @@ function InvoiceCard({
             <Row label="نرخ واحد معامله" value={formatWholeToman(view.unitPricePerGram)} />
             <Row label="وزن خالص سفارش" value={formatWeight(view.weightGrams)} />
           </dl>
-          <div className="mt-4 rounded-2xl bg-white/80 px-4 py-3 ring-1 ring-black/5">
+          <div className="mt-4 rounded-2xl bg-gray-50 px-4 py-3 ring-1 ring-black/5 dark:bg-slate-800">
             <dl className="text-sm">
               <Row label="مبلغ طلا" value={formatWholeToman(view.goldCommercialRial)} />
               {feeLines(view, selling).map((line) => (
                 <Row key={line.key} label={line.label} value={line.value} />
               ))}
-              {view.wageAmount ? <Row label="اجرت" value={formatWholeToman(view.wageAmount)} /> : null}
-              {view.taxAmount ? <Row label="مالیات" value={formatWholeToman(view.taxAmount)} /> : null}
+              {view.wageAmount ? (
+                <Row label="اجرت" value={formatWholeToman(view.wageAmount)} />
+              ) : null}
+              {view.taxAmount ? (
+                <Row label="مالیات" value={formatWholeToman(view.taxAmount)} />
+              ) : null}
             </dl>
-            <div className="mt-2 border-t border-black/5 pt-2">
+            <div className="mt-2 border-t border-black/5 pt-3">
               <p className="text-xs text-gray-500">
                 {selling ? 'مبلغ قابل دریافت' : 'مبلغ قابل پرداخت'}
               </p>
-              <p className="mt-1 text-left text-2xl font-bold text-gray-900 md:text-3xl" dir="ltr">
+              <p
+                className="mt-1 rounded-xl bg-emerald-50 px-3 py-3 text-left text-2xl font-bold text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 md:text-3xl"
+                dir="ltr"
+              >
                 {formatWholeToman(view.customerTotalRial)}
               </p>
             </div>
           </div>
+          {!selling ? (
+            <div className="mt-3 flex items-start gap-2 rounded-xl bg-gray-50 px-3 py-2.5 text-xs leading-6 text-gray-600 dark:bg-slate-800 dark:text-slate-300">
+              <ShieldAlert className="mt-1 h-4 w-4 shrink-0 text-emerald-600" aria-hidden />
+              <span>
+                مبلغ خرید از کیف پول کسر می‌شود و طلای خریداری‌شده پس از تأیید مدیر به کیف پول طلا
+                افزوده خواهد شد.
+              </span>
+            </div>
+          ) : null}
         </>
       ) : (
         <p className="mt-4 text-sm leading-7 text-gray-500">
@@ -1078,22 +1217,23 @@ function InvoiceCard({
       <label className="mt-4 flex items-start gap-3 text-sm leading-6 text-gray-900 print:hidden">
         <input
           type="checkbox"
-          className={cn('mt-1 h-5 w-5 shrink-0', selling ? 'accent-rose-600' : 'accent-emerald-600')}
+          className={cn(
+            'mt-1 h-5 w-5 shrink-0',
+            selling ? 'accent-rose-600' : 'accent-emerald-600',
+          )}
           checked={accepted}
           disabled={checkboxDisabled}
           onChange={(event) => onAcceptedChange(event.target.checked)}
         />
         <span>
-          قیمت نمایش داده شده و جزئیات سفارش را بررسی کرده‌ام و ثبت سفارش به منزله پذیرش قیمت قطعی است.
+          قیمت و جزئیات سفارش را بررسی کرده‌ام؛ قیمت اجرایی هنگام ثبت سفارش دوباره بررسی می‌شود.
         </span>
       </label>
       <Button
         type="button"
         className={cn(
           'mt-4 h-12 w-full gap-2 text-white disabled:opacity-50 print:hidden',
-          selling
-            ? 'bg-rose-600 hover:bg-rose-700'
-            : 'bg-emerald-600 hover:bg-emerald-700',
+          selling ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700',
         )}
         disabled={!canConfirm}
         onClick={onConfirm}
@@ -1107,7 +1247,11 @@ function InvoiceCard({
 
 function TradeSideTabs({ side }: { side: TradeSide }) {
   return (
-    <div className="mb-4 grid grid-cols-2 gap-2 print:hidden" role="tablist" aria-label="نوع معامله">
+    <div
+      className="mb-4 grid grid-cols-2 gap-2 print:hidden"
+      role="tablist"
+      aria-label="نوع معامله"
+    >
       <Link
         href="/portal/orders/new?side=buy"
         role="tab"
@@ -1148,10 +1292,6 @@ function LivePriceCard({
   now,
   refreshing,
   onRefresh,
-  selling,
-  availableRial,
-  sellableGrams,
-  sellMaxRial,
 }: {
   loading: boolean;
   error: boolean;
@@ -1160,10 +1300,6 @@ function LivePriceCard({
   now: number;
   refreshing: boolean;
   onRefresh: () => void;
-  selling: boolean;
-  availableRial?: string;
-  sellableGrams?: string | null;
-  sellMaxRial?: string | null;
 }) {
   return (
     <section className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm print:border-gray-300 print:bg-white md:p-6">
@@ -1199,40 +1335,17 @@ function LivePriceCard({
           آخرین بروزرسانی: {formatRelativeTime(capturedAt, now)}
         </p>
       ) : null}
-      {!loading && !error ? (
-        <div
-          className={cn(
-            'mt-4 rounded-xl px-3 py-2.5 text-sm print:hidden',
-            selling ? 'bg-rose-50 text-rose-900' : 'bg-emerald-50 text-emerald-900',
-          )}
-        >
-          {selling ? (
-            sellableGrams ? (
-              <p>
-                <span className="font-medium">موجودی طلا:</span>{' '}
-                <span dir="ltr">{formatWeight(sellableGrams)}</span>
-                {sellMaxRial && !isZeroDecimal(sellMaxRial) ? (
-                  <span className="text-rose-700/80">
-                    {' '}
-                    (معادل {formatWholeToman(sellMaxRial)})
-                  </span>
-                ) : null}
-              </p>
-            ) : (
-              <p>موجودی طلا برای فروش ندارید.</p>
-            )
-          ) : availableRial && !isZeroDecimal(availableRial) ? (
-            <p>
-              <span className="font-medium">توان خرید:</span>{' '}
-              <span dir="ltr">{formatWholeToman(availableRial)}</span>
-            </p>
-          ) : (
-            <p>توان خرید در دسترس نیست.</p>
-          )}
+      {!loading && !error && value ? (
+        <div className="mt-4 rounded-xl bg-emerald-50 px-3 py-2.5 text-sm text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 print:hidden">
+          قیمت لحظه‌ای است و هنگام ثبت سفارش مجدداً بررسی و نهایی می‌شود.
         </div>
       ) : null}
       {error ? (
-        <button type="button" onClick={onRefresh} className="mt-3 h-11 text-sm font-medium text-amber-700 print:hidden">
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="mt-3 h-11 text-sm font-medium text-amber-700 print:hidden"
+        >
           تلاش مجدد
         </button>
       ) : null}
@@ -1291,31 +1404,42 @@ function StatusBanner({
     <section
       className={cn(
         'rounded-2xl border px-4 py-3 print:hidden',
-        danger ? 'border-red-200 bg-red-50 text-[#DC2626]' : 'border-amber-200 bg-amber-50 text-[#92400E]',
+        danger
+          ? 'border-red-200 bg-red-50 text-[#DC2626]'
+          : 'border-amber-200 bg-amber-50 text-[#92400E]',
       )}
     >
       <p className="text-sm font-medium">{title}</p>
-      <button type="button" onClick={onAction} className="mt-2 h-11 text-sm font-bold text-[#C8922E]">
+      <button
+        type="button"
+        onClick={onAction}
+        className="mt-2 h-11 text-sm font-bold text-[#C8922E]"
+      >
         {action}
       </button>
     </section>
   );
 }
 
-
-function KycBlock() {
+function KycBlock({ pending }: { pending: boolean }) {
   return (
     <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#202124] print:hidden">
       <div className="flex items-start gap-3">
         <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[#F59E0B]" />
         <div>
-          <p className="font-bold">احراز هویت تکمیل نشده است.</p>
-          <p className="mt-1 leading-6">برای معامله طلا ابتدا احراز هویت خود را تکمیل کنید.</p>
+          <p className="font-bold">
+            {pending ? 'مدارک شما در انتظار تأیید است.' : 'احراز هویت تکمیل نشده است.'}
+          </p>
+          <p className="mt-1 leading-6">
+            {pending
+              ? 'پس از بررسی مدارک، امکانات مالی فعال می‌شود.'
+              : 'برای استفاده از این امکان، ابتدا احراز هویت خود را تکمیل کنید.'}
+          </p>
           <Link
-            href="/portal/kyc"
+            href="/portal/profile#kyc"
             className="mt-3 inline-flex h-11 items-center justify-center rounded-xl bg-[#F59E0B] px-4 text-sm font-semibold text-white"
           >
-            تکمیل احراز هویت
+            {pending ? 'مشاهده وضعیت بررسی' : 'تکمیل احراز هویت'}
           </Link>
         </div>
       </div>
@@ -1327,7 +1451,10 @@ function AccountBlock() {
   return (
     <section className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-[#202124] print:hidden">
       <p className="font-bold">حساب اعتباری شما برای معامله فعال نیست.</p>
-      <Link href="/portal/credit" className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]">
+      <Link
+        href="/portal/credit"
+        className="mt-2 inline-flex h-11 items-center font-medium text-[#C8922E]"
+      >
         مشاهده اعتبار
       </Link>
     </section>
@@ -1351,7 +1478,10 @@ function PurchaseSuccess({
       <p className="mb-4 hidden border-b border-gray-200 pb-3 text-right text-sm font-bold text-gray-900 print:block">
         سامانه طلا — {selling ? 'رسید سفارش فروش' : 'رسید سفارش خرید'}
       </p>
-      <section className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center shadow-sm print:border-gray-300 print:text-right" role="status">
+      <section
+        className="rounded-2xl border border-[#E5E7EB] bg-white p-6 text-center shadow-sm print:border-gray-300 print:text-right"
+        role="status"
+      >
         <CheckCircle2 className="mx-auto h-12 w-12 text-[#16A34A] print:hidden" />
         <h1 className="mt-3 text-xl font-bold text-[#202124]">
           {selling ? 'سفارش فروش ثبت شد' : 'سفارش خرید ثبت شد'}
@@ -1380,7 +1510,10 @@ function PurchaseSuccess({
           )}
           <Row label="مبلغ" value={formatWholeToman(order.totalAmountRial)} />
           <Row label="وزن" value={formatWeight(order.weightGrams)} />
-          <Row label="عیار" value={purityLabel(order.purityRatio) || formatPurity(order.purityRatio)} />
+          <Row
+            label="عیار"
+            value={purityLabel(order.purityRatio) || formatPurity(order.purityRatio)}
+          />
           <Row label="وضعیت" value={status} />
         </dl>
         <p className="mt-5 text-right text-sm leading-7 text-[#202124]">
@@ -1434,8 +1567,19 @@ function ConfirmPurchase({
   if (!open || !view) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center print:hidden lg:items-center" role="dialog" aria-modal="true" aria-labelledby="confirm-purchase-title">
-      <button type="button" className="absolute inset-0 bg-black/50" aria-label="بستن" onClick={onClose} disabled={submitting} />
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center print:hidden lg:items-center"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="confirm-purchase-title"
+    >
+      <button
+        type="button"
+        className="absolute inset-0 bg-black/50"
+        aria-label="بستن"
+        onClick={onClose}
+        disabled={submitting}
+      />
       <div className="relative z-10 w-full rounded-t-2xl bg-white p-5 shadow-xl lg:max-w-md lg:rounded-2xl">
         <h2 id="confirm-purchase-title" className="text-lg font-bold text-[#202124]">
           {selling ? 'ثبت سفارش فروش' : 'ثبت سفارش خرید'}
@@ -1457,18 +1601,29 @@ function ConfirmPurchase({
             strong
           />
         </dl>
-        <p className="mt-4 text-sm leading-7 text-[#6B7280]">با ثبت این سفارش، قیمت فعلی را می‌پذیرید.</p>
-        {blocked ? <p className="mt-2 text-sm text-[#DC2626]">قیمت این سفارش منقضی شده است.</p> : null}
+        <p className="mt-4 text-sm leading-7 text-[#6B7280]">
+          با ثبت این سفارش، قیمت فعلی را می‌پذیرید.
+        </p>
+        {blocked ? (
+          <p className="mt-2 text-sm text-[#DC2626]">قیمت این سفارش منقضی شده است.</p>
+        ) : null}
         <div className="mt-5 flex gap-3">
-          <Button type="button" variant="outline" className="h-12 flex-1" onClick={onClose} disabled={submitting}>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-12 flex-1"
+            onClick={onClose}
+            disabled={submitting}
+          >
             بازگشت
           </Button>
-          <Button type="button" className="h-12 flex-1" onClick={onConfirm} disabled={submitting || blocked}>
-            {submitting
-              ? 'ثبت سفارش...'
-              : selling
-                ? 'تأیید و فروش طلا'
-                : 'تأیید و خرید طلا'}
+          <Button
+            type="button"
+            className="h-12 flex-1"
+            onClick={onConfirm}
+            disabled={submitting || blocked}
+          >
+            {submitting ? 'ثبت سفارش...' : selling ? 'تأیید و فروش طلا' : 'تأیید و خرید طلا'}
           </Button>
         </div>
       </div>

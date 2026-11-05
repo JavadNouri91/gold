@@ -33,7 +33,7 @@ export interface StaffCustomer {
   lastName: string;
   fullName: string;
   hasAvatar?: boolean;
-  nationalId: string;
+  nationalId: string | null;
   mobile: string;
   email: string | null;
   dateOfBirth: string | null;

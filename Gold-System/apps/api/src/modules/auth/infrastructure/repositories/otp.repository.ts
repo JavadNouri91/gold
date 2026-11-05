@@ -1,4 +1,6 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { AUTH_ERROR } from '../../application/auth-security.service';
 import * as argon2 from 'argon2';
 import { PrismaService } from '../../../../database/prisma.service';
 
@@ -11,6 +13,8 @@ export interface OtpRecord {
   expiresAt: Date;
   usedAt: Date | null;
   attempts: number;
+  userId?: string | null;
+  payload?: Prisma.JsonValue;
 }
 
 /**
@@ -27,34 +31,66 @@ export class OtpRepository {
   constructor(private readonly prisma: PrismaService) {}
 
   async createOrReplace(data: {
-    userId: string;
+    userId: string | null;
     mobile: string;
-    /** Plaintext OTP — will be hashed before storage */
     code: string;
     purpose: string;
     expiresAt: Date;
+    payload?: Prisma.InputJsonValue;
   }): Promise<void> {
-    // Invalidate any existing unused OTPs for this mobile+purpose
-    await this.prisma.otpCode.updateMany({
-      where: {
-        mobile: data.mobile,
-        purpose: data.purpose as never,
-        usedAt: null,
-      },
-      data: { usedAt: new Date() },
+    const codeHash = await argon2.hash(data.code, { type: argon2.argon2id });
+    await this.prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${data.mobile + ':' + data.purpose}))`;
+      await tx.otpCode.updateMany({
+        where: { mobile: data.mobile, purpose: data.purpose as never, usedAt: null },
+        data: { usedAt: new Date() },
+      });
+      await tx.otpCode.create({
+        data: {
+          userId: data.userId,
+          mobile: data.mobile,
+          codeHash,
+          purpose: data.purpose as never,
+          expiresAt: data.expiresAt,
+          payload: data.payload,
+        },
+      });
     });
+  }
 
-    // Hash the OTP before storing — plaintext NEVER hits the DB
-    const codeHash = await argon2.hash(data.code);
-
-    await this.prisma.otpCode.create({
-      data: {
-        userId: data.userId,
-        mobile: data.mobile,
-        codeHash,
-        purpose: data.purpose as never,
-        expiresAt: data.expiresAt,
+  /** Failed attempts commit; successful consumption and its effects share one transaction. */
+  async consume<T>(
+    mobile: string,
+    purpose: string,
+    code: string,
+    effect: (tx: Prisma.TransactionClient, record: OtpRecord) => Promise<T>,
+  ): Promise<T> {
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${mobile + ':' + purpose}))`;
+        const row = await tx.otpCode.findFirst({
+          where: { mobile, purpose: purpose as never, usedAt: null, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: 'desc' },
+        });
+        if (!row || row.attempts >= 3) return { ok: false as const };
+        await tx.otpCode.update({ where: { id: row.id }, data: { attempts: { increment: 1 } } });
+        if (!(await argon2.verify(row.codeHash, code))) return { ok: false as const };
+        await tx.otpCode.update({
+          where: { id: row.id },
+          data: { usedAt: new Date(), payload: Prisma.DbNull },
+        });
+        return { ok: true as const, value: await effect(tx, row) };
       },
+      { timeout: 15_000 },
+    );
+    if (!result.ok) throw new UnauthorizedException(AUTH_ERROR);
+    return result.value;
+  }
+
+  async invalidate(mobile: string, purpose: string) {
+    await this.prisma.otpCode.updateMany({
+      where: { mobile, purpose: purpose as never, usedAt: null },
+      data: { usedAt: new Date(), payload: Prisma.DbNull },
     });
   }
 

@@ -518,6 +518,8 @@ export const PAYMENT_STATUS_LABELS: Record<string, string> = {
 
 export const PAYMENT_METHOD_LABELS: Record<string, string> = {
   BANK_TRANSFER: 'انتقال بانکی',
+  PAYA: '\u067e\u0627\u06cc\u0627',
+  SATNA: '\u0633\u0627\u062a\u0646\u0627',
   CARD_TO_CARD: 'کارت به کارت',
   CASH: 'نقدی',
 };

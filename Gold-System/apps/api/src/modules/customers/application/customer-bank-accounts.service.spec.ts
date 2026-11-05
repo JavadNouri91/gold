@@ -60,11 +60,14 @@ describe('CustomerBankAccountsService', () => {
     prisma.customerBankAccount.findMany.mockResolvedValue([
       {
         id: 'ba-1',
-        iban: 'IR120560084200001234567890',
+        iban: 'IR280560084200001234567890',
         bankCode: '056',
         bankName: 'بانک سامان',
         accountHolder: 'علی محمدی',
         status: 'VERIFIED',
+        isDefault: false,
+        cardLast4: null,
+        accountLast4: null,
         createdAt: new Date('2026-10-20'),
       },
     ]);
@@ -72,36 +75,39 @@ describe('CustomerBankAccountsService', () => {
     await expect(service.listMine('user-1')).resolves.toEqual([
       {
         id: 'ba-1',
-        iban: 'IR120560084200001234567890',
+        iban: 'IR28056•••••••••••••••7890',
         bankCode: '056',
         bankName: 'بانک سامان',
         accountHolder: 'علی محمدی',
         status: 'VERIFIED',
+        isDefault: false,
+        cardLast4: null,
+        accountLast4: null,
         createdAt: '2026-10-20T00:00:00.000Z',
       },
     ]);
   });
 
-  it('creates a normalized IBAN with bank metadata from the code table', async () => {
+  it('creates a normalized IBAN pending review with bank metadata', async () => {
     prisma.customerBankAccount.findUnique.mockResolvedValue(null);
     prisma.customerBankAccount.create.mockResolvedValue({
       id: 'ba-2',
-      iban: 'IR120560084200001234567890',
+        iban: 'IR28056•••••••••••••••7890',
       bankCode: '056',
       bankName: 'بانک سامان',
       accountHolder: 'علی محمدی',
-      status: 'VERIFIED',
+      status: 'PENDING',
       createdAt: new Date('2026-10-20'),
     });
 
-    const created = await service.createMine('user-1', 'ir۱۲ 0560 0842 0000 1234 5678 90');
-    expect(created.iban).toBe('IR120560084200001234567890');
+    const created = await service.createMine('user-1', 'IR280560084200001234567890');
+    expect(created.iban).toBe('IR28056•••••••••••••••7890');
     expect(created.bankCode).toBe('056');
     expect(created.bankName).toBe('بانک سامان');
     expect(prisma.customerBankAccount.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         customerId: 'cust-1',
-        iban: 'IR120560084200001234567890',
+        iban: 'IR280560084200001234567890',
         bankCode: '056',
         bankName: 'بانک سامان',
         accountHolder: 'علی محمدی',
@@ -116,7 +122,7 @@ describe('CustomerBankAccountsService', () => {
 
   it('rejects a duplicate IBAN', async () => {
     prisma.customerBankAccount.findUnique.mockResolvedValue({ id: 'ba-1' });
-    await expect(service.createMine('user-1', 'IR120560084200001234567890')).rejects.toBeInstanceOf(
+    await expect(service.createMine('user-1', 'IR280560084200001234567890')).rejects.toBeInstanceOf(
       ConflictException,
     );
   });
@@ -124,7 +130,7 @@ describe('CustomerBankAccountsService', () => {
   it('deletes only the signed-in customer account', async () => {
     prisma.customerBankAccount.findFirst.mockResolvedValue({
       id: 'ba-1',
-      iban: 'IR120560084200001234567890',
+      iban: 'IR280560084200001234567890',
     });
     prisma.customerBankAccount.delete.mockResolvedValue({});
 

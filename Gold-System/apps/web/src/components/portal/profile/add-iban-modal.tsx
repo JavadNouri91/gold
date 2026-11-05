@@ -4,7 +4,7 @@ import { useEffect, useId, useState } from 'react';
 import { Check, X } from 'lucide-react';
 import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
-import { formatIbanDigitGroups, ibanBankName, ibanDigits } from '@/lib/iban-bank';
+import { formatIbanDigitGroups, ibanBankName, ibanDigits, isValidIranianIban } from '@/lib/iban-bank';
 import { BankLogo } from './bank-logo';
 import { cn, toPersianDigits } from '@/lib/utils';
 
@@ -14,6 +14,8 @@ export type AddIbanResult = {
   iban: string;
   accountHolder: string;
   bankName: string | null;
+  cardNumber?: string;
+  accountNumber?: string;
 };
 
 function extractIbanDigits(value: string): string {
@@ -33,12 +35,15 @@ export function AddIbanModal({
 }) {
   const inputId = useId();
   const [digits, setDigits] = useState('');
+  const [cardNumber, setCardNumber] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [bankOverride, setBankOverride] = useState('');
 
   useEffect(() => {
-    if (!open) setDigits('');
+    if (!open) { setDigits(''); setCardNumber(''); setAccountNumber(''); setBankOverride(''); }
   }, [open]);
 
-  const isIbanValid = digits.length === IBAN_DIGIT_COUNT;
+  const isIbanValid = digits.length === IBAN_DIGIT_COUNT && isValidIranianIban(`IR${digits}`);
   const displayValue = formatIbanDigitGroups(digits);
   const displayName = holderName.trim() || 'کاربر';
   const bankName = isIbanValid ? ibanBankName(`IR${digits}`) : null;
@@ -48,7 +53,9 @@ export function AddIbanModal({
     onSubmit({
       iban: `IR${digits}`,
       accountHolder: displayName,
-      bankName,
+      bankName: bankOverride.trim() || bankName,
+      cardNumber: cardNumber || undefined,
+      accountNumber: accountNumber || undefined,
     });
     onClose();
   };
@@ -112,6 +119,16 @@ export function AddIbanModal({
             </p>
           </div>
 
+          {digits.length === IBAN_DIGIT_COUNT && !isIbanValid ? <p className="text-sm text-red-600">شماره شبا معتبر نیست.</p> : null}
+          <label className="block text-sm font-medium text-slate-700">نام بانک
+            <input value={bankOverride || bankName || ''} onChange={(e) => setBankOverride(e.target.value)} maxLength={80} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900" />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">شماره کارت (اختیاری)
+            <input inputMode="numeric" autoComplete="off" value={cardNumber} onChange={(e) => setCardNumber(ibanDigits(e.target.value).slice(0, 16))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900" />
+          </label>
+          <label className="block text-sm font-medium text-slate-700">شماره حساب (اختیاری)
+            <input inputMode="numeric" autoComplete="off" value={accountNumber} onChange={(e) => setAccountNumber(ibanDigits(e.target.value).slice(0, 30))} className="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 font-mono text-sm text-slate-900" />
+          </label>
           {isIbanValid ? (
             <div
               id="iban-lookup-result"
@@ -143,7 +160,7 @@ export function AddIbanModal({
           </Button>
           <Button
             type="button"
-            disabled={!isIbanValid}
+            disabled={!isIbanValid || (cardNumber.length > 0 && (cardNumber.length !== 16 || !luhn(cardNumber)))}
             onClick={handleSubmit}
             className={cn(
               'bg-emerald-600 text-white hover:bg-emerald-700',
@@ -156,4 +173,16 @@ export function AddIbanModal({
       </div>
     </Modal>
   );
+}
+
+function luhn(value: string) {
+  let sum = 0;
+  let double = false;
+  for (let i = value.length - 1; i >= 0; i--) {
+    let digit = Number(value[i]);
+    if (double && (digit *= 2) > 9) digit -= 9;
+    sum += digit;
+    double = !double;
+  }
+  return sum % 10 === 0;
 }

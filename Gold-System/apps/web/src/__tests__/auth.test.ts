@@ -7,17 +7,20 @@ import { tokenStore } from '../lib/api';
 
 beforeEach(() => {
   localStorage.clear();
+  tokenStore.clear();
 });
 
 describe('tokenStore', () => {
   it('stores and retrieves access token', () => {
     tokenStore.setAccess('test-access-token');
     expect(tokenStore.getAccess()).toBe('test-access-token');
+    expect(localStorage.getItem('gold_access_token')).toBeNull();
   });
 
-  it('stores and retrieves refresh token', () => {
+  it('never stores refresh credentials in browser storage', () => {
     tokenStore.setRefresh('test-refresh-token');
-    expect(tokenStore.getRefresh()).toBe('test-refresh-token');
+    expect(tokenStore.getRefresh()).toBeNull();
+    expect(localStorage.getItem('gold_refresh_token')).toBeNull();
   });
 
   it('clears both tokens', () => {

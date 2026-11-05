@@ -119,7 +119,7 @@ export interface KycReviewQueueItem {
   customerNumber: string;
   fullName: string;
   mobile: string;
-  nationalId: string;
+  nationalId: string | null;
   status: CustomerStatus;
   customerType: string | null;
   bucket: KycStaffBucket;
@@ -181,6 +181,9 @@ const PRESERVED_REVIEW_CUSTOMER_STATUSES = new Set<CustomerStatus>([
 
 @Injectable()
 export class KycService {
+  completeOwnIdentity(userId: string, nationalId: string) {
+    return this.customersService.completeOwnIdentity(userId, nationalId);
+  }
   private readonly logger = new Logger(KycService.name);
 
   constructor(
@@ -375,7 +378,7 @@ export class KycService {
     }
 
     const documents = await this.documentRepo.findByCustomerId(customerId);
-    if (!this.allRequiredDocumentsApproved(customer.type, documents)) {
+    if (!customer.nationalId || !this.allRequiredDocumentsApproved(customer.type, documents)) {
       throw new BusinessRuleException(
         'KYC_DOCUMENTS_NOT_APPROVED',
         'تا زمانی که همه مدارک الزامی تأیید نشوند، فعال‌سازی حساب ممکن نیست.',

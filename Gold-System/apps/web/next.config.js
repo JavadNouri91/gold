@@ -1,5 +1,7 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // Keep build verification from overwriting assets served by the dev process.
+  distDir: process.env.NODE_ENV === 'development' ? '.next-dev' : '.next',
   reactStrictMode: true,
   transpilePackages: ['@gold/shared-types', 'recharts', 'react-iranian-bank-logo'],
   async headers() {

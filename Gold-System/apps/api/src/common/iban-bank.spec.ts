@@ -5,8 +5,9 @@ describe('iban-bank', () => {
     expect(normalizeIban('ir۱۲ 0560 0842 0000 1234 5678 90')).toBe('IR120560084200001234567890');
   });
 
-  it('validates IR + 24 digits', () => {
-    expect(isValidIranianIban('IR120560084200001234567890')).toBe(true);
+  it('validates Iranian IBAN length and checksum', () => {
+    expect(isValidIranianIban('IR280560084200001234567890')).toBe(true);
+    expect(isValidIranianIban('IR120560084200001234567890')).toBe(false);
     expect(isValidIranianIban('IR12')).toBe(false);
   });
 

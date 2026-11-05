@@ -27,6 +27,9 @@ describe('OTP Security — Phase 7', () => {
         update: jest.fn().mockResolvedValue({}),
       } as never,
     };
+    mockPrisma.$transaction = jest.fn(async (fn) =>
+      fn({ ...mockPrisma, $executeRaw: jest.fn() }),
+    ) as never;
     otpRepo = new OtpRepository(mockPrisma as PrismaService);
   });
 

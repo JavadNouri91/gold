@@ -33,10 +33,10 @@ it.each([
   expect(link.querySelector('svg')).toBeInTheDocument();
 });
 
-it('waits for KYC data and updates from unsubmitted to pending to approved', () => {
+it('shows the existing reminder and updates from unsubmitted to pending to approved', () => {
   setState();
   const { rerender } = render(<HeaderKycStatus />);
-  expect(screen.queryByRole('link')).not.toBeInTheDocument();
+  expect(screen.getByRole('link')).toHaveAttribute('href', '/portal/profile#kyc');
   setState('NOT_STARTED');
   rerender(<HeaderKycStatus />);
   expect(screen.getByRole('link')).toHaveTextContent('مدارک احراز هویت را ارسال کنید');

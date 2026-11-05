@@ -1,36 +1,40 @@
-import { IsNotEmpty, IsOptional, IsString, Matches, MinLength } from 'class-validator';
+import { Mobile } from '../../domain/mobile';
+import { IsNotEmpty, IsOptional, IsString, Matches, MinLength, MaxLength } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { LatinDigits } from '../../../../common/latin-digits.decorator';
 
 export class InitiateLoginDto {
   @ApiProperty({ example: '09123456789' })
-  @LatinDigits()
+  @Mobile()
   @IsNotEmpty()
   @Matches(/^09[0-9]{9}$/, { message: 'Must be a valid Iranian mobile number' })
   mobile: string;
 
   @ApiProperty({ minLength: 8 })
-  @LatinDigits()
+  @IsString()
   @IsNotEmpty()
   @MinLength(8)
+  @MaxLength(128)
   password: string;
 }
 
 export class VerifyOtpDto {
   @ApiProperty({ example: '09123456789' })
-  @LatinDigits()
+  @Mobile()
   @IsNotEmpty()
   @Matches(/^09[0-9]{9}$/)
   mobile: string;
 
   @ApiProperty({ example: '123456' })
+  @LatinDigits()
   @IsNotEmpty()
+  @Matches(/^\d{6}$/)
   otp: string;
 }
 
 export class RequestPasswordResetDto {
   @ApiProperty({ example: '09123456789' })
-  @LatinDigits()
+  @Mobile()
   @IsNotEmpty()
   @Matches(/^09[0-9]{9}$/, { message: 'Must be a valid Iranian mobile number' })
   mobile: string;
@@ -38,7 +42,7 @@ export class RequestPasswordResetDto {
 
 export class ResetPasswordDto {
   @ApiProperty({ example: '09123456789' })
-  @LatinDigits()
+  @Mobile()
   @IsNotEmpty()
   @Matches(/^09[0-9]{9}$/, { message: 'Must be a valid Iranian mobile number' })
   mobile: string;
@@ -57,8 +61,8 @@ export class ResetPasswordDto {
 }
 
 export class RefreshTokenDto {
-  @ApiProperty()
-  @IsNotEmpty()
+  @ApiProperty({ required: false })
+  @IsOptional()
   refreshToken: string;
 }
 

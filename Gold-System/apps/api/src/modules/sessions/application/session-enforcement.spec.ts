@@ -73,7 +73,11 @@ function harness(global: {
     },
     userSessionPolicy: { findUnique: async () => state.userPolicy },
     user: {
-      findUnique: async () => ({ roles: state.roleIds.map((roleId) => ({ roleId })) }),
+      findUnique: async () => ({
+        status: 'ACTIVE',
+        customer: null,
+        roles: state.roleIds.map((roleId) => ({ roleId })),
+      }),
     },
     sessionSetting: {
       findUnique: async () => ({

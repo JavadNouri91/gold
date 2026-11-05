@@ -1,3 +1,4 @@
+import { normalizeMobile } from '../../auth/domain/mobile';
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import * as argon2 from 'argon2';
 import { Prisma } from '@prisma/client';
@@ -15,6 +16,7 @@ export class UsersService {
   ) {}
 
   async create(dto: CreateUserDto, actorId: string | null = null): Promise<UserEntity> {
+    dto = { ...dto, mobile: normalizeMobile(dto.mobile) };
     const existing = await this.userRepository.findByMobile(dto.mobile);
     if (existing) {
       throw new ConflictException('A user with this mobile number already exists');
@@ -47,13 +49,13 @@ export class UsersService {
   }
 
   async findByMobile(mobile: string): Promise<UserEntity | null> {
-    return this.userRepository.findByMobile(mobile);
+    return this.userRepository.findByMobile(normalizeMobile(mobile));
   }
 
   async findByMobileWithPassword(
     mobile: string,
   ): Promise<{ user: UserEntity; passwordHash: string | null } | null> {
-    return this.userRepository.findByMobileWithPassword(mobile);
+    return this.userRepository.findByMobileWithPassword(normalizeMobile(mobile));
   }
 
   async update(id: string, dto: UpdateUserDto, actorId: string): Promise<UserEntity> {
@@ -98,12 +100,13 @@ export class UsersService {
       name: string;
       mobile: string;
       email?: string;
-      password: string;
       roleId: string;
-    },
+      mobileVerifiedAt?: Date;
+    } & ({ password: string; passwordHash?: never } | { passwordHash: string; password?: never }),
     tx: Prisma.TransactionClient,
   ): Promise<{ id: string; name: string; mobile: string }> {
-    const passwordHash = await argon2.hash(data.password);
+    data = { ...data, mobile: normalizeMobile(data.mobile) };
+    const passwordHash = data.passwordHash ?? (await argon2.hash(data.password as string));
 
     const user = await tx.user.create({
       data: {
@@ -111,6 +114,7 @@ export class UsersService {
         mobile: data.mobile,
         email: data.email ?? null,
         passwordHash,
+        mobileVerifiedAt: data.mobileVerifiedAt,
         roles: {
           create: [{ roleId: data.roleId }],
         },

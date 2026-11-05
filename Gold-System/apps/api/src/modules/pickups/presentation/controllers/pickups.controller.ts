@@ -1,3 +1,4 @@
+import { RequireApprovedKyc } from '../../../../common/guards/approved-kyc.guard';
 import {
   Body,
   Controller,
@@ -36,6 +37,7 @@ export class PickupsController {
 
   @Post()
   @RequirePermissions('customer.pickup.create')
+  @RequireApprovedKyc()
   create(@Body() dto: CreatePickupDto, @CurrentUser() user: CurrentUserData) {
     return this.pickupService.create(user.userId, dto);
   }
@@ -80,7 +82,11 @@ export class PickupsController {
     @Param('id') id: string,
     @CurrentUser() user: CurrentUserData,
   ): Promise<StreamableFile> {
-    const file = await this.pickupService.downloadDocumentForCustomer(user.userId, id, 'PRE_INVOICE');
+    const file = await this.pickupService.downloadDocumentForCustomer(
+      user.userId,
+      id,
+      'PRE_INVOICE',
+    );
     return new StreamableFile(file.buffer, {
       type: file.mimeType,
       disposition: attachmentDisposition(file.fileName),

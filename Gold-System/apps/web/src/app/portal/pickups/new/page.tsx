@@ -28,14 +28,18 @@ const QUICK_WEIGHTS_GRAMS = [10, 20, 50, 100, 200] as const;
 
 /** Digits only — pickup weight is whole grams, never fractional. */
 function normalizeIntegerGrams(raw: string): string {
-  return toLatinDigits(raw).replace(/\D/g, '').replace(/^0+(?=\d)/, '');
+  return toLatinDigits(raw)
+    .replace(/\D/g, '')
+    .replace(/^0+(?=\d)/, '');
 }
 
 export default function NewPickupPage() {
   const router = useRouter();
-  const { data: holding, error: holdingError, isLoading } = useSWR('portal-portfolio', () =>
-    ordersApi.portfolio(),
-  );
+  const {
+    data: holding,
+    error: holdingError,
+    isLoading,
+  } = useSWR('portal-portfolio', () => ordersApi.portfolio());
   const position = toPortfolioPosition(holding);
   const available = isRegisteredHolding(position) ? position : null;
 
@@ -43,6 +47,7 @@ export default function NewPickupPage() {
   const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [kycRequired, setKycRequired] = useState(false);
 
   const availableGrams = available ? Number(toLatinDigits(available.weightGrams)) : 0;
   const quickWeights = QUICK_WEIGHTS_GRAMS.filter(
@@ -50,8 +55,7 @@ export default function NewPickupPage() {
   );
   const selectedQuick = Number(toLatinDigits(weight).trim());
 
-  const weightValidForPreview =
-    /^[1-9]\d*$/.test(weight) && Number(weight) <= availableGrams;
+  const weightValidForPreview = /^[1-9]\d*$/.test(weight) && Number(weight) <= availableGrams;
   const { data: feePreview } = useSWR(
     weightValidForPreview ? ['pickup-fee-preview', weight] : null,
     () => pickupsApi.feePreview({ weightGrams: weight }),
@@ -94,6 +98,7 @@ export default function NewPickupPage() {
       });
       router.push(`/portal/pickups/${pickup.id}`);
     } catch (err) {
+      setKycRequired(err instanceof ApiClientError && err.code === 'KYC_REQUIRED');
       setError(err instanceof ApiClientError ? err.message : 'ثبت درخواست ناموفق بود.');
     } finally {
       setSubmitting(false);
@@ -106,7 +111,10 @@ export default function NewPickupPage() {
     <div className="mx-auto max-w-lg space-y-6">
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">درخواست تحویل حضوری</h1>
-        <Link href="/portal/pickups" className="text-sm text-muted-foreground hover:text-foreground">
+        <Link
+          href="/portal/pickups"
+          className="text-sm text-muted-foreground hover:text-foreground"
+        >
           بازگشت
         </Link>
       </div>
@@ -123,8 +131,8 @@ export default function NewPickupPage() {
           </p>
           <p className="text-muted-foreground">عیار ثابت {toPersianDigits('750')}</p>
           <p className="leading-7 text-muted-foreground">
-            با ثبت درخواست، همین وزن از موجودی شما رزرو می‌شود و پس از آماده‌سازی می‌توانید در فروشگاه
-            قالب آبشده را تحویل بگیرید.
+            با ثبت درخواست، همین وزن از موجودی شما رزرو می‌شود و پس از آماده‌سازی می‌توانید در
+            فروشگاه قالب آبشده را تحویل بگیرید.
           </p>
         </CardContent>
       </Card>
@@ -233,6 +241,11 @@ export default function NewPickupPage() {
             ) : null}
 
             {error ? <Alert variant="error">{error}</Alert> : null}
+            {kycRequired && (
+              <a href="/portal/profile#kyc" className="block text-sm underline">
+                مشاهده و تکمیل احراز هویت
+              </a>
+            )}
             <Button
               type="submit"
               className="w-full"

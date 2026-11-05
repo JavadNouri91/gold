@@ -54,8 +54,7 @@ export class SmsSirProvider implements SmsProvider {
       });
 
       if (!response.ok) {
-        const text = await response.text().catch(() => '');
-        this.logger.error(`[SMS.ir] HTTP ${response.status}: ${text.substring(0, 200)}`);
+        this.logger.error(`[SMS.ir] HTTP ${response.status}`);
         return { success: false, error: `HTTP_${response.status}` };
       }
 
@@ -75,12 +74,11 @@ export class SmsSirProvider implements SmsProvider {
         };
       }
 
-      this.logger.error(`[SMS.ir] API error: status=${data.status} message=${data.message}`);
+      this.logger.error(`[SMS.ir] API error: status=${data.status}`);
       return { success: false, error: `SMSIR_STATUS_${data.status}` };
-    } catch (err: unknown) {
-      const message_ = err instanceof Error ? err.message : String(err);
-      this.logger.error(`[SMS.ir] Network/timeout error: ${message_}`);
-      return { success: false, error: `NETWORK_ERROR: ${message_}` };
+    } catch {
+      this.logger.error(`[SMS.ir] Network/timeout error`);
+      return { success: false, error: 'NETWORK_ERROR' };
     }
   }
 
