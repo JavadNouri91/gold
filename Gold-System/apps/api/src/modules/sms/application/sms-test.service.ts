@@ -1,4 +1,4 @@
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { AuditService } from '../../audit/application/audit.service';
 import {
   SMS_PROVIDER_TOKEN,
@@ -6,7 +6,7 @@ import {
 } from '../infrastructure/providers/sms-provider.interface';
 import { SmsSettingsService } from './sms-settings.service';
 
-const TEST_MESSAGE = 'پیامک آزمایشی سامانه طلا — تنظیمات پیامک به‌درستی اعمال شده است.';
+const TEST_MESSAGE = 'این یک پیامک آزمایشی از سامانه معاملات طلا است.';
 
 export interface SmsTestResult {
   success: boolean;
@@ -15,17 +15,8 @@ export interface SmsTestResult {
   error?: string;
 }
 
-/**
- * Sends one live SMS with the currently resolved credentials so an
- * administrator can verify a freshly saved API key.
- *
- * Kept separate from SmsSettingsService: that service is a dependency of
- * RoutingSmsProvider, so it must not depend on the provider token itself.
- */
 @Injectable()
 export class SmsTestService {
-  private readonly logger = new Logger(SmsTestService.name);
-
   constructor(
     @Inject(SMS_PROVIDER_TOKEN) private readonly smsProvider: SmsProvider,
     private readonly settings: SmsSettingsService,
@@ -34,21 +25,18 @@ export class SmsTestService {
 
   async sendTest(mobile: string, actorId: string, ipAddress?: string): Promise<SmsTestResult> {
     const config = await this.settings.resolveEffectiveConfig();
-
-    if (config.provider !== 'mock' && !config.apiKey) {
-      throw new BadRequestException('ابتدا کلید API را ذخیره کنید.');
-    }
-    if (config.provider !== 'mock' && !config.senderLine) {
-      throw new BadRequestException('ابتدا شماره خط فرستنده را ذخیره کنید.');
-    }
+    if (!config.enabled) throw new BadRequestException('سرویس پیامک غیرفعال است.');
+    if (
+      config.provider === 'hisms' &&
+      (!config.apiBaseUrl || !config.username || !config.password || !config.originator)
+    )
+      throw new BadRequestException('تنظیمات سرویس پیامک کامل نیست.');
+    if (config.provider === 'smsir' && !config.apiKey)
+      throw new BadRequestException('کلید API سرویس پیامک تنظیم نشده است.');
+    if (config.provider === 'melipayamak' && (!config.apiKey || !config.melipayamakPassword))
+      throw new BadRequestException('اطلاعات ورود سرویس پیامک کامل نیست.');
 
     const result = await this.smsProvider.send(mobile, TEST_MESSAGE);
-    if (!result.success) {
-      this.logger.warn(
-        `[SMS test] provider=${config.provider} failed: ${result.error ?? 'unknown error'}`,
-      );
-    }
-
     await this.audit.log({
       actorId,
       action: 'SMS_SETTINGS_TEST',
@@ -57,12 +45,12 @@ export class SmsTestService {
       ipAddress,
       after: {
         provider: config.provider,
-        mobile,
+        mobileMasked: maskMobile(mobile),
         success: result.success,
-        error: result.error ?? null,
+        error: result.error ? 'ارسال ناموفق' : null,
+        providerReference: result.providerReference ?? null,
       },
     });
-
     return {
       success: result.success,
       provider: config.provider,
@@ -70,4 +58,9 @@ export class SmsTestService {
       error: result.error,
     };
   }
+}
+
+function maskMobile(value: string) {
+  const digits = value.replace(/\D/g, '');
+  return digits.length > 4 ? `${digits.slice(0, 3)}***${digits.slice(-2)}` : '***';
 }

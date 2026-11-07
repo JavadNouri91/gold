@@ -25,9 +25,21 @@ export default function StaffOtpPage() {
   const [closeToken, setCloseToken] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{
     token: string;
-    sessions: Array<{ id: string; device?: string; browser?: string; os?: string; ipAddress?: string | null }>;
+    sessions: Array<{
+      id: string;
+      device?: string;
+      browser?: string;
+      os?: string;
+      ipAddress?: string | null;
+    }>;
   } | null>(null);
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<OtpForm>({
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<OtpForm>({
     defaultValues: { code: '' },
   });
   const code = watch('code');
@@ -57,14 +69,24 @@ export default function StaffOtpPage() {
       router.replace(firstStaffRoute(permissions));
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'SESSION_LIMIT_REACHED') {
-        const token = (err.details as { confirmationToken?: string } | undefined)?.confirmationToken;
+        const token = (err.details as { confirmationToken?: string } | undefined)
+          ?.confirmationToken;
         if (token) setCloseToken(token);
         setError(err.message);
         return;
       }
       if (err instanceof ApiClientError && err.code === 'SESSION_LIMIT_CONFIRMATION_REQUIRED') {
         const details = err.details as
-          | { confirmationToken?: string; sessions?: Array<{ id: string; device?: string; browser?: string; os?: string; ipAddress?: string | null }> }
+          | {
+              confirmationToken?: string;
+              sessions?: Array<{
+                id: string;
+                device?: string;
+                browser?: string;
+                os?: string;
+                ipAddress?: string | null;
+              }>;
+            }
           | undefined;
         if (details?.confirmationToken && details.sessions?.length) {
           setConfirmation({ token: details.confirmationToken, sessions: details.sessions });
@@ -82,8 +104,16 @@ export default function StaffOtpPage() {
     <div className="flex min-h-screen items-center justify-center bg-slate-50 p-4">
       <div className="w-full max-w-sm rounded-xl border bg-white p-6">
         <h1 className="text-xl font-bold">تأیید ورود کارکنان</h1>
-        {mobile ? <p className="mt-1 text-sm text-muted-foreground" dir="ltr">{formatMobile(mobile)}</p> : null}
-        {error ? <div className="mt-4"><Alert variant="error">{error}</Alert></div> : null}
+        {mobile ? (
+          <p className="mt-1 text-sm text-muted-foreground" dir="ltr">
+            {formatMobile(mobile)}
+          </p>
+        ) : null}
+        {error ? (
+          <div className="mt-4">
+            <Alert variant="error">{error}</Alert>
+          </div>
+        ) : null}
         {closeToken ? (
           <Button
             type="button"
@@ -97,8 +127,12 @@ export default function StaffOtpPage() {
                 await closeOtherSessions(closeToken);
                 sessionStorage.removeItem('staff_login_mobile');
                 const raw = localStorage.getItem('gold_user');
-                const permissions = raw ? (JSON.parse(raw) as { permissions?: string[] }).permissions : [];
-                router.replace(isStaffUser(permissions) ? firstStaffRoute(permissions) : '/portal/dashboard');
+                const permissions = raw
+                  ? (JSON.parse(raw) as { permissions?: string[] }).permissions
+                  : [];
+                router.replace(
+                  isStaffUser(permissions) ? firstStaffRoute(permissions) : '/portal/dashboard',
+                );
               } catch (err) {
                 setError(err instanceof ApiClientError ? err.message : 'بستن نشست‌ها انجام نشد.');
               } finally {
@@ -125,8 +159,12 @@ export default function StaffOtpPage() {
                     await confirmSession(confirmation.token, session.id);
                     sessionStorage.removeItem('staff_login_mobile');
                     const raw = localStorage.getItem('gold_user');
-                    const permissions = raw ? (JSON.parse(raw) as { permissions?: string[] }).permissions : [];
-                    router.replace(isStaffUser(permissions) ? firstStaffRoute(permissions) : '/portal/dashboard');
+                    const permissions = raw
+                      ? (JSON.parse(raw) as { permissions?: string[] }).permissions
+                      : [];
+                    router.replace(
+                      isStaffUser(permissions) ? firstStaffRoute(permissions) : '/portal/dashboard',
+                    );
                   } catch (err) {
                     setError(err instanceof ApiClientError ? err.message : 'تأیید ورود انجام نشد.');
                   } finally {
@@ -134,7 +172,9 @@ export default function StaffOtpPage() {
                   }
                 }}
               >
-                <span>{session.device ?? 'دستگاه'} · {session.browser ?? 'مرورگر'}</span>
+                <span>
+                  {session.device ?? 'دستگاه'} · {session.browser ?? 'مرورگر'}
+                </span>
                 <span dir="ltr">{session.ipAddress ? toPersianDigits(session.ipAddress) : ''}</span>
               </Button>
             ))}
@@ -146,9 +186,13 @@ export default function StaffOtpPage() {
             dir="ltr"
             inputMode="numeric"
             autoComplete="one-time-code"
+            autoFocus
             maxLength={6}
             error={errors.code?.message}
-            {...register('code', { required: 'کد الزامی است', minLength: { value: 4, message: 'کد ناقص است' } })}
+            {...register('code', {
+              required: 'کد الزامی است',
+              pattern: { value: /^\d{6}$/, message: 'کد تأیید باید شش رقم باشد.' },
+            })}
             value={toPersianDigits(code)}
             onChange={(event) => {
               setValue('code', toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 6), {
@@ -156,7 +200,9 @@ export default function StaffOtpPage() {
               });
             }}
           />
-          <Button className="w-full" type="submit" isLoading={isLoading}>ورود</Button>
+          <Button className="w-full" type="submit" isLoading={isLoading}>
+            ورود
+          </Button>
         </form>
       </div>
     </div>

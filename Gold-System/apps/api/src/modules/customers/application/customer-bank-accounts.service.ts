@@ -1,7 +1,8 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../database/prisma.service';
 import { AuditService } from '../../audit/application/audit.service';
 import { CustomerRepository } from '../infrastructure/repositories/customer.repository';
+import { NotificationService } from '../../notifications/application/notification.service';
 import { ibanBankCode, ibanBankName, isValidIranianIban, normalizeIban } from '../../../common/iban-bank';
 
 export type OwnBankAccountDto = {
@@ -23,6 +24,7 @@ export class CustomerBankAccountsService {
     private readonly prisma: PrismaService,
     private readonly customerRepo: CustomerRepository,
     private readonly audit: AuditService,
+    @Optional() private readonly notifications?: NotificationService,
   ) {}
 
   async listMine(userId: string): Promise<OwnBankAccountDto[]> {
@@ -74,6 +76,9 @@ export class CustomerBankAccountsService {
       ipAddress,
     });
 
+    await this.notifications?.sendConfiguredSmsEvent('account.bank_account_changed', `${row.id}:CREATED`, customer.userId ?? null,
+      { action: 'ثبت شد', eventDate: new Date().toLocaleDateString('fa-IR') });
+
     return this.toDto(row);
   }
 
@@ -83,6 +88,8 @@ export class CustomerBankAccountsService {
     if (status === 'VERIFIED' && row.customer.status !== 'APPROVED') throw new BadRequestException('Customer KYC must be approved before bank ownership review');
     const updated = await this.prisma.customerBankAccount.update({ where: { id }, data: { status } });
     await this.audit.log({ actorId: reviewerId, action: `BANK_ACCOUNT_${status}`, entityType: 'CustomerBankAccount', entityId: id, reason: `IBAN ending ${row.iban.slice(-4)}`, ipAddress });
+    await this.notifications?.sendConfiguredSmsEvent('account.bank_account_changed', `${row.id}:${status}`, row.customer.userId ?? null,
+      { action: status === 'VERIFIED' ? 'تأیید شد' : 'رد شد', eventDate: new Date().toLocaleDateString('fa-IR') });
     return this.toDto(updated);
   }
 
@@ -121,6 +128,11 @@ export class CustomerBankAccountsService {
       reason: `IBAN ending ${row.iban.slice(-4)}`,
       ipAddress,
     });
+    if (this.notifications?.sendConfiguredSmsEvent && typeof this.customerRepo.findById === 'function') {
+      const owner = await this.customerRepo.findById(row.customerId).catch(() => null);
+      await this.notifications.sendConfiguredSmsEvent('account.bank_account_changed', `${row.id}:DELETED`, owner?.userId ?? null,
+        { action: 'حذف شد', eventDate: new Date().toLocaleDateString('fa-IR') });
+    }
   }
 
   private async requireCustomer(userId: string) {

@@ -7,13 +7,18 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../../database/prisma.service';
+import { Optional } from '@nestjs/common';
+import { SmsSettingsService } from '../../sms/application/sms-settings.service';
 
 export const AUTH_ERROR = 'اطلاعات ورود یا کد تأیید معتبر نیست یا منقضی شده است.';
 
 @Injectable()
 export class AuthSecurityService implements OnModuleInit, OnModuleDestroy {
   private cleanup?: ReturnType<typeof setInterval>;
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly smsSettings?: SmsSettingsService,
+  ) {}
 
   onModuleInit() {
     this.cleanup = setInterval(() => {
@@ -33,11 +38,13 @@ export class AuthSecurityService implements OnModuleInit, OnModuleDestroy {
   async limit(mobile: string, ip: string, action: 'send' | 'password', userId?: string) {
     if (!userId)
       userId = (await this.prisma.user.findUnique({ where: { mobile }, select: { id: true } }))?.id;
+    const otpPolicy = action === 'send' ? await this.smsSettings?.getOtpPolicy() : undefined;
+    const cooldownMs = (otpPolicy?.resendCooldownSeconds ?? 60) * 1000;
     const now = Date.now();
     const rules: Array<[string, number, number]> =
       action === 'send'
         ? [
-            [`sms:cooldown:${mobile}`, 1, 60_000],
+            [`sms:cooldown:${mobile}`, 1, cooldownMs],
             [`sms:mobile:${mobile}`, 5, 3_600_000],
             [`sms:ip:${ip}`, 20, 3_600_000],
             ...(userId ? [[`sms:user:${userId}`, 5, 3_600_000] as [string, number, number]] : []),

@@ -332,6 +332,10 @@ export class TradesService {
         this.logger.error(`[TradesService] TRADE_CONFIRMED notification failed: ${err}`),
       );
 
+    const eventCustomer = await this.prisma.customer.findUnique({ where: { id: trade.customerId }, select: { userId: true } });
+    await this.notificationService.sendConfiguredSmsEvent?.('trading.order_completed', trade.id,
+      eventCustomer?.userId ?? null, { tradeNumber: trade.tradeNumber, eventDate: new Date().toLocaleDateString('fa-IR') });
+
     return TradeResponseDto.fromEntity(trade);
   }
 
@@ -478,6 +482,7 @@ export class TradesService {
       .catch((err: unknown) =>
         this.logger.error(`[TradesService] TRADE_REVERSED notification failed: ${err}`),
       );
+
 
     return TradeResponseDto.fromEntity(reversed!);
   }

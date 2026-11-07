@@ -163,6 +163,13 @@ export const DASHBOARD_NAV: NavItem[] = [
     anyOf: ['sms.settings.manage'],
     group: 'سیستم',
   },
+  {
+    href: '/dashboard/settings/sms/events',
+    label: 'مدیریت رویدادهای پیامکی',
+    icon: MessageSquare,
+    anyOf: ['sms.settings.manage'],
+    group: 'سیستم',
+  },
 ];
 
 export function visibleNav(permissions: readonly string[] | undefined | null): NavItem[] {

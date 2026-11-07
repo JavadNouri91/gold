@@ -92,6 +92,8 @@ export class SmsSirProvider implements SmsProvider {
       melipayamakBaseUrl:
         (smsConfig?.melipayamakBaseUrl as string) ?? 'https://rest.payamak-panel.com/api/SendSMS',
       melipayamakPassword: (smsConfig?.melipayamakPassword as string) ?? '',
+      apiBaseUrl: '', username: '', password: '', otpTemplate: '', enabled: true, originator: '',
+      otpExpiresInSeconds: 120, otpResendCooldownSeconds: 60, otpMaxAttempts: 5, otpMaxPerHour: 5,
     };
   }
 }

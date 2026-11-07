@@ -3,7 +3,7 @@ import * as Joi from 'joi';
 export function validateEnv(config: Record<string, unknown>) {
   const schema = Joi.object({
     NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
-    APP_PORT: Joi.number().default(4001),
+    APP_PORT: Joi.number().default(4002),
     DATABASE_URL: Joi.string().required(),
     JWT_ACCESS_SECRET: Joi.string().min(32).required(),
     JWT_REFRESH_SECRET: Joi.string().min(32).required(),
@@ -13,9 +13,11 @@ export function validateEnv(config: Record<string, unknown>) {
     OTP_LENGTH: Joi.number().default(6),
     // SMS Provider — docs/21-business-decisions.md §10.1
     // open-questions #31: provider not yet finalized; mock is safe default
-    SMS_PROVIDER: Joi.string().valid('smsir', 'melipayamak', 'mock').default('mock'),
+    SMS_PROVIDER: Joi.string().valid('hisms', 'smsir', 'melipayamak', 'mock').default('hisms'),
     SMS_API_KEY: Joi.string().default(''),
     SMS_SENDER_LINE: Joi.string().default(''),
+    SMS_ENCRYPTION_KEY: Joi.string().min(32).allow('').default(''),
+    OTP_HASH_KEY: Joi.string().min(32).allow('').default(''),
     // Local filesystem storage — docs/deployment.md
     STORAGE_LOCAL_ROOT: Joi.string().default('.data/uploads'),
   }).unknown(true);

@@ -1,4 +1,13 @@
-import { Body, Controller, Delete, Get, Patch, Post, Req } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Patch,
+  Post,
+  Req,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { Request } from 'express';
@@ -8,7 +17,10 @@ import { SmsSettingsService, SmsSettingsView } from '../../application/sms-setti
 import { SmsTestService, SmsTestResult } from '../../application/sms-test.service';
 import { SmsCreditResult, SmsCreditService } from '../../application/sms-credit.service';
 import { SmsLineListResult, SmsLinesService } from '../../application/sms-lines.service';
+import { SmsConnectionService } from '../../application/sms-connection.service';
 import { SendTestSmsDto, UpdateSmsSettingsDto } from '../../application/dto/sms-settings.dto';
+import { SmsEventManagementService } from '../../application/sms-event-management.service';
+import { TestSmsEventDto, UpdateSmsEventDto } from '../../application/dto/sms-event.dto';
 
 /** A live SMS costs money — allow only a handful of probes per minute. */
 const SMS_TEST_THROTTLE = { short: { limit: 3, ttl: 60_000 }, long: { limit: 10, ttl: 60_000 } };
@@ -38,6 +50,8 @@ export class SmsSettingsController {
     private readonly testSms: SmsTestService,
     private readonly credit: SmsCreditService,
     private readonly lines: SmsLinesService,
+    private readonly connection: SmsConnectionService,
+    private readonly events: SmsEventManagementService,
   ) {}
 
   @Get()
@@ -47,18 +61,12 @@ export class SmsSettingsController {
     return this.settings.getView();
   }
 
-  @Get('reveal')
+  @Post('connection-test')
+  @Throttle(SMS_TEST_THROTTLE)
   @RequirePermissions('sms.settings.manage')
-  @ApiOperation({
-    summary: 'Reveal the stored API key and panel password (audited)',
-    description:
-      'The regular GET only returns a masked hint. This endpoint returns the plaintext secrets and writes an audit entry on every call.',
-  })
-  reveal(
-    @CurrentUser() actor: CurrentUserData,
-    @Req() req: Request,
-  ): Promise<{ apiKey: string; melipayamakPassword: string; apiKeySource: string }> {
-    return this.settings.revealSecrets(actor.userId, req.ip);
+  @ApiOperation({ summary: 'Test HiSMS credentials without sending an SMS' })
+  testConnection(@CurrentUser() actor: CurrentUserData, @Req() req: Request) {
+    return this.connection.test(actor.userId, req.ip);
   }
 
   @Get('credit')
@@ -104,6 +112,53 @@ export class SmsSettingsController {
     @CurrentUser() actor: CurrentUserData,
     @Req() req: Request,
   ): Promise<SmsTestResult> {
+    if (!dto.confirmed)
+      throw new BadRequestException('ارسال پیامک آزمایشی نیازمند تأیید صریح است.');
     return this.testSms.sendTest(dto.mobile, actor.userId, req.ip);
+  }
+
+  @Get('events')
+  @RequirePermissions('sms.settings.manage')
+  @ApiOperation({ summary: 'List the supported SMS business events and their settings' })
+  listEvents() {
+    return this.events.list();
+  }
+
+  @Patch('events/:eventId')
+  @RequirePermissions('sms.settings.manage')
+  @ApiOperation({ summary: 'Update settings for a supported SMS event' })
+  updateEvent(
+    @Body() dto: UpdateSmsEventDto,
+    @CurrentUser() actor: CurrentUserData,
+    @Req() req: Request,
+  ) {
+    return this.events.update(req.params.eventId, dto, actor.userId, req.ip);
+  }
+
+  @Post('events/:eventId/test')
+  @Throttle(SMS_TEST_THROTTLE)
+  @RequirePermissions('sms.settings.manage')
+  @ApiOperation({ summary: 'Send a confirmed test template SMS for one event' })
+  testEvent(
+    @Body() dto: TestSmsEventDto,
+    @CurrentUser() actor: CurrentUserData,
+    @Req() req: Request,
+  ) {
+    return this.events.sendTest(
+      req.params.eventId,
+      dto.mobile,
+      dto.confirmed,
+      actor.userId,
+      req.ip,
+      dto,
+    );
+  }
+
+  @Post('events/:eventId/refresh-status')
+  @Throttle(SMS_TEST_THROTTLE)
+  @RequirePermissions('sms.settings.manage')
+  @ApiOperation({ summary: 'Refresh delivery states for the latest 100 accepted messages' })
+  refreshEventStatus(@CurrentUser() actor: CurrentUserData, @Req() req: Request) {
+    return this.events.refreshDeliveryStatus(req.params.eventId, actor.userId, req.ip);
   }
 }

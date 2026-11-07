@@ -33,11 +33,11 @@ services:
     env_file:
       - .env
     environment:
-      PORT: 4001
+      PORT: 4002
       STORAGE_LOCAL_ROOT: /opt/gold/data/uploads
       DATABASE_URL: postgresql://gold_user:gold_pass@postgres:5432/gold_db?schema=public
     ports:
-      - '4001:4001'
+      - '4002:4002'
     depends_on:
       postgres:
         condition: service_healthy

@@ -182,20 +182,68 @@ model UserSessionPolicy {
 }
 
 /// SMS provider credentials editable from the admin panel.
-/// Singleton row id = "global". Empty/null fields fall back to the .env values.
-/// Secrets are stored AES-256-GCM encrypted (see common/crypto/secret-box.ts).
+/// Singleton row id = "global". HiSMS is disabled by default. Provider
+/// credentials use authenticated encryption with SMS_ENCRYPTION_KEY.
 model SmsSetting {
   id                           String   @id
-  provider                     String   @default("mock")
+  provider                     String   @default("hisms")
   apiKeyEncrypted              String?  @map("api_key_encrypted")
   senderLine                   String?  @map("sender_line")
   smsirBaseUrl                 String?  @map("smsir_base_url")
   melipayamakBaseUrl           String?  @map("melipayamak_base_url")
   melipayamakPasswordEncrypted String?  @map("melipayamak_password_encrypted")
+  apiBaseUrl                   String?  @map("api_base_url")
+  username                     String?  @map("username")
+  passwordEncrypted            String?  @map("password_encrypted")
+  otpTemplate                  String?  @map("otp_template")
+  enabled                      Boolean  @default(false)
+  otpExpiresInSeconds          Int      @default(120) @map("otp_expires_in_seconds")
+  otpResendCooldownSeconds     Int      @default(60) @map("otp_resend_cooldown_seconds")
+  otpMaxAttempts               Int      @default(5) @map("otp_max_attempts")
+  connectionTestedAt           DateTime? @map("connection_tested_at")
+  connectionTestSuccess        Boolean? @map("connection_test_success")
+  connectionTestMessage        String?  @map("connection_test_message")
   updatedAt                    DateTime @updatedAt @map("updated_at")
   updatedById                  String?  @map("updated_by_id")
 
   @@map("sms_settings")
+}
+
+/// Optional business-event SMS preferences. Registry entries are disabled by
+/// default and can only reference approved fields defined in application code.
+model SmsEventSetting {
+  eventId         String   @id @map("event_id")
+  enabled         Boolean  @default(false)
+  recipientPolicy String   @default("USER") @map("recipient_policy")
+  templateCode    String?  @map("template_code")
+  parameterFields Json     @default("[]") @map("parameter_fields")
+  sendingMode     String   @default("provider_template") @map("sending_mode")
+  customMessage   String?  @map("custom_message") @db.Text
+  customTextVerifiedAt DateTime? @map("custom_text_verified_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+  updatedById     String?  @map("updated_by_id")
+
+  @@map("sms_event_settings")
+}
+
+model SmsMessageLog {
+  id                    String   @id @default(cuid())
+  provider              String
+  purpose               String
+  recipientMasked       String   @map("recipient_masked")
+  templateCode          String?  @map("template_code")
+  providerReferenceId   String?  @map("provider_reference_id")
+  providerErrorCode     Int?     @map("provider_error_code")
+  acceptanceStatus      String   @map("acceptance_status")
+  deliveryStatus        String?  @map("delivery_status")
+  eventId               String?  @map("event_id")
+  idempotencyKey        String?  @unique @map("idempotency_key")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
+
+  @@index([createdAt])
+  @@index([providerReferenceId])
+  @@map("sms_message_logs")
 }
 
 /// Short-lived proof that credentials were accepted while a session slot must be freed.

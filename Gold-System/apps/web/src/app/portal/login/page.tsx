@@ -73,6 +73,8 @@ export default function LoginPage() {
         setConfirmPassword('');
         router.replace('/portal/dashboard');
       } else {
+        let expiresInSeconds = 120;
+        let resendCooldownSeconds = 60;
         if (tab === 'register') {
           if (!firstName.trim() || !lastName.trim())
             throw new Error('نام و نام خانوادگی الزامی است.');
@@ -84,24 +86,26 @@ export default function LoginPage() {
           )
             throw new Error('رمز عبور باید ۱۲ تا ۱۲۸ نویسه و شامل حرف و عدد باشد.');
           if (password !== confirmPassword) throw new Error('تکرار رمز عبور یکسان نیست.');
-          setNotice(
-            (
-              await authApi.register({
-                firstName,
-                lastName,
-                mobile: normalized,
-                password,
-                confirmPassword,
-              })
-            ).message,
-          );
+          const challenge = await authApi.register({
+            firstName,
+            lastName,
+            mobile: normalized,
+            password,
+            confirmPassword,
+          });
+          setNotice(challenge.message);
+          expiresInSeconds = challenge.expiresInSeconds;
+          resendCooldownSeconds = challenge.resendCooldownSeconds;
         } else {
-          setNotice((await authApi.requestCustomerOtp(normalized)).message);
+          const challenge = await authApi.requestCustomerOtp(normalized);
+          setNotice(challenge.message);
+          expiresInSeconds = challenge.expiresInSeconds;
+          resendCooldownSeconds = challenge.resendCooldownSeconds;
         }
         setVerifying(true);
         setOtp('');
-        setCooldown(60);
-        setExpires(120);
+        setCooldown(resendCooldownSeconds);
+        setExpires(expiresInSeconds);
       }
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'PASSWORD_RECOVERY_REQUIRED') {
@@ -161,6 +165,14 @@ export default function LoginPage() {
             />
           ) : (
             <>
+              {verifying ? (
+                <div className="text-center">
+                  <h2 className="text-lg font-semibold">تأیید شماره موبایل</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    در صورت فعال بودن سرویس، کد تأیید برای این شماره ارسال می‌شود.
+                  </p>
+                </div>
+              ) : null}
               {error && <Alert variant="error">{error}</Alert>}
               {notice && <Alert variant="info">{notice}</Alert>}
               {closeToken && (
@@ -237,6 +249,7 @@ export default function LoginPage() {
                         dir="ltr"
                         inputMode="numeric"
                         autoComplete="one-time-code"
+                        autoFocus
                         maxLength={6}
                         value={toPersianDigits(otp)}
                         onChange={(e) =>

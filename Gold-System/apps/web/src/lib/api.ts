@@ -206,6 +206,8 @@ export async function request<T>(path: string, options: RequestInit = {}): Promi
 export interface LoginResponse {
   message: string;
   requiresOtp?: boolean;
+  expiresInSeconds?: number;
+  resendCooldownSeconds?: number;
   accessToken?: string;
   refreshToken?: string;
   expiresIn?: number;
@@ -231,7 +233,7 @@ export const authApi = {
     mobile: string;
     password: string;
     confirmPassword: string;
-  }): Promise<{ message: string }> {
+  }): Promise<{ message: string; expiresInSeconds: number; resendCooldownSeconds: number }> {
     return rawRequest('/auth/register', { method: 'POST', body: JSON.stringify(data) });
   },
   verifyRegistration(mobile: string, otp: string): Promise<OtpResponse> {
@@ -246,7 +248,9 @@ export const authApi = {
       body: JSON.stringify({ mobile, password }),
     });
   },
-  requestCustomerOtp(mobile: string): Promise<{ message: string }> {
+  requestCustomerOtp(
+    mobile: string,
+  ): Promise<{ message: string; expiresInSeconds: number; resendCooldownSeconds: number }> {
     return rawRequest('/auth/customer/otp/request', {
       method: 'POST',
       body: JSON.stringify({ mobile }),
@@ -424,7 +428,12 @@ export const customerApi = {
     return request('/customers/me/bank-accounts');
   },
 
-  createMyBankAccount(input: { iban: string; bankName?: string; cardNumber?: string; accountNumber?: string }): Promise<CustomerBankAccount> {
+  createMyBankAccount(input: {
+    iban: string;
+    bankName?: string;
+    cardNumber?: string;
+    accountNumber?: string;
+  }): Promise<CustomerBankAccount> {
     return request('/customers/me/bank-accounts', {
       method: 'POST',
       body: JSON.stringify(input),

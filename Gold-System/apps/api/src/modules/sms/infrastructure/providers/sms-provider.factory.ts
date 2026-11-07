@@ -3,6 +3,7 @@ import { SmsProvider, SmsProviderName } from './sms-provider.interface';
 import { MockSmsProvider } from './mock-sms.provider';
 import { SmsSirProvider } from './smsir.provider';
 import { MelipayamakProvider } from './melipayamak.provider';
+import { HismsProvider } from './hisms.provider';
 
 /**
  * SMS Provider Factory
@@ -24,6 +25,7 @@ export class SmsProviderFactory {
     private readonly mockProvider: MockSmsProvider,
     private readonly smsSirProvider: SmsSirProvider,
     private readonly melipayamakProvider: MelipayamakProvider,
+    private readonly hismsProvider: HismsProvider,
   ) {}
 
   forProvider(name: string): SmsProvider {
@@ -31,6 +33,8 @@ export class SmsProviderFactory {
     const nodeEnv = process.env.NODE_ENV ?? 'development';
 
     switch (providerName) {
+      case 'hisms':
+        return this.hismsProvider;
       case 'smsir':
         return this.smsSirProvider;
       case 'melipayamak':

@@ -350,6 +350,14 @@ export class PaymentService {
       );
     }
 
+    if (isWithdrawal || (!payment.tradeId && payment.direction === PaymentDirection.DEPOSIT)) {
+      const customer = await this.prisma.customer.findUnique({ where: { id: payment.customerId }, select: { userId: true } });
+      await this.notificationService.sendConfiguredSmsEvent?.(
+        isWithdrawal ? 'financial.withdrawal_completed' : 'financial.deposit_confirmed', payment.id,
+        customer?.userId ?? null, { eventDate: new Date().toLocaleDateString('fa-IR') },
+      );
+    }
+
     return PaymentResponseDto.from(updated);
   }
 
@@ -951,6 +959,10 @@ export class PaymentService {
       'درخواست برداشت ثبت شد',
       `درخواست برداشت به مبلغ ${amount.toFixed(2)} ریال ثبت و مبلغ رزرو شد. پس از تأیید مالی به شبا واریز می‌شود.`,
     );
+
+    const withdrawalCustomer = await this.prisma.customer.findUnique({ where: { id: customerId }, select: { userId: true } });
+    await this.notificationService.sendConfiguredSmsEvent?.('financial.withdrawal_requested', payment.id,
+      withdrawalCustomer?.userId ?? null, { eventDate: new Date().toLocaleDateString('fa-IR') });
 
     return this.toLedgerDto({
       payment,

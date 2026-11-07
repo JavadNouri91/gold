@@ -174,6 +174,7 @@ describe('OrdersService', () => {
   let tradingPolicy: { assertTradingOpen: jest.Mock; validateTransaction: jest.Mock };
   let activity: { sellableWeightGrams: jest.Mock };
   let tradesService: { confirmTrade: jest.Mock };
+  let notificationService: { dispatch: jest.Mock; sendConfiguredSmsEvent: jest.Mock };
 
   // Mock $transaction: just execute the callback with a fake tx
   // Phase 3.5: fakeTx needs order.update + order.findUnique + assignment.updateMany
@@ -183,6 +184,7 @@ describe('OrdersService', () => {
   } as unknown as Parameters<Parameters<typeof prisma.$transaction>[0]>[0];
 
   beforeEach(async () => {
+    notificationService = { dispatch: jest.fn().mockResolvedValue([]), sendConfiguredSmsEvent: jest.fn().mockResolvedValue(undefined) };
     // Reset fakeTx mocks
     (
       fakeTx as unknown as {
@@ -276,7 +278,7 @@ describe('OrdersService', () => {
         },
         {
           provide: NotificationService,
-          useValue: { dispatch: jest.fn().mockResolvedValue([]) },
+          useValue: notificationService,
         },
         // Phase 3.4: QuotationsService integrated into OrdersService
         {
@@ -497,6 +499,9 @@ describe('OrdersService', () => {
       // TX1: Order → SUBMITTED
       expect(orderRepo.submitInTx).toHaveBeenCalledTimes(1);
       expect(orderRepo.submitInTx).toHaveBeenCalledWith(fakeTx, ORDER_ID, TOTAL_AMOUNT);
+      expect(notificationService.sendConfiguredSmsEvent).toHaveBeenCalledWith(
+        'trading.buy_order_created', ORDER_ID, null, expect.objectContaining({ orderNumber: ORDER_NUMBER }),
+      );
 
       // Phase 3.4: Quotation auto-generated (UC-08, BR-O02)
       expect(quotationsService.generateForOrder).toHaveBeenCalledTimes(1);

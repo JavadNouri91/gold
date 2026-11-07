@@ -14,20 +14,26 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
  */
 
 const FORMAT_VERSION = 'v1';
+const SMS_FORMAT_VERSION = 'sms1';
 
-function keyBytes(): Buffer {
+function keyBytes(secret: string): Buffer {
+  if (!secret) throw new Error('Secret encryption key is not configured.');
+  return createHash('sha256').update(secret, 'utf8').digest();
+}
+
+function legacyKeyBytes(): Buffer {
   const secret = process.env.SETTINGS_ENCRYPTION_KEY || process.env.JWT_ACCESS_SECRET || '';
   if (!secret) {
     throw new Error(
       'SETTINGS_ENCRYPTION_KEY or JWT_ACCESS_SECRET must be set to store encrypted settings.',
     );
   }
-  return createHash('sha256').update(secret, 'utf8').digest();
+  return keyBytes(secret);
 }
 
 export function encryptSecret(plaintext: string): string {
   const iv = randomBytes(12);
-  const cipher = createCipheriv('aes-256-gcm', keyBytes(), iv);
+  const cipher = createCipheriv('aes-256-gcm', legacyKeyBytes(), iv);
   const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
   return [
     FORMAT_VERSION,
@@ -42,11 +48,47 @@ export function decryptSecret(payload: string): string {
   if (version !== FORMAT_VERSION || !iv || !tag || !data) {
     throw new Error('Unsupported encrypted secret format.');
   }
-  const decipher = createDecipheriv('aes-256-gcm', keyBytes(), Buffer.from(iv, 'base64'));
+  const decipher = createDecipheriv('aes-256-gcm', legacyKeyBytes(), Buffer.from(iv, 'base64'));
   decipher.setAuthTag(Buffer.from(tag, 'base64'));
   return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString(
     'utf8',
   );
+}
+
+/** Dedicated SMS key. New credentials never fall back to JWT or settings keys. */
+export function encryptSmsSecret(plaintext: string): string {
+  const secret = process.env.SMS_ENCRYPTION_KEY || '';
+  if (Buffer.byteLength(secret, 'utf8') < 32)
+    throw new Error('SMS_ENCRYPTION_KEY must contain at least 32 bytes to store SMS credentials.');
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', keyBytes(secret), iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return [
+    SMS_FORMAT_VERSION,
+    iv.toString('base64'),
+    cipher.getAuthTag().toString('base64'),
+    encrypted.toString('base64'),
+  ].join(':');
+}
+
+/** Reads new SMS ciphertext and legacy v1 ciphertext during key migration. */
+export function decryptSmsSecret(payload: string): { value: string; legacy: boolean } {
+  const [version, iv, tag, data] = payload.split(':');
+  if (version === FORMAT_VERSION) return { value: decryptSecret(payload), legacy: true };
+  if (version !== SMS_FORMAT_VERSION || !iv || !tag || !data) {
+    throw new Error('Unsupported encrypted SMS secret format.');
+  }
+  const secret = process.env.SMS_ENCRYPTION_KEY || '';
+  if (Buffer.byteLength(secret, 'utf8') < 32)
+    throw new Error('SMS_ENCRYPTION_KEY must contain at least 32 bytes.');
+  const decipher = createDecipheriv('aes-256-gcm', keyBytes(secret), Buffer.from(iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(tag, 'base64'));
+  return {
+    value: Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString(
+      'utf8',
+    ),
+    legacy: false,
+  };
 }
 
 /** Never send a stored secret to the browser — only a hint that it exists. */

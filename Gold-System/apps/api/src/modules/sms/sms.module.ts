@@ -4,12 +4,15 @@ import { SMS_PROVIDER_TOKEN } from './infrastructure/providers/sms-provider.inte
 import { MockSmsProvider } from './infrastructure/providers/mock-sms.provider';
 import { SmsSirProvider } from './infrastructure/providers/smsir.provider';
 import { MelipayamakProvider } from './infrastructure/providers/melipayamak.provider';
+import { HismsProvider } from './infrastructure/providers/hisms.provider';
 import { SmsProviderFactory } from './infrastructure/providers/sms-provider.factory';
 import { RoutingSmsProvider } from './infrastructure/providers/routing-sms.provider';
 import { SmsSettingsService } from './application/sms-settings.service';
 import { SmsTestService } from './application/sms-test.service';
+import { SmsConnectionService } from './application/sms-connection.service';
 import { SmsCreditService } from './application/sms-credit.service';
 import { SmsLinesService } from './application/sms-lines.service';
+import { SmsEventManagementService } from './application/sms-event-management.service';
 import { SmsSettingsController } from './presentation/controllers/sms-settings.controller';
 
 /**
@@ -30,18 +33,21 @@ import { SmsSettingsController } from './presentation/controllers/sms-settings.c
     MockSmsProvider,
     SmsSirProvider,
     MelipayamakProvider,
+    HismsProvider,
     SmsProviderFactory,
     SmsSettingsService,
     RoutingSmsProvider,
     SmsTestService,
+    SmsConnectionService,
     SmsCreditService,
     SmsLinesService,
+    SmsEventManagementService,
     {
       provide: SMS_PROVIDER_TOKEN,
       useFactory: (routing: RoutingSmsProvider) => routing,
       inject: [RoutingSmsProvider],
     },
   ],
-  exports: [SMS_PROVIDER_TOKEN, SmsSettingsService],
+  exports: [SMS_PROVIDER_TOKEN, SmsSettingsService, SmsEventManagementService],
 })
 export class SmsModule {}

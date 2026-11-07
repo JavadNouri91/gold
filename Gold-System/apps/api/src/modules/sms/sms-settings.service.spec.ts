@@ -1,201 +1,171 @@
 import { BadRequestException } from '@nestjs/common';
 import { SmsSettingsService, SMS_SETTING_ID } from './application/sms-settings.service';
-import { RoutingSmsProvider } from './infrastructure/providers/routing-sms.provider';
-import { decryptSecret, encryptSecret } from '../../common/crypto/secret-box';
+import { decryptSmsSecret, encryptSecret, encryptSmsSecret } from '../../common/crypto/secret-box';
 import type { SmsSetting } from '@prisma/client';
-
-/**
- * SMS settings unit tests.
- *
- *  1. No database row → every value comes from .env
- *  2. Database row wins over .env
- *  3. The API key is encrypted at rest and only ever returned masked
- *  4. Omitting apiKey keeps the stored secret; '' clears it
- *  5. mock is rejected in production
- *  6. reset deletes the row and the .env values apply again
- *  7. Sender line accepts Persian digits and rejects letters
- *  8. RoutingSmsProvider forwards the resolved config to the chosen provider
- */
-
-const ENV_SMS = {
-  provider: 'smsir',
-  apiKey: 'env-api-key',
-  senderLine: '3000111',
-  smsirBaseUrl: 'https://api.sms.ir/v1',
-  melipayamakBaseUrl: 'https://rest.payamak-panel.com/api/SendSMS',
-  melipayamakPassword: '',
-};
 
 function row(overrides: Partial<SmsSetting> = {}): SmsSetting {
   return {
     id: SMS_SETTING_ID,
-    provider: 'smsir',
+    provider: 'hisms',
     apiKeyEncrypted: null,
-    senderLine: null,
+    senderLine: '50004597',
     smsirBaseUrl: null,
     melipayamakBaseUrl: null,
     melipayamakPasswordEncrypted: null,
-    updatedAt: new Date('2026-10-26T10:00:00.000Z'),
+    apiBaseUrl: null,
+    username: 'CSkkrm',
+    passwordEncrypted: null,
+    otpTemplate: null,
+    enabled: false,
+    otpExpiresInSeconds: 120,
+    otpResendCooldownSeconds: 60,
+    otpMaxAttempts: 5,
+    connectionTestedAt: null,
+    connectionTestSuccess: null,
+    connectionTestMessage: null,
+    updatedAt: new Date('2026-11-07T10:00:00.000Z'),
     updatedById: 'admin-1',
     ...overrides,
   };
 }
 
 describe('SmsSettingsService', () => {
-  const originalEnv = process.env.NODE_ENV;
   let service: SmsSettingsService;
-  let prisma: {
+  const prisma = {
+    smsEventSetting: { updateMany: jest.fn() },
     smsSetting: {
-      findUnique: jest.Mock;
-      upsert: jest.Mock;
-      deleteMany: jest.Mock;
-    };
+      findUnique: jest.fn(),
+      upsert: jest.fn(),
+      deleteMany: jest.fn(),
+    },
   };
-  let audit: { log: jest.Mock };
+  const audit = { log: jest.fn() };
 
   beforeEach(() => {
-    process.env.NODE_ENV = 'development';
-    process.env.SETTINGS_ENCRYPTION_KEY = 'unit-test-encryption-secret';
-
-    prisma = {
-      smsSetting: {
-        findUnique: jest.fn().mockResolvedValue(null),
-        upsert: jest.fn().mockResolvedValue(undefined),
-        deleteMany: jest.fn().mockResolvedValue({ count: 1 }),
-      },
-    };
-    audit = { log: jest.fn().mockResolvedValue({}) };
-
-    const config = { get: jest.fn().mockReturnValue(ENV_SMS) };
-    service = new SmsSettingsService(prisma as never, config as never, audit as never);
-  });
-
-  afterEach(() => {
-    process.env.NODE_ENV = originalEnv;
-    delete process.env.SETTINGS_ENCRYPTION_KEY;
-    jest.clearAllMocks();
-  });
-
-  it('falls back to the .env configuration when nothing is stored', async () => {
-    const view = await service.getView();
-
-    expect(view.provider).toBe('smsir');
-    expect(view.senderLine).toBe('3000111');
-    expect(view.apiKeySource).toBe('environment');
-    expect(view.storedInDatabase).toBe(false);
-    expect(view.apiKeyMasked).toContain('••••');
-    expect(view.apiKeyMasked).not.toContain('env-api-key');
-  });
-
-  it('lets the stored row win over the .env values', async () => {
-    prisma.smsSetting.findUnique.mockResolvedValue(
-      row({ apiKeyEncrypted: encryptForTest('db-api-key'), senderLine: '3000999' }),
+    process.env.NODE_ENV = 'test';
+    process.env.SMS_ENCRYPTION_KEY = 'dedicated-sms-key-with-at-least-32-chars';
+    process.env.SETTINGS_ENCRYPTION_KEY = 'legacy-settings-key-with-at-least-32-chars';
+    process.env.JWT_ACCESS_SECRET = 'jwt-test-key-with-at-least-32-characters';
+    prisma.smsSetting.findUnique.mockResolvedValue(null);
+    prisma.smsSetting.upsert.mockResolvedValue(undefined);
+    prisma.smsSetting.deleteMany.mockResolvedValue({ count: 1 });
+    prisma.smsEventSetting.updateMany.mockResolvedValue({ count: 1 });
+    audit.log.mockResolvedValue({});
+    service = new SmsSettingsService(
+      prisma as never,
+      { get: jest.fn().mockReturnValue({ provider: 'mock' }) } as never,
+      audit as never,
     );
-
-    const view = await service.getView();
-
-    expect(view.senderLine).toBe('3000999');
-    expect(view.apiKeySource).toBe('database');
-    expect(view.storedInDatabase).toBe(true);
   });
 
-  it('encrypts the API key at rest and never returns the plaintext', async () => {
+  afterEach(() => jest.clearAllMocks());
+
+  it('defaults to HiSMS disabled with the documented initial username and sender', async () => {
+    const view = await service.getView();
+    expect(view).toMatchObject({
+      provider: 'hisms',
+      username: 'CSkkrm',
+      originator: '50004597',
+      enabled: false,
+      connectionStatus: 'incomplete',
+    });
+  });
+
+  it('saves general settings while the OTP template is missing', async () => {
     const view = await service.update(
-      { provider: 'smsir', apiKey: 'super-secret-key', senderLine: '3000123' },
+      {
+        provider: 'hisms',
+        apiBaseUrl: '',
+        username: 'CSkkrm',
+        originator: '۵۰۰۰۴۵۹۷',
+        enabled: false,
+      },
       'admin-1',
-      '127.0.0.1',
     );
-
-    const written = prisma.smsSetting.upsert.mock.calls[0][0] as {
-      create: { apiKeyEncrypted: string };
-    };
-    expect(written.create.apiKeyEncrypted).not.toContain('super-secret-key');
-    expect(decryptSecret(written.create.apiKeyEncrypted)).toBe('super-secret-key');
-    expect(view.apiKeyMasked).not.toContain('super-secret-key');
-    expect(audit.log).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'SMS_SETTINGS_CHANGED', entityId: SMS_SETTING_ID }),
-    );
+    expect(view.otpTemplate).toBe('');
+    expect(view.enabled).toBe(false);
+    expect(prisma.smsSetting.upsert).toHaveBeenCalled();
   });
 
-  it('keeps the stored key when apiKey is omitted and clears it on an empty string', async () => {
-    const existing = row({ apiKeyEncrypted: encryptForTest('kept-key') });
-    prisma.smsSetting.findUnique.mockResolvedValue(existing);
-
-    await service.update({ provider: 'smsir' }, 'admin-1');
-    const kept = prisma.smsSetting.upsert.mock.calls[0][0] as {
-      update: { apiKeyEncrypted: string | null };
-    };
-    expect(kept.update.apiKeyEncrypted).toBe(existing.apiKeyEncrypted);
-
-    await service.update({ provider: 'smsir', apiKey: '' }, 'admin-1');
-    const cleared = prisma.smsSetting.upsert.mock.calls[1][0] as {
-      update: { apiKeyEncrypted: string | null };
-    };
-    expect(cleared.update.apiKeyEncrypted).toBeNull();
-  });
-
-  it('rejects the mock provider in production', async () => {
-    process.env.NODE_ENV = 'production';
-
-    await expect(service.update({ provider: 'mock' }, 'admin-1')).rejects.toBeInstanceOf(
-      BadRequestException,
+  it('invalidates custom-text capability tests when SMS provider settings change', async () => {
+    await service.update(
+      { provider: 'hisms', apiBaseUrl: 'https://sms.example.org' },
+      'admin-1',
     );
-    expect(prisma.smsSetting.upsert).not.toHaveBeenCalled();
+    expect(prisma.smsEventSetting.updateMany).toHaveBeenCalledWith({
+      where: { customTextVerifiedAt: { not: null } },
+      data: { customTextVerifiedAt: null },
+    });
   });
 
-  it('normalizes Persian digits in the sender line and rejects letters', async () => {
-    await service.update({ provider: 'smsir', senderLine: '۳۰۰۰۱۲۳' }, 'admin-1');
-    const written = prisma.smsSetting.upsert.mock.calls[0][0] as {
-      update: { senderLine: string };
-    };
-    expect(written.update.senderLine).toBe('3000123');
+  it('encrypts passwords with the dedicated key and never returns/logs them', async () => {
+    const view = await service.update(
+      { provider: 'hisms', password: 'provider-secret', apiBaseUrl: 'https://sms.example.org' },
+      'admin-1',
+    );
+    const write = prisma.smsSetting.upsert.mock.calls[0][0];
+    expect(write.create.passwordEncrypted).not.toContain('provider-secret');
+    expect(decryptSmsSecret(write.create.passwordEncrypted).value).toBe('provider-secret');
+    expect(JSON.stringify(view)).not.toContain('provider-secret');
+    expect(JSON.stringify(audit.log.mock.calls)).not.toContain('provider-secret');
+  });
 
+  it('preserves an existing password when the password field is omitted', async () => {
+    const saved = encryptSmsSecret('saved-secret');
+    prisma.smsSetting.findUnique.mockResolvedValue(row({ passwordEncrypted: saved }));
+    await service.update({ provider: 'hisms', username: 'CSkkrm' }, 'admin-1');
+    const update = prisma.smsSetting.upsert.mock.calls[0][0].update;
+    expect(update.passwordEncrypted).toBe(saved);
+  });
+
+  it('reads a legacy encrypted password and re-encrypts it with SMS_ENCRYPTION_KEY on save', async () => {
+    const legacy = encryptSecret('old-secret');
+    prisma.smsSetting.findUnique.mockResolvedValue(row({ passwordEncrypted: legacy }));
+    expect((await service.getView()).passwordConfigured).toBe(true);
+    await service.update({ provider: 'hisms' }, 'admin-1');
+    const updated = prisma.smsSetting.upsert.mock.calls[0][0].update.passwordEncrypted;
+    expect(updated).toMatch(/^sms1:/);
+    expect(decryptSmsSecret(updated).value).toBe('old-secret');
+  });
+
+  it('allows an explicit password clear', async () => {
+    prisma.smsSetting.findUnique.mockResolvedValue(
+      row({ passwordEncrypted: encryptSmsSecret('saved') }),
+    );
+    await service.update({ provider: 'hisms', password: '' }, 'admin-1');
+    expect(prisma.smsSetting.upsert.mock.calls[0][0].update.passwordEncrypted).toBeNull();
+  });
+
+  it.each([
+    'http://127.0.0.1',
+    'https://localhost',
+    'https://user:pass@sms.example.org',
+    'https://192.168.1.8',
+  ])('rejects unsafe API URL %s', async (apiBaseUrl) => {
     await expect(
-      service.update({ provider: 'smsir', senderLine: 'abc' }, 'admin-1'),
+      service.update({ provider: 'hisms', apiBaseUrl }, 'admin-1'),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
 
-  it('reset drops the row so the .env values apply again', async () => {
-    prisma.smsSetting.findUnique.mockResolvedValue(row({ senderLine: '3000999' }));
-
-    await service.resetToEnv('admin-1', '127.0.0.1');
-
-    expect(prisma.smsSetting.deleteMany).toHaveBeenCalledWith({
-      where: { id: SMS_SETTING_ID },
-    });
+  it('normalizes Persian sender digits and audits settings without secrets', async () => {
+    await service.update({ provider: 'hisms', originator: '۵۰۰۰۴۵۹۷' }, 'admin-1', '127.0.0.1');
+    const write = prisma.smsSetting.upsert.mock.calls[0][0];
+    expect(write.create.senderLine).toBe('50004597');
     expect(audit.log).toHaveBeenCalledWith(
-      expect.objectContaining({ action: 'SMS_SETTINGS_RESET' }),
+      expect.objectContaining({ action: 'SMS_SETTINGS_CHANGED' }),
+    );
+  });
+
+  it('stores connection test outcome without provider credentials', async () => {
+    await service.recordConnectionTest('admin-1', '127.0.0.1', {
+      success: false,
+      message: 'اتصال برقرار نیست.',
+    });
+    expect(prisma.smsSetting.upsert.mock.calls[0][0].update).toEqual(
+      expect.objectContaining({ connectionTestSuccess: false }),
+    );
+    expect(audit.log).toHaveBeenCalledWith(
+      expect.objectContaining({ action: 'SMS_CONNECTION_TEST' }),
     );
   });
 });
-
-describe('RoutingSmsProvider', () => {
-  it('sends through the provider and credentials resolved at call time', async () => {
-    const config = {
-      provider: 'melipayamak' as const,
-      apiKey: 'user',
-      senderLine: '3000',
-      smsirBaseUrl: 'https://api.sms.ir/v1',
-      melipayamakBaseUrl: 'https://rest.payamak-panel.com/api/SendSMS',
-      melipayamakPassword: 'pass',
-    };
-    const settings = { resolveEffectiveConfig: jest.fn().mockResolvedValue(config) };
-    const target = {
-      providerName: 'melipayamak',
-      send: jest.fn().mockResolvedValue({ success: true, providerReference: '42' }),
-    };
-    const factory = { forProvider: jest.fn().mockReturnValue(target) };
-
-    const routing = new RoutingSmsProvider(settings as never, factory as never);
-    const result = await routing.send('09120000000', 'hi');
-
-    expect(factory.forProvider).toHaveBeenCalledWith('melipayamak');
-    expect(target.send).toHaveBeenCalledWith('09120000000', 'hi', config);
-    expect(result).toEqual({ success: true, providerReference: '42' });
-  });
-});
-
-function encryptForTest(value: string): string {
-  // Uses the same helper the service uses, so decryption round-trips.
-  return encryptSecret(value);
-}

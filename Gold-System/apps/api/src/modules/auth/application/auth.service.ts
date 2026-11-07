@@ -1,5 +1,5 @@
 import { BadRequestException } from '@nestjs/common';
-import { randomBytes } from 'crypto';
+import { randomBytes, randomUUID } from 'crypto';
 import { PrismaService } from '../../../database/prisma.service';
 import { CustomersService } from '../../customers/application/customers.service';
 import { AuthSecurityService, AUTH_ERROR } from './auth-security.service';
@@ -18,6 +18,8 @@ import { hashRefreshToken } from '../domain/refresh-token.hash';
 import { generateNumericOtp } from '../domain/otp-generator';
 import { JwtPayload, TokenPair } from '@gold/shared-types';
 import { toLatinDigits } from '../../../common/digits';
+import { Optional } from '@nestjs/common';
+import { SmsSettingsService } from '../../sms/application/sms-settings.service';
 
 /**
  * Valid argon2id hash of a throwaway string.
@@ -56,6 +58,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly customers: CustomersService,
     private readonly security: AuthSecurityService,
+    @Optional() private readonly smsSettings?: SmsSettingsService,
   ) {}
 
   /**
@@ -67,7 +70,12 @@ export class AuthService {
     _ipAddress?: string,
     _userAgent?: string,
   ): Promise<
-    | { message: string; requiresOtp: true }
+    | {
+        message: string;
+        requiresOtp: true;
+        expiresInSeconds: number;
+        resendCooldownSeconds: number;
+      }
     | (TokenPair & {
         message: string;
         requiresOtp: false;
@@ -96,8 +104,13 @@ export class AuthService {
         requiresOtp: false,
       };
     }
-    await this.sendChallenge(user.id, mobile, 'LOGIN');
-    return { message: 'کد تأیید ارسال شد.', requiresOtp: true };
+    const challenge = await this.sendChallenge(user.id, mobile, 'LOGIN');
+    return {
+      message: 'در صورت امکان، کد تأیید ارسال می‌شود.',
+      requiresOtp: true,
+      expiresInSeconds: challenge.expiresInSeconds,
+      resendCooldownSeconds: challenge.resendCooldownSeconds,
+    };
   }
 
   requiresLoginOtp(): boolean {
@@ -462,22 +475,26 @@ export class AuthService {
     purpose: string,
     payload?: import('@prisma/client').Prisma.InputJsonValue,
   ) {
+    const otpPolicy = await this.smsSettings?.getOtpPolicy();
+    const expiresInSeconds = otpPolicy?.expiresInSeconds ?? this.defaultOtpExpirySeconds();
+    const resendCooldownSeconds = otpPolicy?.resendCooldownSeconds ?? 60;
     const otp = generateNumericOtp(6);
     await this.otpRepository.createOrReplace({
       userId,
       mobile,
       purpose,
       code: otp,
-      expiresAt: new Date(Date.now() + 120_000),
+      expiresAt: new Date(Date.now() + expiresInSeconds * 1000),
       payload,
     });
     try {
-      await this.notificationService.sendOtp(userId, mobile, otp);
+      await this.notificationService.sendOtp(userId, mobile, otp, purpose);
     } catch {
       await this.otpRepository.invalidate(mobile, purpose);
       this.logger.warn('Authentication SMS delivery failed');
       // Keep account existence private. The frontend never promises delivery.
     }
+    return { expiresInSeconds, resendCooldownSeconds };
   }
 
   async initiateRegistration(dto: RegistrationDto) {
@@ -488,14 +505,21 @@ export class AuthService {
       where: { mobile: dto.mobile },
       select: { id: true },
     });
+    let expiresInSeconds =
+      (await this.smsSettings?.getOtpPolicy())?.expiresInSeconds ?? this.defaultOtpExpirySeconds();
     if (!exists && !customerExists) {
-      await this.sendChallenge(null, dto.mobile, 'REGISTRATION', {
+      const challenge = await this.sendChallenge(null, dto.mobile, 'REGISTRATION', {
         firstName: dto.firstName.trim(),
         lastName: dto.lastName.trim(),
         passwordHash,
       });
+      expiresInSeconds = challenge.expiresInSeconds;
     }
-    return { message: 'در صورت امکان ثبت‌نام، کد تأیید ارسال می‌شود.' };
+    return {
+      message: 'در صورت امکان، کد تأیید برای ادامه ثبت‌نام ارسال می‌شود.',
+      expiresInSeconds,
+      resendCooldownSeconds: (await this.smsSettings?.getOtpPolicy())?.resendCooldownSeconds ?? 60,
+    };
   }
 
   async verifyRegistration(mobile: string, otp: string, ipAddress?: string, userAgent?: string) {
@@ -577,8 +601,24 @@ export class AuthService {
 
   async requestCustomerOtp(mobile: string) {
     const found = await this.customerForLogin(mobile);
-    if (found) await this.sendChallenge(found.user.id, mobile, 'CUSTOMER_LOGIN');
-    return { message: 'اگر حساب مجاز باشد، کد تأیید ارسال می‌شود.' };
+    const policy = await this.smsSettings?.getOtpPolicy();
+    const challenge = found
+      ? await this.sendChallenge(found.user.id, mobile, 'CUSTOMER_LOGIN')
+      : null;
+    return {
+      message: 'در صورت امکان، کد تأیید ارسال می‌شود.',
+      expiresInSeconds:
+        challenge?.expiresInSeconds ?? policy?.expiresInSeconds ?? this.defaultOtpExpirySeconds(),
+      resendCooldownSeconds:
+        challenge?.resendCooldownSeconds ?? policy?.resendCooldownSeconds ?? 60,
+    };
+  }
+
+  private defaultOtpExpirySeconds() {
+    const configured = this.configService.get<number>('otp.expiresInSeconds');
+    return Number.isSafeInteger(configured) && (configured as number) > 0
+      ? (configured as number)
+      : 120;
   }
 
   async verifyCustomerOtp(mobile: string, otp: string, ipAddress?: string, userAgent?: string) {
@@ -633,6 +673,11 @@ export class AuthService {
       entityId: user.id,
       ipAddress,
     });
+
+    if (user.roles.includes('customer')) {
+      void this.notificationService.sendConfiguredSmsEvent?.('auth.new_login_alert', randomUUID(), user.id,
+        { eventDate: new Date().toLocaleDateString('fa-IR') });
+    }
 
     return {
       ...tokenPair,

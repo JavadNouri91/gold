@@ -13,7 +13,7 @@ import { registerAs } from '@nestjs/config';
  * Provider selection: SMS_PROVIDER=smsir | melipayamak | mock
  */
 export default registerAs('sms', () => ({
-  provider: process.env.SMS_PROVIDER ?? 'mock',
+  provider: process.env.SMS_PROVIDER ?? 'hisms',
   apiKey: process.env.SMS_API_KEY ?? '',
   senderLine: process.env.SMS_SENDER_LINE ?? '',
   // SMS.ir specific

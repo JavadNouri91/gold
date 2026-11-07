@@ -13,6 +13,7 @@ import { UsersModule } from '../users/users.module';
 import { AuditModule } from '../audit/audit.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SessionsModule } from '../sessions/sessions.module';
+import { SmsModule } from '../sms/sms.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { SessionsModule } from '../sessions/sessions.module';
     AuditModule,
     NotificationsModule,
     SessionsModule,
+    SmsModule,
   ],
   providers: [AuthSecurityService, AuthService, JwtStrategy, OtpRepository, RefreshTokenRepository],
   controllers: [AuthController],

@@ -29,7 +29,7 @@ start "Gold Web" cmd /k "cd /d "%~dp0" && pnpm dev:web"
 
 echo.
 echo Web: http://localhost:4000
-echo API: http://localhost:4001/api/v1
+echo API: http://localhost:4002/api/v1
 echo.
 echo Close the Gold API / Gold Web windows to stop the servers.
 endlocal

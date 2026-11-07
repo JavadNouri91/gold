@@ -1,30 +1,14 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { SmsProvider, SmsDeliveryResult } from './sms-provider.interface';
+import { randomUUID } from 'node:crypto';
+import { SmsDeliveryResult, SmsProvider } from './sms-provider.interface';
 
-/**
- * Mock SMS Provider — for development and testing only.
- *
- * Selected when the resolved provider is `mock` (the default in development).
- * Logs the message to the console at WARN level so developers
- * can see the SMS content without actually sending it.
- *
- * SECURITY: OTP values are logged here only in development.
- * This provider must NEVER be used in production.
- */
 @Injectable()
 export class MockSmsProvider implements SmsProvider {
   private readonly logger = new Logger(MockSmsProvider.name);
   readonly providerName = 'mock';
 
-  async send(to: string, message: string): Promise<SmsDeliveryResult> {
-    // Only log in development — never in production
-    const nodeEnv = process.env.NODE_ENV ?? 'development';
-    if (nodeEnv === 'development' || nodeEnv === 'test') {
-      this.logger.warn(`[MOCK SMS] To: ${to} | Message: ${message}`);
-    }
-    return {
-      success: true,
-      providerReference: `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-    };
+  async send(_to: string, _message: string): Promise<SmsDeliveryResult> {
+    if (process.env.NODE_ENV === 'development') this.logger.warn('Simulated SMS delivery.');
+    return { success: true, providerReference: `mock-${randomUUID()}` };
   }
 }

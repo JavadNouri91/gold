@@ -1,4 +1,4 @@
-import { Injectable, Logger, Inject, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger, Inject, BadRequestException, Optional } from '@nestjs/common';
 import { NotificationRepository } from '../infrastructure/repositories/notification.repository';
 import {
   SmsProvider,
@@ -20,6 +20,7 @@ import {
 import { InboxCriteria } from '../domain/inbox-filter';
 import { NotificationRelationDto } from '../domain/owned-relation';
 import { ListNotificationsQueryDto } from './dto/list-notifications.query';
+import { SmsEventManagementService, SmsEventId } from '../../sms/application/sms-event-management.service';
 
 export interface DispatchNotificationInput {
   /** User ID of the recipient (null for system-level notifications) */
@@ -70,7 +71,13 @@ export class NotificationService {
     private readonly notificationRepo: NotificationRepository,
     @Inject(SMS_PROVIDER_TOKEN) private readonly smsProvider: SmsProvider,
     private readonly audit: AuditService,
+    @Optional() private readonly smsEvents?: SmsEventManagementService,
   ) {}
+
+  /** Sends an optional, admin-configured template after the caller's commit. */
+  sendConfiguredSmsEvent(eventId: SmsEventId, eventKey: string, userId: string | null, values: Record<string, string>) {
+    return this.smsEvents?.dispatch(eventId, eventKey, userId, values) ?? Promise.resolve();
+  }
 
   // ─── Core Dispatch ───────────────────────────────────────────────────────
 
@@ -122,7 +129,12 @@ export class NotificationService {
    * - OTP plaintext is NOT logged at any level when NODE_ENV=production.
    * - The mock provider logs OTP in development/test mode only.
    */
-  async sendOtp(userId: string | null, mobile: string, otpPlaintext: string): Promise<void> {
+  async sendOtp(
+    userId: string | null,
+    mobile: string,
+    otpPlaintext: string,
+    purpose = 'otp',
+  ): Promise<void> {
     const body = `کد تایید شما: ${otpPlaintext}\nاعتبار: ۲ دقیقه`;
 
     // Create notification record (status=PENDING — body does NOT contain OTP for security)
@@ -143,13 +155,13 @@ export class NotificationService {
       const msg = err instanceof Error ? err.message : String(err);
       this.logger.error(`[NotificationService] OTP DB record creation failed: ${msg}`);
       // Still attempt SMS delivery even if DB record creation fails
-      const sent = await this.deliverSms(null, mobile, body);
+      const sent = await this.deliverSms(null, mobile, body, otpPlaintext, purpose);
       if (!sent.success) throw new Error('Authentication SMS delivery failed');
       return;
     }
 
     // Deliver the actual OTP content via SMS provider
-    const result = await this.deliverSms(notification.id, mobile, body);
+    const result = await this.deliverSms(notification.id, mobile, body, otpPlaintext, purpose);
 
     if (!result.success) {
       throw new Error('Authentication SMS delivery failed');
@@ -324,8 +336,17 @@ export class NotificationService {
     notificationId: string | null,
     mobile: string,
     body: string,
+    otpCode?: string,
+    purpose?: string,
   ): Promise<{ success: boolean }> {
-    const result = await this.smsProvider.send(mobile, body);
+    const mandatoryOtpResult = otpCode && purpose
+      ? await this.smsEvents?.sendMandatoryOtp(purpose, mobile, otpCode)
+      : null;
+    const result = mandatoryOtpResult ?? (
+      otpCode && this.smsProvider.sendOtp
+        ? await this.smsProvider.sendOtp(mobile, otpCode, purpose ?? 'otp')
+        : await this.smsProvider.send(mobile, body)
+    );
     if (notificationId) {
       if (result.success) {
         await this.notificationRepo.markSent(notificationId, result.providerReference ?? '');

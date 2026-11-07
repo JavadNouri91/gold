@@ -9,8 +9,11 @@ import { CustomerRepository } from '../customers/infrastructure/repositories/cus
 import { CustomersService } from '../customers/application/customers.service';
 import { CustomerAccountRepository } from '../customer-accounts/infrastructure/repositories/customer-account.repository';
 
-const url = process.env.AUTH_TEST_DATABASE_URL;
-const integration = url && /\/gold_auth_test[_?]/.test(url) ? describe : describe.skip;
+const configuredUrl = process.env.AUTH_TEST_DATABASE_URL;
+const integrationUrl =
+  configuredUrl && /\/gold_auth_test[_?]/.test(configuredUrl) ? configuredUrl : undefined;
+const url = integrationUrl ?? 'postgresql://localhost:5432/gold_auth_test';
+const integration = integrationUrl ? describe : describe.skip;
 
 integration('Customer authentication against isolated PostgreSQL', () => {
   const db = new PrismaClient({ datasources: { db: { url } } });

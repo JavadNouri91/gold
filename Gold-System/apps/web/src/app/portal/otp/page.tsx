@@ -30,7 +30,13 @@ export default function OtpPage() {
     setMobile(stored);
   }, [router]);
 
-  const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<OtpForm>({
+  const {
+    register,
+    handleSubmit,
+    setValue,
+    watch,
+    formState: { errors },
+  } = useForm<OtpForm>({
     defaultValues: { code: '' },
   });
   const code = watch('code');
@@ -46,7 +52,8 @@ export default function OtpPage() {
       router.replace('/portal/dashboard');
     } catch (err) {
       if (err instanceof ApiClientError && err.code === 'SESSION_LIMIT_REACHED') {
-        const token = (err.details as { confirmationToken?: string } | undefined)?.confirmationToken;
+        const token = (err.details as { confirmationToken?: string } | undefined)
+          ?.confirmationToken;
         if (token) setCloseToken(token);
         setError(err.message);
       } else if (err instanceof ApiClientError) {
@@ -112,19 +119,24 @@ export default function OtpPage() {
                 inputMode="numeric"
                 maxLength={6}
                 autoComplete="one-time-code"
+                autoFocus
                 error={errors.code?.message}
                 {...register('code', {
                   required: 'کد تأیید الزامی است',
                   pattern: {
-                    value: /^\d{4,8}$/,
+                    value: /^\d{6}$/,
                     message: 'کد تأیید باید عددی باشد',
                   },
                 })}
                 value={toPersianDigits(code)}
                 onChange={(event) => {
-                  setValue('code', toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 6), {
-                    shouldValidate: true,
-                  });
+                  setValue(
+                    'code',
+                    toLatinDigits(event.target.value).replace(/\D/g, '').slice(0, 6),
+                    {
+                      shouldValidate: true,
+                    },
+                  );
                 }}
               />
               <Button type="submit" className="w-full" isLoading={isLoading}>

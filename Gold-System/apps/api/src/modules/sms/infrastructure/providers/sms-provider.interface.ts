@@ -10,7 +10,7 @@
  */
 
 /** Provider values accepted in the database and in SMS_PROVIDER. */
-export const SMS_PROVIDER_NAMES = ['smsir', 'melipayamak', 'mock'] as const;
+export const SMS_PROVIDER_NAMES = ['hisms', 'smsir', 'melipayamak', 'mock'] as const;
 export type SmsProviderName = (typeof SMS_PROVIDER_NAMES)[number];
 
 /**
@@ -23,9 +23,19 @@ export interface SmsRuntimeConfig {
   provider: SmsProviderName;
   apiKey: string;
   senderLine: string;
+  originator?: string;
   smsirBaseUrl: string;
   melipayamakBaseUrl: string;
   melipayamakPassword: string;
+  apiBaseUrl?: string;
+  username?: string;
+  password?: string;
+  otpTemplate?: string;
+  enabled?: boolean;
+  otpExpiresInSeconds?: number;
+  otpResendCooldownSeconds?: number;
+  otpMaxAttempts?: number;
+  otpMaxPerHour?: number;
 }
 
 export interface SmsProvider {
@@ -43,6 +53,20 @@ export interface SmsProvider {
    */
   send(to: string, message: string, config?: SmsRuntimeConfig): Promise<SmsDeliveryResult>;
 
+  sendOtp?(
+    to: string,
+    code: string,
+    purpose: string,
+    config?: SmsRuntimeConfig,
+  ): Promise<SmsDeliveryResult>;
+
+  sendTemplateMessage?(
+    to: string,
+    template: string,
+    parameters: string[],
+    config?: SmsRuntimeConfig,
+  ): Promise<SmsDeliveryResult>;
+
   /** Provider name — for logging and audit */
   readonly providerName: string;
 }
@@ -51,6 +75,7 @@ export interface SmsDeliveryResult {
   success: boolean;
   providerReference?: string;
   error?: string;
+  errorCode?: number;
 }
 
 export const SMS_PROVIDER_TOKEN = 'SMS_PROVIDER';

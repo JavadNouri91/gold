@@ -315,6 +315,12 @@ export class OrdersService {
       },
     });
 
+    const eventCustomer = await this.prisma.customer.findUnique({ where: { id: order.customerId }, select: { userId: true } });
+    await this.notificationService.sendConfiguredSmsEvent?.(
+      selling ? 'trading.sell_order_created' : 'trading.buy_order_created', order.id,
+      eventCustomer?.userId ?? null, { orderNumber: order.orderNumber, eventDate: new Date().toLocaleDateString('fa-IR') },
+    );
+
     this.logger.log(
       selling
         ? `Order submitted: ${order.orderNumber} — sell ${order.weightGrams.toFixed(6)} g, no rial credit reserved`
@@ -525,6 +531,9 @@ export class OrdersService {
 
     const updated = await this.orderRepo.findById(orderId);
     if (!updated) throw new OrderNotFoundException(orderId);
+    const eventCustomer = await this.prisma.customer.findUnique({ where: { id: order.customerId }, select: { userId: true } });
+    await this.notificationService.sendConfiguredSmsEvent?.('trading.order_canceled_rejected', order.id,
+      eventCustomer?.userId ?? null, { orderNumber: order.orderNumber, status: 'لغو شد', eventDate: new Date().toLocaleDateString('fa-IR') });
     return this.toResponse(updated, []);
   }
 
@@ -644,6 +653,9 @@ export class OrdersService {
 
     const updated = await this.orderRepo.findById(orderId);
     if (!updated) throw new OrderNotFoundException(orderId);
+    const eventCustomer = await this.prisma.customer.findUnique({ where: { id: order.customerId }, select: { userId: true } });
+    await this.notificationService.sendConfiguredSmsEvent?.('trading.order_canceled_rejected', order.id,
+      eventCustomer?.userId ?? null, { orderNumber: order.orderNumber, status: 'رد شد', eventDate: new Date().toLocaleDateString('fa-IR') });
     return this.toResponse(updated, []);
   }
 

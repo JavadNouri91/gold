@@ -847,6 +847,9 @@ export class KycService {
         this.logger.error(`[KycService] KYC_APPROVED notification failed: ${err}`),
       );
 
+    await this.notificationService.sendConfiguredSmsEvent?.('account.kyc_status_changed', `${verification.id}:APPROVED`,
+      customerForNotif?.userId ?? null, { status: 'تأیید شد', eventDate: new Date().toLocaleDateString('fa-IR') });
+
     return updated;
   }
 
@@ -1156,6 +1159,9 @@ export class KycService {
         .catch((err: unknown) =>
           this.logger.error(`[KycService] KYC_REJECTED notification failed: ${err}`),
         );
+
+      await this.notificationService.sendConfiguredSmsEvent?.('account.kyc_status_changed', `${verification.id}:REJECTED`,
+        customerForNotif?.userId ?? null, { status: 'رد شد', eventDate: new Date().toLocaleDateString('fa-IR') });
 
       return KycVerificationResponseDto.fromEntity(updated);
     }

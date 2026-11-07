@@ -6,12 +6,7 @@
  */
 
 import type { PaginationMeta } from '@gold/shared-types';
-import {
-  fetchBlob,
-  request,
-  type ListPickupsResponse,
-  type PhysicalGoldPickup,
-} from './api';
+import { fetchBlob, request, type ListPickupsResponse, type PhysicalGoldPickup } from './api';
 
 export function toQuery(params: object): string {
   const query = new URLSearchParams();
@@ -954,31 +949,40 @@ export const internalCustomersApi = {
   exportCsv(params: object): Promise<{ content: string }> {
     return request(`/customers/export${toQuery(params)}`);
   },
-  importRows(rows: Array<{
-    firstName: string;
-    lastName: string;
-    nationalId: string;
-    mobile: string;
-    password?: string;
-    email?: string;
-    address?: string;
-  }>): Promise<{ created: number; failed: number; errors: Array<{ row: number; message: string }> }> {
+  importRows(
+    rows: Array<{
+      firstName: string;
+      lastName: string;
+      nationalId: string;
+      mobile: string;
+      password?: string;
+      email?: string;
+      address?: string;
+    }>,
+  ): Promise<{ created: number; failed: number; errors: Array<{ row: number; message: string }> }> {
     return request('/customers/import', { method: 'POST', body: JSON.stringify({ rows }) });
   },
   workspace(id: string): Promise<CustomerWorkspace> {
     return request(`/customers/${id}/workspace`);
   },
-  update(id: string, body: {
-    firstName?: string;
-    lastName?: string;
-    nationalId?: string;
-    mobile?: string;
-    email?: string;
-    address?: string;
-  }): Promise<StaffCustomer> {
+  update(
+    id: string,
+    body: {
+      firstName?: string;
+      lastName?: string;
+      nationalId?: string;
+      mobile?: string;
+      email?: string;
+      address?: string;
+    },
+  ): Promise<StaffCustomer> {
     return request(`/customers/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
   },
-  setAccountStatus(id: string, accountStatus: string, reason: string): Promise<{ id: string; accountStatus: string }> {
+  setAccountStatus(
+    id: string,
+    accountStatus: string,
+    reason: string,
+  ): Promise<{ id: string; accountStatus: string }> {
     return request(`/customers/${id}/account-status`, {
       method: 'PATCH',
       body: JSON.stringify({ accountStatus, reason }),
@@ -993,13 +997,20 @@ export const internalCustomersApi = {
   getById(id: string): Promise<StaffCustomer> {
     return request(`/customers/${id}`);
   },
-  assignType(id: string, type: string, reason = 'تغییر نوع مشتری از پرونده'): Promise<StaffCustomer> {
+  assignType(
+    id: string,
+    type: string,
+    reason = 'تغییر نوع مشتری از پرونده',
+  ): Promise<StaffCustomer> {
     return request(`/customers/${id}/type`, {
       method: 'PATCH',
       body: JSON.stringify({ type, reason }),
     });
   },
-  sendBulkSms(ids: string[], body: string): Promise<{ sent: number; failed: number; total: number }> {
+  sendBulkSms(
+    ids: string[],
+    body: string,
+  ): Promise<{ sent: number; failed: number; total: number }> {
     return request('/customers/bulk-sms', {
       method: 'POST',
       body: JSON.stringify({ ids, body }),
@@ -1079,11 +1090,7 @@ export const internalKycApi = {
     return request(`/customers/${customerId}/kyc/activate`, { method: 'POST' });
   },
 
-  uploadDocument(
-    customerId: string,
-    documentType: string,
-    file: File,
-  ): Promise<KycDocumentRecord> {
+  uploadDocument(customerId: string, documentType: string, file: File): Promise<KycDocumentRecord> {
     const body = new FormData();
     body.append('documentType', documentType);
     body.append('file', file);
@@ -1129,7 +1136,11 @@ export const internalKycApi = {
   deleteDocument(customerId: string, documentId: string): Promise<void> {
     return request(`/customers/${customerId}/documents/${documentId}`, { method: 'DELETE' });
   },
-  replaceDocumentImage(customerId: string, documentId: string, file: File): Promise<KycDocumentRecord> {
+  replaceDocumentImage(
+    customerId: string,
+    documentId: string,
+    file: File,
+  ): Promise<KycDocumentRecord> {
     const body = new FormData();
     body.append('file', file);
     return request(`/customers/${customerId}/documents/${documentId}/file`, {
@@ -1228,7 +1239,10 @@ export const assignmentsApi = {
   }): Promise<AssignmentList> {
     return request(`/assignments${toQuery(params)}`);
   },
-  assign(orderId: string, input: { assignedToUserId: string; notes?: string }): Promise<AssignmentRecord> {
+  assign(
+    orderId: string,
+    input: { assignedToUserId: string; notes?: string },
+  ): Promise<AssignmentRecord> {
     return request(`/orders/${orderId}/assign`, {
       method: 'POST',
       body: JSON.stringify(input),
@@ -1467,7 +1481,11 @@ export const staffPickupsApi = {
 };
 
 export const financialLedgerApi = {
-  journals(params?: { limit?: number; offset?: number; sourceType?: string }): Promise<LedgerJournalList> {
+  journals(params?: {
+    limit?: number;
+    offset?: number;
+    sourceType?: string;
+  }): Promise<LedgerJournalList> {
     return request(`/ledger/financial/journals${toQuery(params ?? {})}`);
   },
   accounts(): Promise<LedgerAccount[]> {
@@ -1479,7 +1497,11 @@ export const financialLedgerApi = {
 };
 
 export const goldLedgerApi = {
-  journals(params?: { limit?: number; offset?: number; sourceType?: string }): Promise<GoldJournalList> {
+  journals(params?: {
+    limit?: number;
+    offset?: number;
+    sourceType?: string;
+  }): Promise<GoldJournalList> {
     return request(`/ledger/gold/journals${toQuery(params ?? {})}`);
   },
   accounts(): Promise<LedgerAccount[]> {
@@ -1584,7 +1606,9 @@ function policyMinutesFromApi(value: unknown): number | null {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
-function normalizeSessionPolicyFields(raw: SessionPolicyFields & Record<string, unknown>): SessionPolicyFields {
+function normalizeSessionPolicyFields(
+  raw: SessionPolicyFields & Record<string, unknown>,
+): SessionPolicyFields {
   const idle = raw.idleTimeoutMinutes ?? raw.idle_timeout_minutes;
   const maxDuration = raw.maxSessionDurationMinutes ?? raw.max_session_duration_minutes;
   return {
@@ -1840,12 +1864,14 @@ export const tradingApi = {
   listLimits(): Promise<TradingScopedLimits> {
     return request('/trading/limits');
   },
-  upsertLimit(body: TradingSessionBody & {
-    sessionId?: string | null;
-    scope: string;
-    scopeKey?: string | null;
-    enabled?: boolean;
-  }) {
+  upsertLimit(
+    body: TradingSessionBody & {
+      sessionId?: string | null;
+      scope: string;
+      scopeKey?: string | null;
+      enabled?: boolean;
+    },
+  ) {
     return request('/trading/limits', { method: 'PUT', body: JSON.stringify(body) });
   },
   deleteLimit(id: string): Promise<{ id: string }> {
@@ -1864,16 +1890,28 @@ export const tradingApi = {
   },
 };
 
-export type SmsProviderName = 'smsir' | 'melipayamak' | 'mock';
+export type SmsProviderName = 'hisms' | 'smsir' | 'melipayamak' | 'mock';
 
 export interface SmsSettingsView {
   provider: SmsProviderName;
+  apiBaseUrl: string;
+  username: string;
+  passwordConfigured: boolean;
+  originator: string;
+  otpTemplate: string;
+  enabled: boolean;
+  otpExpiresInSeconds: number;
+  otpResendCooldownSeconds: number;
+  otpMaxAttempts: number;
+  otpMaxPerHour: number;
+  connectionStatus: 'connected' | 'disconnected' | 'untested' | 'incomplete';
+  connectionTestedAt: string | null;
+  connectionTestMessage: string | null;
   senderLine: string;
   smsirBaseUrl: string;
   melipayamakBaseUrl: string;
   /** Masked hint only — the API never returns the stored secret. */
-  apiKeyMasked: string;
-  apiKeySource: 'database' | 'environment' | 'none';
+  apiKeyConfigured: boolean;
   melipayamakPasswordConfigured: boolean;
   storedInDatabase: boolean;
   updatedAt: string | null;
@@ -1882,6 +1920,15 @@ export interface SmsSettingsView {
 
 export interface SmsSettingsBody {
   provider: SmsProviderName;
+  apiBaseUrl?: string;
+  username?: string;
+  password?: string;
+  originator?: string;
+  otpTemplate?: string;
+  enabled?: boolean;
+  otpExpiresInSeconds?: number;
+  otpResendCooldownSeconds?: number;
+  otpMaxAttempts?: number;
   /** Omit to keep the stored key, send '' to clear it. */
   apiKey?: string;
   senderLine?: string;
@@ -1896,6 +1943,33 @@ export interface SmsTestResult {
   provider: string;
   providerReference?: string;
   error?: string;
+}
+
+export interface SmsEventSettingView {
+  id: string;
+  category: string;
+  name: string;
+  description: string;
+  mandatory?: boolean;
+  allowedFields: string[];
+  enabled: boolean;
+  recipientPolicy: 'USER' | 'ADMIN' | 'BOTH';
+  templateCode: string | null;
+  parameterFields: string[];
+  sendingMode: 'provider_template' | 'custom_text';
+  customMessage: string | null;
+  providerReady: boolean;
+  customTextVerified: boolean;
+  status: 'enabled' | 'disabled' | 'incomplete';
+  updatedAt?: string;
+}
+
+export interface SmsConnectionTestResult {
+  success: boolean;
+  status: 'connected' | 'disconnected' | 'incomplete';
+  message: string;
+  credit: string | null;
+  checkedAt: string;
 }
 
 export interface SmsCreditResult {
@@ -1920,18 +1994,21 @@ export const smsSettingsApi = {
     return request('/sms-settings');
   },
   /** Plaintext secrets — audited server-side on every call. */
-  reveal(): Promise<{ apiKey: string; melipayamakPassword: string; apiKeySource: string }> {
-    return request('/sms-settings/reveal');
-  },
   update(body: SmsSettingsBody): Promise<SmsSettingsView> {
     return request('/sms-settings', { method: 'PATCH', body: JSON.stringify(body) });
+  },
+  testConnection(): Promise<SmsConnectionTestResult> {
+    return request('/sms-settings/connection-test', { method: 'POST' });
   },
   /** Forget database overrides; the .env values apply again. */
   reset(): Promise<SmsSettingsView> {
     return request('/sms-settings', { method: 'DELETE' });
   },
   sendTest(mobile: string): Promise<SmsTestResult> {
-    return request('/sms-settings/test', { method: 'POST', body: JSON.stringify({ mobile }) });
+    return request('/sms-settings/test', {
+      method: 'POST',
+      body: JSON.stringify({ mobile, confirmed: true }),
+    });
   },
   /** Panel credit, resolved server-side so the key stays on the API. */
   credit(): Promise<SmsCreditResult> {
@@ -1940,5 +2017,17 @@ export const smsSettingsApi = {
   /** Sender lines registered on the provider panel (SMS.ir only). */
   lines(): Promise<SmsLineListResult> {
     return request('/sms-settings/lines');
+  },
+  events(): Promise<SmsEventSettingView[]> {
+    return request('/sms-settings/events');
+  },
+  updateEvent(eventId: string, body: Pick<SmsEventSettingView, 'enabled' | 'recipientPolicy' | 'parameterFields' | 'sendingMode'> & { templateCode: string; customMessage: string }): Promise<SmsEventSettingView> {
+    return request(`/sms-settings/events/${encodeURIComponent(eventId)}`, { method: 'PATCH', body: JSON.stringify(body) });
+  },
+  testEvent(eventId: string, mobile: string, configuration?: Pick<SmsEventSettingView, 'sendingMode' | 'parameterFields'> & { templateCode: string; customMessage: string }): Promise<{ success: boolean; providerReference?: string; error?: string }> {
+    return request(`/sms-settings/events/${encodeURIComponent(eventId)}/test`, { method: 'POST', body: JSON.stringify({ mobile, confirmed: true, ...configuration }) });
+  },
+  refreshEventStatus(eventId: string): Promise<{ success: boolean; checked: number; updated: number; error?: string }> {
+    return request(`/sms-settings/events/${encodeURIComponent(eventId)}/refresh-status`, { method: 'POST' });
   },
 };

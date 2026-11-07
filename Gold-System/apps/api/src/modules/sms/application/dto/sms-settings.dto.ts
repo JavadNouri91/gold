@@ -1,4 +1,15 @@
-import { IsIn, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
+import {
+  IsBoolean,
+  IsIn,
+  IsInt,
+  IsOptional,
+  IsString,
+  Length,
+  Matches,
+  Max,
+  Min,
+  MaxLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { LatinDigits } from '../../../../common/latin-digits.decorator';
 import {
@@ -10,6 +21,30 @@ export class UpdateSmsSettingsDto {
   @ApiProperty({ enum: SMS_PROVIDER_NAMES })
   @IsIn(SMS_PROVIDER_NAMES)
   provider!: SmsProviderName;
+
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(300) apiBaseUrl?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) username?: string;
+  @ApiPropertyOptional({ description: 'Omit to keep the existing value; empty string clears it.' })
+  @IsOptional()
+  @IsString()
+  @MaxLength(400)
+  password?: string;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @LatinDigits()
+  @IsString()
+  @MaxLength(32)
+  originator?: string;
+  @ApiPropertyOptional() @IsOptional() @IsString() @MaxLength(100) otpTemplate?: string;
+  @ApiPropertyOptional() @IsOptional() @IsBoolean() enabled?: boolean;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(30) @Max(900) otpExpiresInSeconds?: number;
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  @Max(3600)
+  otpResendCooldownSeconds?: number;
+  @ApiPropertyOptional() @IsOptional() @IsInt() @Min(1) @Max(5) otpMaxAttempts?: number;
 
   @ApiPropertyOptional({
     description:
@@ -55,4 +90,8 @@ export class SendTestSmsDto {
   @Matches(/^09\d{9}$/, { message: 'شماره موبایل معتبر نیست.' })
   @Length(11, 11)
   mobile!: string;
+
+  @ApiProperty({ description: 'Must be explicitly confirmed by the administrator.' })
+  @IsBoolean()
+  confirmed!: boolean;
 }
