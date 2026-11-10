@@ -514,6 +514,11 @@ export class ReportsService {
       description: e.description ?? null,
       sourceType: e.journal.sourceType,
       sourceId: e.journal.sourceId,
+      orderId: e.orderId ?? null,
+      tradeId: e.tradeId ?? null,
+      orderNumber: e.orderNumber ?? null,
+      tradeNumber: e.tradeNumber ?? null,
+      customerName: e.customerName ?? null,
       createdAt: e.createdAt.toISOString(),
     }));
 

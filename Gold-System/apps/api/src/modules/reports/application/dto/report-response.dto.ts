@@ -265,6 +265,11 @@ export class GoldLedgerEntryDto {
   description: string | null;
   sourceType: string;
   sourceId: string;
+  orderId: string | null;
+  tradeId: string | null;
+  orderNumber: string | null;
+  tradeNumber: string | null;
+  customerName: string | null;
   createdAt: string;
 }
 

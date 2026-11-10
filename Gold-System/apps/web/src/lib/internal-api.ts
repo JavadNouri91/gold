@@ -809,6 +809,11 @@ export interface GoldReport {
     purity: string;
     sourceType: string;
     sourceId: string;
+    orderId: string | null;
+    tradeId: string | null;
+    orderNumber: string | null;
+    tradeNumber: string | null;
+    customerName: string | null;
     createdAt: string;
   }>;
   totalEntries: number;

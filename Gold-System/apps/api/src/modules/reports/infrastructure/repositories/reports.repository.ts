@@ -512,7 +512,43 @@ export class ReportsRepository {
       }),
     ]);
 
-    return { inBalances, outBalances, totalEntries, entries };
+    const sourceIds = [...new Set(entries.map((entry) => entry.journal.sourceId))];
+    const [trades, orders] = await Promise.all([
+      this.prisma.trade.findMany({
+        where: { id: { in: sourceIds } },
+        select: {
+          id: true,
+          tradeNumber: true,
+          order: { select: { id: true, orderNumber: true, customer: { select: { firstName: true, lastName: true, companyName: true } } } },
+          customer: { select: { firstName: true, lastName: true, companyName: true } },
+        },
+      }),
+      this.prisma.order.findMany({
+        where: { id: { in: sourceIds } },
+        select: {
+          id: true,
+          orderNumber: true,
+          customer: { select: { firstName: true, lastName: true, companyName: true } },
+        },
+      }),
+    ]);
+    const tradeById = new Map(trades.map((trade) => [trade.id, trade]));
+    const orderById = new Map(orders.map((order) => [order.id, order]));
+    const enrichedEntries = entries.map((entry) => {
+      const trade = tradeById.get(entry.journal.sourceId);
+      const order = orderById.get(entry.journal.sourceId) ?? trade?.order;
+      const customer = trade?.customer ?? order?.customer;
+      return {
+        ...entry,
+        orderId: order?.id ?? null,
+        tradeId: trade?.id ?? null,
+        tradeNumber: trade?.tradeNumber ?? null,
+        orderNumber: order?.orderNumber ?? null,
+        customerName: customer?.companyName || [customer?.firstName, customer?.lastName].filter(Boolean).join(' ') || null,
+      };
+    });
+
+    return { inBalances, outBalances, totalEntries, entries: enrichedEntries };
   }
 
   // ─────────────────────────────────────────────────────────────────────────

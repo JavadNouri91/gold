@@ -1,6 +1,8 @@
 'use client';
 
+import Link from 'next/link';
 import { NumberedTable } from '@/components/dashboard/numbered-table';
+import { Badge } from '@/components/ui/badge';
 
 import { useState } from 'react';
 import useSWR from 'swr';
@@ -11,7 +13,14 @@ import { PageHeader } from './page-header';
 import { FilterBar } from './filter-bar';
 import { ForbiddenNotice } from './permission-gate';
 import { ApiErrorState } from './states';
-import { formatDateTime, formatMoney, formatWeight, toPersianDigits } from '@/lib/utils';
+import {
+  CUSTOMER_STATUS_LABELS,
+  VERIFICATION_STATUS_LABELS,
+  formatDateTime,
+  formatMoney,
+  formatWeight,
+  toPersianDigits,
+} from '@/lib/utils';
 
 export type ReportKind =
   | 'customers'
@@ -125,8 +134,8 @@ function ReportBody({ kind, data, offset }: { kind: ReportKind; data: Awaited<Re
         rows={report.customers.map((row) => [
           toPersianDigits(row.customerNumber),
           `${row.firstName} ${row.lastName}`,
-          row.status,
-          row.kycStatus ?? '—',
+          <CustomerReportStatus status={row.status} />,
+          row.kycStatus ? <CustomerReportStatus status={row.kycStatus} verification /> : '—',
           formatMoney(row.creditLimitRial),
           formatMoney(row.availableCreditRial),
         ])}
@@ -219,8 +228,24 @@ function ReportBody({ kind, data, offset }: { kind: ReportKind; data: Awaited<Re
           ])}
         />
         <SimpleTable offset={offset}
-          headers={['حساب', 'جهت', 'وزن', 'منبع']}
-          rows={report.entries.map((row) => [toPersianDigits(row.accountCode), row.direction, formatWeight(row.quantity), row.sourceType])}
+          headers={['شماره سفارش', 'شماره معامله', 'مشتری', 'حساب', 'جهت', 'وزن', 'منبع']}
+          rows={report.entries.map((row) => [
+            row.orderNumber && row.orderId ? (
+              <Link href={`/dashboard/orders/${row.orderId}`} className="text-gold-800 hover:underline" dir="ltr">
+                {toPersianDigits(row.orderNumber)}
+              </Link>
+            ) : '—',
+            row.tradeNumber && row.tradeId ? (
+              <Link href={`/dashboard/trades/${row.tradeId}`} className="text-gold-800 hover:underline" dir="ltr">
+                {toPersianDigits(row.tradeNumber)}
+              </Link>
+            ) : '—',
+            row.customerName ?? '—',
+            toPersianDigits(row.accountCode),
+            row.direction,
+            formatWeight(row.quantity),
+            row.sourceType,
+          ])}
         />
       </div>
     );
@@ -254,7 +279,22 @@ function ReportBody({ kind, data, offset }: { kind: ReportKind; data: Awaited<Re
   );
 }
 
-function SimpleTable({ headers, rows, offset }: { headers: string[]; rows: string[][]; offset: number }) {
+function CustomerReportStatus({ status, verification = false }: { status: string; verification?: boolean }) {
+  const labels = verification ? VERIFICATION_STATUS_LABELS : CUSTOMER_STATUS_LABELS;
+  const label = labels[status] ?? 'نامشخص';
+  const variant = statusTone(status, verification);
+
+  return <Badge variant={variant}>{label}</Badge>;
+}
+
+function statusTone(status: string, verification: boolean): 'green' | 'yellow' | 'red' | 'gray' {
+  if (status === 'APPROVED' || (!verification && status === 'ACTIVE')) return 'green';
+  if (status === 'PENDING' || status === 'UNDER_REVIEW') return 'yellow';
+  if (status === 'REJECTED' || (!verification && status === 'BLOCKED')) return 'red';
+  return 'gray';
+}
+
+function SimpleTable({ headers, rows, offset }: { headers: string[]; rows: React.ReactNode[][]; offset: number }) {
   if (!rows.length) return <p className="text-sm text-muted-foreground">ردیفی برای این فیلتر نیست.</p>;
   return (
     <div className="overflow-x-auto rounded-xl border bg-white">
