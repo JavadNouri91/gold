@@ -52,6 +52,36 @@ describe('permission matrix', () => {
     expect(customer).not.toContain('kyc.documents.read');
     expect(customer).not.toContain('trade.approve');
     expect(customer).not.toContain('payment.create');
+    expect(customer).not.toContain('connect.settings.read');
+    expect(customer).not.toContain('connect.settings.manage');
+    expect(customer).not.toContain('connect.connection.test');
+    expect(customer).not.toContain('connect.status.read');
+    expect(customer).not.toContain('connect.products.read');
+    expect(customer).not.toContain('connect.products.sync');
+    expect(customer).not.toContain('connect.products.mapping.manage');
+    expect(customer).not.toContain('connect.products.mapping.verify');
+  });
+
+  it('grants Connect settings to managers and platform admins only', () => {
+    const connectPermissions = [
+      'connect.settings.read',
+      'connect.settings.manage',
+      'connect.connection.test',
+      'connect.status.read',
+      'connect.products.read',
+      'connect.products.sync',
+      'connect.products.mapping.manage',
+      'connect.products.mapping.verify',
+    ];
+    for (const roleName of ['store_manager', 'platform_admin']) {
+      const role = roleBlock(roleName);
+      expect(role).toContain('permissions: PERMISSIONS.map((p) => p.key)');
+    }
+    for (const permission of connectPermissions) expect(seed).toContain(`key: '${permission}'`);
+    for (const roleName of ['seller', 'operator', 'reviewer', 'accountant', 'customer']) {
+      const role = roleBlock(roleName);
+      for (const permission of connectPermissions) expect(role).not.toContain(permission);
+    }
   });
 
   it('grants KYC document access to reviewer and accountant, and decisions to reviewer', () => {

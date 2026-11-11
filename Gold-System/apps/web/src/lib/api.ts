@@ -766,6 +766,236 @@ export const pricingApi = {
   },
 };
 
+export interface ConnectSettings {
+  httpBaseUrl: string;
+  websocketUrl: string;
+  isEnabled: boolean;
+  priceSyncEnabled: boolean;
+  externalBuyEnabled: boolean;
+  externalSellEnabled: boolean;
+  externalExecutionFeatureGate: boolean;
+  accessKeyConfigured: boolean;
+  accessSecretConfigured: boolean;
+  webhookSecretConfigured: boolean;
+  lastHttpCheckAt: string | null;
+  lastHttpCheckStatus: string | null;
+  lastWebSocketCheckAt: string | null;
+  lastWebSocketCheckStatus: string | null;
+  lastConnectionErrorCode: string | null;
+  lastSuccessfulCheckAt: string | null;
+}
+
+export interface ConnectTestResult {
+  success: boolean;
+  method: 'http' | 'websocket';
+  connectionStatus?: 'CONNECTED_VALID' | 'CONNECTED_WITH_WARNINGS' | 'CONNECTION_FAILED';
+  httpConnected?: boolean;
+  dataValidationStatus?: 'VALID' | 'PARTIAL' | 'INVALID' | 'INVALID_RESPONSE' | 'NOT_CHECKED';
+  validProductsCount?: number | null;
+  invalidProductsCount?: number | null;
+  pricingReady?: false;
+  responseTimeMs?: number | null;
+  productsCount?: number | null;
+  checkedAt: string;
+  errorCode: string | null;
+  diagnostic?: {
+    productsCount: number | null;
+    validProductsCount: number;
+    invalidProductsCount: number;
+    issuesTruncated: boolean;
+    issues: Array<{
+      index: number | null;
+      field: string;
+      expectedType: string;
+      receivedType: string;
+      errorCode: string;
+      reason?: ConnectPriceValidationReason;
+    }>;
+  } | null;
+}
+
+export type ConnectPriceValidationReason =
+  | 'NEGATIVE_PRICE'
+  | 'NON_FINITE_PRICE'
+  | 'NULL_PRICE'
+  | 'STRING_PRICE'
+  | 'MISSING_PRICE'
+  | 'INVALID_PRICE_TYPE';
+
+export const connectSettingsApi = {
+  get(): Promise<ConnectSettings> {
+    return request('/admin/integrations/connect/settings');
+  },
+  update(
+    input: Partial<ConnectSettings> & {
+      accessKey?: string;
+      accessSecret?: string;
+      webhookSecret?: string;
+    },
+  ): Promise<ConnectSettings> {
+    return request('/admin/integrations/connect/settings', {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    });
+  },
+  removeSecret(secret: 'accessKey' | 'accessSecret' | 'webhookSecret'): Promise<ConnectSettings> {
+    return request('/admin/integrations/connect/settings/secret', {
+      method: 'DELETE',
+      body: JSON.stringify({ secret, confirmed: true }),
+    });
+  },
+  testHttp(): Promise<ConnectTestResult> {
+    return request('/admin/integrations/connect/test/http', { method: 'POST' });
+  },
+  testWebSocket(): Promise<ConnectTestResult> {
+    return request('/admin/integrations/connect/test/websocket', { method: 'POST' });
+  },
+  status(): Promise<{ connectionState: string }> {
+    return request('/admin/integrations/connect/status');
+  },
+};
+
+export interface ConnectProductMapping {
+  id?: string;
+  internalAssetType: string | null;
+  internalGoldPurity: string | null;
+  externalQuantityUnit: string | null;
+  externalPriceCurrency: string | null;
+  priceUnitBasis: string | null;
+  cashPriceCategory?: 'CASH_SPOT' | 'CASH_TOMORROW' | 'CASH_DAY_AFTER_TOMORROW' | null;
+  conversionFactor: string | null;
+  connectBuySide: 'INTERNAL_BUY' | 'INTERNAL_SELL' | null;
+  connectSellSide: 'INTERNAL_BUY' | 'INTERNAL_SELL' | null;
+  isEnabled: boolean;
+  isVerified: boolean;
+  verifiedById?: string | null;
+  verifiedAt?: string | null;
+}
+
+export interface ConnectProduct {
+  id: string;
+  externalProductId: string;
+  title: string | null;
+  buyPrice: string | null;
+  sellPrice: string | null;
+  isActive: boolean | null;
+  isBuyActive: boolean | null;
+  isSellActive: boolean | null;
+  validationStatus: 'VALID' | 'PARTIAL' | 'INVALID';
+  presenceStatus: 'SEEN' | 'NOT_SEEN';
+  lastValidationErrors: Array<{
+    index: number | null;
+    field: string;
+    receivedType: string;
+    errorCode: string;
+    reason?: ConnectPriceValidationReason;
+  }>;
+  lastFetchedAt: string | null;
+  lastValidAt: string | null;
+  mapping: ConnectProductMapping | null;
+}
+
+export interface ConnectProductList {
+  items: ConnectProduct[];
+  page: number;
+  pageSize: number;
+  total: number;
+  pageCount: number;
+}
+
+export interface ConnectProductSyncResult {
+  success: boolean;
+  status: 'SUCCESS' | 'WARNING';
+  totalCount: number;
+  validCount: number;
+  invalidCount: number;
+  newCount: number;
+  updatedCount: number;
+  notSeenCount: number;
+  unpersistedInvalidIdCount: number;
+  issues: Array<{
+    index: number | null;
+    field: string;
+    receivedType: string;
+    errorCode: string;
+    reason?: ConnectPriceValidationReason;
+  }>;
+  issuesTruncated: boolean;
+  responseTimeMs: number;
+  completedAt: string;
+}
+
+export const connectProductsApi = {
+  cashShadow(): Promise<any> { return request('/admin/integrations/connect/products/cash-shadow'); },
+  selectCashReference(category: string, productId: string | null): Promise<any> {
+    return request('/admin/integrations/connect/products/cash-shadow/reference', { method: 'PUT', body: JSON.stringify({ category, productId }) });
+  },
+  setShadowDisplayMode(mode: 'MESGHAL' | 'GRAM' | 'BOTH'): Promise<any> {
+    return request('/admin/integrations/connect/products/cash-shadow/display-mode', { method: 'PUT', body: JSON.stringify({ mode }) });
+  },
+  shadowReference(): Promise<any> {
+    return request('/admin/integrations/connect/products/shadow-reference');
+  },
+  selectShadowReference(productId: string | null, priceField: 'buy_price' | 'sell_price' | null): Promise<any> {
+    return request('/admin/integrations/connect/products/shadow-reference', {
+      method: 'PUT',
+      body: JSON.stringify({ productId, priceField }),
+    });
+  },
+  setShadowMaxAge(maxAgeSeconds: number): Promise<any> {
+    return request('/admin/integrations/connect/products/shadow-reference/max-age', {
+      method: 'PUT',
+      body: JSON.stringify({ maxAgeSeconds }),
+    });
+  },
+  list(params: {
+    page?: number;
+    pageSize?: number;
+    search?: string;
+    validationStatus?: string;
+    isActive?: boolean;
+    mappingStatus?: string;
+  }): Promise<ConnectProductList> {
+    const query = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+      if (value !== undefined && value !== '') query.set(key, String(value));
+    });
+    return request(
+      `/admin/integrations/connect/products${query.size ? `?${query.toString()}` : ''}`,
+    );
+  },
+  get(id: string): Promise<ConnectProduct> {
+    return request(`/admin/integrations/connect/products/${encodeURIComponent(id)}`);
+  },
+  syncStatus(): Promise<any> {
+    return request('/admin/integrations/connect/products/sync-status');
+  },
+  sync(): Promise<ConnectProductSyncResult> {
+    return request('/admin/integrations/connect/products/sync', { method: 'POST' });
+  },
+  getMapping(id: string): Promise<ConnectProductMapping | null> {
+    return request(`/admin/integrations/connect/products/${encodeURIComponent(id)}/mapping`);
+  },
+  saveMapping(id: string, mapping: Partial<ConnectProductMapping>): Promise<ConnectProductMapping> {
+    return request(`/admin/integrations/connect/products/${encodeURIComponent(id)}/mapping`, {
+      method: 'PUT',
+      body: JSON.stringify(mapping),
+    });
+  },
+  verifyMapping(id: string): Promise<ConnectProductMapping> {
+    return request(
+      `/admin/integrations/connect/products/${encodeURIComponent(id)}/mapping/verify`,
+      { method: 'POST' },
+    );
+  },
+  disableMapping(id: string): Promise<ConnectProductMapping> {
+    return request(
+      `/admin/integrations/connect/products/${encodeURIComponent(id)}/mapping/disable`,
+      { method: 'POST' },
+    );
+  },
+};
+
 // ─── Orders ───────────────────────────────────────────────────────────────────
 
 export interface Order {

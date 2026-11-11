@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { validateEnv } from './env.validation';
 
 const baseEnv = {
@@ -15,6 +16,22 @@ describe('validateEnv', () => {
   it('rejects the mock SMS provider in production', () => {
     expect(() => validateEnv({ ...baseEnv, NODE_ENV: 'production', SMS_PROVIDER: 'mock' })).toThrow(
       /SMS_PROVIDER=mock/,
+    );
+  });
+
+  it('accepts a high-entropy Connect key in the documented 64-character hex format', () => {
+    const key = randomBytes(32).toString('hex');
+    expect(validateEnv({ ...baseEnv, CONNECT_ENCRYPTION_KEY: key }).CONNECT_ENCRYPTION_KEY).toBe(
+      key,
+    );
+  });
+
+  it('rejects malformed and low-entropy Connect keys', () => {
+    expect(() => validateEnv({ ...baseEnv, CONNECT_ENCRYPTION_KEY: 'a'.repeat(64) })).toThrow(
+      /CONNECT_ENCRYPTION_KEY/,
+    );
+    expect(() => validateEnv({ ...baseEnv, CONNECT_ENCRYPTION_KEY: 'short' })).toThrow(
+      /CONNECT_ENCRYPTION_KEY/,
     );
   });
 });

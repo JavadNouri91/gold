@@ -35,6 +35,8 @@ services:
     environment:
       PORT: 4002
       STORAGE_LOCAL_ROOT: /opt/gold/data/uploads
+      DATABASE_BACKUP_RECOVERY_DIR: /opt/gold/data/emergency-recovery
+      DATABASE_BACKUP_STORAGE_DIR: /opt/gold/data/emergency-storage
       DATABASE_URL: postgresql://gold_user:gold_pass@postgres:5432/gold_db?schema=public
     ports:
       - '4002:4002'
@@ -43,6 +45,8 @@ services:
         condition: service_healthy
     volumes:
       - uploads_data:/opt/gold/data/uploads
+      - emergency_recovery_data:/opt/gold/data/emergency-recovery
+      - emergency_storage_data:/opt/gold/data/emergency-storage
 
   # ─────────────────────────────────────────
   # Next.js Web
@@ -69,3 +73,5 @@ services:
 volumes:
   postgres_data:
   uploads_data:
+  emergency_recovery_data:
+  emergency_storage_data:

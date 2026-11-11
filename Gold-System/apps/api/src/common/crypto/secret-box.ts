@@ -15,6 +15,7 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:
 
 const FORMAT_VERSION = 'v1';
 const SMS_FORMAT_VERSION = 'sms1';
+const CONNECT_FORMAT_VERSION = 'connect1';
 
 function keyBytes(secret: string): Buffer {
   if (!secret) throw new Error('Secret encryption key is not configured.');
@@ -89,6 +90,68 @@ export function decryptSmsSecret(payload: string): { value: string; legacy: bool
     ),
     legacy: false,
   };
+}
+
+/** Connect credentials use a dedicated key and never fall back to JWT keys. */
+export function encryptConnectSecret(plaintext: string): string {
+  return encryptWithDedicatedKey(plaintext, 'CONNECT_ENCRYPTION_KEY', CONNECT_FORMAT_VERSION);
+}
+
+export function decryptConnectSecret(payload: string): string {
+  return decryptWithDedicatedKey(payload, 'CONNECT_ENCRYPTION_KEY', CONNECT_FORMAT_VERSION);
+}
+
+/** Connect keys are 256-bit random values encoded as exactly 64 hexadecimal characters. */
+export function isValidConnectEncryptionKey(secret: string): boolean {
+  if (!/^[a-fA-F0-9]{64}$/.test(secret)) return false;
+  const bytes = Buffer.from(secret, 'hex');
+  const counts = new Map<number, number>();
+  for (const byte of bytes) counts.set(byte, (counts.get(byte) ?? 0) + 1);
+  const entropy = [...counts.values()].reduce((sum, count) => {
+    const probability = count / bytes.length;
+    return sum - probability * Math.log2(probability);
+  }, 0);
+  return counts.size >= 18 && entropy >= 4;
+}
+
+function encryptWithDedicatedKey(plaintext: string, envName: string, version: string): string {
+  const secret = process.env[envName] || '';
+  const key = dedicatedKeyBytes(secret, envName);
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const encrypted = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()]);
+  return [
+    version,
+    iv.toString('base64'),
+    cipher.getAuthTag().toString('base64'),
+    encrypted.toString('base64'),
+  ].join(':');
+}
+
+function decryptWithDedicatedKey(payload: string, envName: string, version: string): string {
+  const [storedVersion, iv, tag, data] = payload.split(':');
+  if (storedVersion !== version || !iv || !tag || !data)
+    throw new Error('Unsupported encrypted secret format.');
+  const secret = process.env[envName] || '';
+  const key = dedicatedKeyBytes(secret, envName);
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(tag, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(data, 'base64')), decipher.final()]).toString(
+    'utf8',
+  );
+}
+
+function dedicatedKeyBytes(secret: string, envName: string): Buffer {
+  if (envName === 'CONNECT_ENCRYPTION_KEY') {
+    if (!isValidConnectEncryptionKey(secret))
+      throw new Error(
+        'CONNECT_ENCRYPTION_KEY must be 64 hexadecimal characters with sufficient entropy.',
+      );
+    return Buffer.from(secret, 'hex');
+  }
+  if (Buffer.byteLength(secret, 'utf8') < 32)
+    throw new Error(`${envName} must contain at least 32 bytes.`);
+  return keyBytes(secret);
 }
 
 /** Never send a stored secret to the browser — only a hint that it exists. */

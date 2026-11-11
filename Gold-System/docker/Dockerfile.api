@@ -25,7 +25,7 @@ RUN pnpm --filter @gold/api build
 
 # Production stage
 FROM node:20-alpine AS production
-RUN apk add --no-cache openssl libc6-compat
+RUN apk add --no-cache openssl libc6-compat postgresql16-client
 RUN npm install -g pnpm
 WORKDIR /app
 

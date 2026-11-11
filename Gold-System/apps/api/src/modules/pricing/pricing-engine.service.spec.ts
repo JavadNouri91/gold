@@ -259,6 +259,19 @@ describe('PricingEngineService', () => {
     });
   });
 
+  describe('shadow preview', () => {
+    it('reuses the pricing pipeline with a Decimal base and does not persist a PricingCalculation', async () => {
+      mockAdjRepo.findActiveGlobal.mockResolvedValue(null);
+      mockRuleRepo.findActiveForType.mockResolvedValue(null);
+      const result = await engine.calculatePreview({ weightGrams: new Decimal(1), purityRatio: new Decimal('0.750') }, new Decimal('231234.12345678'), 'connect:product:buy');
+      expect(result.step1BasePrice.toString()).toBe('231234.12345678');
+      expect(result.finalPrice.toString()).toBe('231234.12345678');
+      expect(result.snapshotId).toBe('connect:product:buy');
+      expect(mockCalcRepo.create).not.toHaveBeenCalled();
+      expect(mockSnapshotRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
   // ── Provider unavailable ─────────────────────────────────────────────────
 
   describe('provider unavailable', () => {

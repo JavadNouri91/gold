@@ -1,5 +1,5 @@
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
@@ -24,12 +24,12 @@ model Store {
 }
 
 model Role {
-  id          String           @id @default(cuid())
-  name        String           @unique
-  description String?
-  isSystem    Boolean          @default(false) @map("is_system")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
+  id            String             @id @default(cuid())
+  name          String             @unique
+  description   String?
+  isSystem      Boolean            @default(false) @map("is_system")
+  createdAt     DateTime           @default(now()) @map("created_at")
+  updatedAt     DateTime           @updatedAt @map("updated_at")
   permissions   RolePermission[]
   users         UserRole[]
   sessionPolicy RoleSessionPolicy?
@@ -59,49 +59,51 @@ model RolePermission {
 }
 
 model User {
-  id                 String              @id @default(cuid())
-  name               String
-  mobile             String              @unique
-  email              String?             @unique
-  mobileVerifiedAt   DateTime?           @map("mobile_verified_at")
-  passwordHash       String?             @map("password_hash")
-  status             UserStatus          @default(ACTIVE)
-  lastLoginAt        DateTime?           @map("last_login_at")
-  createdAt          DateTime            @default(now()) @map("created_at")
-  updatedAt          DateTime            @updatedAt @map("updated_at")
-  assignedByMe       Assignment[]        @relation("AssignedByUser")
-  assignedToMe       Assignment[]        @relation("AssignedToUser")
-  auditLogs          AuditLog[]
-  creditTransactions CreditTransaction[] @relation("CreditActor")
-  reviewedDocuments  CustomerDocument[]  @relation("DocumentReviewer")
-  customer           Customer?
-  reviewedKyc        KYCVerification[]   @relation("KYCReviewer")
-  notifications      Notification[]      @relation("UserNotifications")
-  cancelledOrders    Order[]             @relation("OrderCancelledBy")
-  rejectedOrders     Order[]             @relation("OrderRejectedBy")
-  otpCodes           OtpCode[]
-  paymentAllocations PaymentAllocation[] @relation("AllocationCreatedBy")
-  recordedPayments   Payment[]           @relation("PaymentRecordedBy")
-  validatedPayments  Payment[]           @relation("PaymentValidatedBy")
-  priceAdjustments   PriceAdjustment[]   @relation("AdjustmentActor")
-  pricingRules       PricingRule[]       @relation("PricingRuleActor")
-  feePolicies        CustomerTypeFeePolicy[] @relation("FeePolicyActor")
-  cancelledPurchases Purchase[]          @relation("PurchaseCancelledBy")
-  confirmedPurchases Purchase[]          @relation("PurchaseConfirmedBy")
-  recordedPurchases  Purchase[]          @relation("PurchaseRecordedBy")
-  refreshTokens      RefreshToken[]
-  settledSettlements Settlement[]        @relation("SettlementSettledBy")
-  confirmedTrades    Trade[]             @relation("TradeConfirmedBy")
-  reversedTrades     Trade[]             @relation("TradeReversedBy")
-  roles                 UserRole[]
-  authoredCustomerNotes CustomerNote[]       @relation("CustomerNoteAuthor")
-  sessionPolicy         UserSessionPolicy?
-  loginConfirmations    LoginConfirmation[]
-  pickupPreparing       PhysicalGoldPickup[] @relation("PickupPreparingBy")
-  pickupReady           PhysicalGoldPickup[] @relation("PickupReadyBy")
-  pickupDelivered       PhysicalGoldPickup[] @relation("PickupDeliveredBy")
-  pickupCancelled       PhysicalGoldPickup[] @relation("PickupCancelledBy")
-  pickupEvents          PhysicalGoldPickupEvent[] @relation("PickupEventActor")
+  id                      String                    @id @default(cuid())
+  name                    String
+  mobile                  String                    @unique
+  email                   String?                   @unique
+  mobileVerifiedAt        DateTime?                 @map("mobile_verified_at")
+  passwordHash            String?                   @map("password_hash")
+  status                  UserStatus                @default(ACTIVE)
+  lastLoginAt             DateTime?                 @map("last_login_at")
+  createdAt               DateTime                  @default(now()) @map("created_at")
+  updatedAt               DateTime                  @updatedAt @map("updated_at")
+  assignedByMe            Assignment[]              @relation("AssignedByUser")
+  assignedToMe            Assignment[]              @relation("AssignedToUser")
+  auditLogs               AuditLog[]
+  creditTransactions      CreditTransaction[]       @relation("CreditActor")
+  reviewedDocuments       CustomerDocument[]        @relation("DocumentReviewer")
+  customer                Customer?
+  reviewedKyc             KYCVerification[]         @relation("KYCReviewer")
+  notifications           Notification[]            @relation("UserNotifications")
+  cancelledOrders         Order[]                   @relation("OrderCancelledBy")
+  rejectedOrders          Order[]                   @relation("OrderRejectedBy")
+  otpCodes                OtpCode[]
+  paymentAllocations      PaymentAllocation[]       @relation("AllocationCreatedBy")
+  recordedPayments        Payment[]                 @relation("PaymentRecordedBy")
+  validatedPayments       Payment[]                 @relation("PaymentValidatedBy")
+  priceAdjustments        PriceAdjustment[]         @relation("AdjustmentActor")
+  pricingRules            PricingRule[]             @relation("PricingRuleActor")
+  feePolicies             CustomerTypeFeePolicy[]   @relation("FeePolicyActor")
+  cancelledPurchases      Purchase[]                @relation("PurchaseCancelledBy")
+  confirmedPurchases      Purchase[]                @relation("PurchaseConfirmedBy")
+  recordedPurchases       Purchase[]                @relation("PurchaseRecordedBy")
+  refreshTokens           RefreshToken[]
+  settledSettlements      Settlement[]              @relation("SettlementSettledBy")
+  confirmedTrades         Trade[]                   @relation("TradeConfirmedBy")
+  reversedTrades          Trade[]                   @relation("TradeReversedBy")
+  roles                   UserRole[]
+  authoredCustomerNotes   CustomerNote[]            @relation("CustomerNoteAuthor")
+  sessionPolicy           UserSessionPolicy?
+  loginConfirmations      LoginConfirmation[]
+  pickupPreparing         PhysicalGoldPickup[]      @relation("PickupPreparingBy")
+  pickupReady             PhysicalGoldPickup[]      @relation("PickupReadyBy")
+  pickupDelivered         PhysicalGoldPickup[]      @relation("PickupDeliveredBy")
+  pickupCancelled         PhysicalGoldPickup[]      @relation("PickupCancelledBy")
+  pickupEvents            PhysicalGoldPickupEvent[] @relation("PickupEventActor")
+  verifiedConnectMappings ConnectProductMapping[]   @relation("ConnectMappingVerifier")
+  initiatedConnectProductSyncs ConnectProductSync[] @relation("ConnectProductSyncInitiator")
 
   @@map("users")
 }
@@ -141,16 +143,16 @@ model RefreshToken {
 
 /// Singleton row id = "global". Role and user policies fall back to this row.
 model SessionSetting {
-  id                       String               @id
-  limitType                SessionLimitType     @default(LIMITED) @map("limit_type")
-  maxSessions              Int?                 @map("max_sessions")
-  loginBehavior            SessionLoginBehavior @default(BLOCK) @map("login_behavior")
+  id                        String               @id
+  limitType                 SessionLimitType     @default(LIMITED) @map("limit_type")
+  maxSessions               Int?                 @map("max_sessions")
+  loginBehavior             SessionLoginBehavior @default(BLOCK) @map("login_behavior")
   /// Minutes without API/refresh activity before the session ends. Null = disabled.
-  idleTimeoutMinutes       Int?                 @map("idle_timeout_minutes")
+  idleTimeoutMinutes        Int?                 @map("idle_timeout_minutes")
   /// Maximum minutes from login (created_at) before the session ends. Null = disabled.
-  maxSessionDurationMinutes Int?                @map("max_session_duration_minutes")
-  updatedAt                DateTime             @updatedAt @map("updated_at")
-  updatedById              String?              @map("updated_by_id")
+  maxSessionDurationMinutes Int?                 @map("max_session_duration_minutes")
+  updatedAt                 DateTime             @updatedAt @map("updated_at")
+  updatedById               String?              @map("updated_by_id")
 
   @@map("session_settings")
 }
@@ -185,61 +187,197 @@ model UserSessionPolicy {
 /// Singleton row id = "global". HiSMS is disabled by default. Provider
 /// credentials use authenticated encryption with SMS_ENCRYPTION_KEY.
 model SmsSetting {
-  id                           String   @id
-  provider                     String   @default("hisms")
-  apiKeyEncrypted              String?  @map("api_key_encrypted")
-  senderLine                   String?  @map("sender_line")
-  smsirBaseUrl                 String?  @map("smsir_base_url")
-  melipayamakBaseUrl           String?  @map("melipayamak_base_url")
-  melipayamakPasswordEncrypted String?  @map("melipayamak_password_encrypted")
-  apiBaseUrl                   String?  @map("api_base_url")
-  username                     String?  @map("username")
-  passwordEncrypted            String?  @map("password_encrypted")
-  otpTemplate                  String?  @map("otp_template")
-  enabled                      Boolean  @default(false)
-  otpExpiresInSeconds          Int      @default(120) @map("otp_expires_in_seconds")
-  otpResendCooldownSeconds     Int      @default(60) @map("otp_resend_cooldown_seconds")
-  otpMaxAttempts               Int      @default(5) @map("otp_max_attempts")
+  id                           String    @id
+  provider                     String    @default("hisms")
+  apiKeyEncrypted              String?   @map("api_key_encrypted")
+  senderLine                   String?   @map("sender_line")
+  smsirBaseUrl                 String?   @map("smsir_base_url")
+  melipayamakBaseUrl           String?   @map("melipayamak_base_url")
+  melipayamakPasswordEncrypted String?   @map("melipayamak_password_encrypted")
+  apiBaseUrl                   String?   @map("api_base_url")
+  username                     String?   @map("username")
+  passwordEncrypted            String?   @map("password_encrypted")
+  otpTemplate                  String?   @map("otp_template")
+  enabled                      Boolean   @default(false)
+  otpExpiresInSeconds          Int       @default(120) @map("otp_expires_in_seconds")
+  otpResendCooldownSeconds     Int       @default(60) @map("otp_resend_cooldown_seconds")
+  otpMaxAttempts               Int       @default(5) @map("otp_max_attempts")
   connectionTestedAt           DateTime? @map("connection_tested_at")
-  connectionTestSuccess        Boolean? @map("connection_test_success")
-  connectionTestMessage        String?  @map("connection_test_message")
-  updatedAt                    DateTime @updatedAt @map("updated_at")
-  updatedById                  String?  @map("updated_by_id")
+  connectionTestSuccess        Boolean?  @map("connection_test_success")
+  connectionTestMessage        String?   @map("connection_test_message")
+  updatedAt                    DateTime  @updatedAt @map("updated_at")
+  updatedById                  String?   @map("updated_by_id")
 
   @@map("sms_settings")
+}
+
+/// Singleton Connect API configuration. Secrets use CONNECT_ENCRYPTION_KEY.
+model ConnectIntegrationSettings {
+  id                           String               @id @default("global")
+  httpBaseUrl                  String               @default("https://connect.tala-app.ir") @map("http_base_url")
+  websocketUrl                 String               @default("wss://connect.tala-app.ir/ws") @map("websocket_url")
+  accessKeyEncrypted           String?              @map("access_key_encrypted")
+  accessSecretEncrypted        String?              @map("access_secret_encrypted")
+  webhookSecretEncrypted       String?              @map("webhook_secret_encrypted")
+  isEnabled                    Boolean              @default(false) @map("is_enabled")
+  priceSyncEnabled             Boolean              @default(false) @map("price_sync_enabled")
+  externalBuyEnabled           Boolean              @default(false) @map("external_buy_enabled")
+  externalSellEnabled          Boolean              @default(false) @map("external_sell_enabled")
+  externalExecutionFeatureGate Boolean              @default(false) @map("external_execution_feature_gate")
+  lastHttpCheckAt              DateTime?            @map("last_http_check_at")
+  lastHttpCheckStatus          String?              @map("last_http_check_status")
+  lastWebSocketCheckAt         DateTime?            @map("last_websocket_check_at")
+  lastWebSocketCheckStatus     String?              @map("last_websocket_check_status")
+  lastConnectionErrorCode      String?              @map("last_connection_error_code")
+  lastSuccessfulCheckAt        DateTime?            @map("last_successful_check_at")
+  catalogSyncLockToken         String?              @map("catalog_sync_lock_token")
+  catalogSyncLockExpiresAt     DateTime?            @map("catalog_sync_lock_expires_at")
+  shadowReferenceProductId     String?              @map("shadow_reference_product_id")
+  shadowReferenceMappingId     String?              @map("shadow_reference_mapping_id")
+  shadowReferenceMappingUpdatedAt DateTime?           @map("shadow_reference_mapping_updated_at")
+  shadowReferencePriceField    String?              @map("shadow_reference_price_field")
+  shadowPriceMaxAgeSeconds     Int                  @default(300) @map("shadow_price_max_age_seconds")
+  shadowDisplayMode            String               @default("BOTH") @map("shadow_display_mode")
+  shadowCashReferences         Json                 @default("{}") @map("shadow_cash_references")
+  products                     ConnectProduct[]
+  productSyncs                 ConnectProductSync[]
+  createdAt                    DateTime             @default(now()) @map("created_at")
+  updatedAt                    DateTime             @updatedAt @map("updated_at")
+
+  @@map("connect_integration_settings")
+}
+
+enum ConnectProductValidationStatus {
+  VALID
+  INVALID
+  PARTIAL
+}
+
+enum ConnectProductPresenceStatus {
+  SEEN
+  NOT_SEEN
+}
+
+enum ConnectProductSyncStatus {
+  RUNNING
+  SUCCESS
+  WARNING
+  FAILED
+}
+
+enum ConnectPriceSide {
+  INTERNAL_BUY
+  INTERNAL_SELL
+}
+
+model ConnectProductSync {
+  id                    String                     @id @default(cuid())
+  integrationSettingsId String                     @default("global") @map("integration_settings_id")
+  status                ConnectProductSyncStatus   @default(RUNNING)
+  totalCount            Int                        @default(0) @map("total_count")
+  validCount            Int                        @default(0) @map("valid_count")
+  invalidCount          Int                        @default(0) @map("invalid_count")
+  newCount              Int                        @default(0) @map("new_count")
+  updatedCount          Int                        @default(0) @map("updated_count")
+  notSeenCount          Int                        @default(0) @map("not_seen_count")
+  responseTimeMs        Int?                       @map("response_time_ms")
+  errorCode             String?                    @map("error_code")
+  startedAt             DateTime                   @default(now()) @map("started_at")
+  finishedAt            DateTime?                  @map("finished_at")
+  initiatedById         String?                    @map("initiated_by_id")
+  initiatedBy           User?                      @relation("ConnectProductSyncInitiator", fields: [initiatedById], references: [id], onDelete: SetNull)
+  integrationSettings   ConnectIntegrationSettings @relation(fields: [integrationSettingsId], references: [id], onDelete: Cascade)
+  products              ConnectProduct[]
+
+  @@index([integrationSettingsId, startedAt])
+  @@index([status, startedAt])
+  @@map("connect_product_syncs")
+}
+
+model ConnectProduct {
+  id                    String                         @id @default(cuid())
+  integrationSettingsId String                         @default("global") @map("integration_settings_id")
+  externalProductId     String                         @map("external_product_id")
+  title                 String?
+  buyPrice              Decimal?                       @map("buy_price") @db.Decimal(30, 8)
+  sellPrice             Decimal?                       @map("sell_price") @db.Decimal(30, 8)
+  isActive              Boolean?                       @map("is_active")
+  isBuyActive           Boolean?                       @map("is_buy_active")
+  isSellActive          Boolean?                       @map("is_sell_active")
+  validationStatus      ConnectProductValidationStatus @default(INVALID) @map("validation_status")
+  presenceStatus        ConnectProductPresenceStatus   @default(SEEN) @map("presence_status")
+  lastValidationErrors  Json?                          @map("last_validation_errors")
+  lastFetchedAt         DateTime?                      @map("last_fetched_at")
+  lastValidAt           DateTime?                      @map("last_valid_at")
+  lastSeenSyncId        String?                        @map("last_seen_sync_id")
+  createdAt             DateTime                       @default(now()) @map("created_at")
+  updatedAt             DateTime                       @updatedAt @map("updated_at")
+  integrationSettings   ConnectIntegrationSettings     @relation(fields: [integrationSettingsId], references: [id], onDelete: Cascade)
+  lastSeenSync          ConnectProductSync?            @relation(fields: [lastSeenSyncId], references: [id], onDelete: SetNull)
+  mapping               ConnectProductMapping?
+
+  @@unique([integrationSettingsId, externalProductId])
+  @@index([validationStatus, presenceStatus])
+  @@index([isActive, presenceStatus])
+  @@index([title])
+  @@map("connect_products")
+}
+
+model ConnectProductMapping {
+  id                    String            @id @default(cuid())
+  connectProductId      String            @unique @map("connect_product_id")
+  internalAssetType     String?           @map("internal_asset_type")
+  internalGoldPurity    Decimal?          @map("internal_gold_purity") @db.Decimal(10, 6)
+  externalQuantityUnit  String?           @map("external_quantity_unit")
+  externalPriceCurrency String?           @map("external_price_currency")
+  priceUnitBasis        String?           @map("price_unit_basis")
+  cashPriceCategory     String?           @map("cash_price_category")
+  conversionFactor      Decimal?          @map("conversion_factor") @db.Decimal(24, 10)
+  connectBuySide        ConnectPriceSide? @map("connect_buy_side")
+  connectSellSide       ConnectPriceSide? @map("connect_sell_side")
+  isEnabled             Boolean           @default(false) @map("is_enabled")
+  isVerified            Boolean           @default(false) @map("is_verified")
+  verifiedById          String?           @map("verified_by_id")
+  verifiedAt            DateTime?         @map("verified_at")
+  createdAt             DateTime          @default(now()) @map("created_at")
+  updatedAt             DateTime          @updatedAt @map("updated_at")
+  connectProduct        ConnectProduct    @relation(fields: [connectProductId], references: [id], onDelete: Cascade)
+  verifiedBy            User?             @relation("ConnectMappingVerifier", fields: [verifiedById], references: [id], onDelete: SetNull)
+
+  @@map("connect_product_mappings")
 }
 
 /// Optional business-event SMS preferences. Registry entries are disabled by
 /// default and can only reference approved fields defined in application code.
 model SmsEventSetting {
-  eventId         String   @id @map("event_id")
-  enabled         Boolean  @default(false)
-  recipientPolicy String   @default("USER") @map("recipient_policy")
-  templateCode    String?  @map("template_code")
-  parameterFields Json     @default("[]") @map("parameter_fields")
-  sendingMode     String   @default("provider_template") @map("sending_mode")
-  customMessage   String?  @map("custom_message") @db.Text
+  eventId              String    @id @map("event_id")
+  enabled              Boolean   @default(false)
+  recipientPolicy      String    @default("USER") @map("recipient_policy")
+  templateCode         String?   @map("template_code")
+  parameterFields      Json      @default("[]") @map("parameter_fields")
+  sendingMode          String    @default("provider_template") @map("sending_mode")
+  customMessage        String?   @map("custom_message") @db.Text
   customTextVerifiedAt DateTime? @map("custom_text_verified_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
-  updatedById     String?  @map("updated_by_id")
+  updatedAt            DateTime  @updatedAt @map("updated_at")
+  updatedById          String?   @map("updated_by_id")
 
   @@map("sms_event_settings")
 }
 
 model SmsMessageLog {
-  id                    String   @id @default(cuid())
-  provider              String
-  purpose               String
-  recipientMasked       String   @map("recipient_masked")
-  templateCode          String?  @map("template_code")
-  providerReferenceId   String?  @map("provider_reference_id")
-  providerErrorCode     Int?     @map("provider_error_code")
-  acceptanceStatus      String   @map("acceptance_status")
-  deliveryStatus        String?  @map("delivery_status")
-  eventId               String?  @map("event_id")
-  idempotencyKey        String?  @unique @map("idempotency_key")
-  createdAt             DateTime @default(now()) @map("created_at")
-  updatedAt             DateTime @updatedAt @map("updated_at")
+  id                  String   @id @default(cuid())
+  provider            String
+  purpose             String
+  recipientMasked     String   @map("recipient_masked")
+  templateCode        String?  @map("template_code")
+  providerReferenceId String?  @map("provider_reference_id")
+  providerErrorCode   Int?     @map("provider_error_code")
+  acceptanceStatus    String   @map("acceptance_status")
+  deliveryStatus      String?  @map("delivery_status")
+  eventId             String?  @map("event_id")
+  idempotencyKey      String?  @unique @map("idempotency_key")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
 
   @@index([createdAt])
   @@index([providerReferenceId])
@@ -303,16 +441,16 @@ model AuditLog {
 }
 
 model Customer {
-  id               String             @id @default(cuid())
-  customerNumber   String             @unique @map("customer_number")
-  userId           String?            @unique @map("user_id")
-  firstName        String             @map("first_name")
-  lastName         String             @map("last_name")
-  nationalId       String?            @unique @map("national_id")
-  mobile           String             @unique
-  email            String?            @unique
-  dateOfBirth      DateTime?          @map("date_of_birth")
-  address          String?
+  id                String                @id @default(cuid())
+  customerNumber    String                @unique @map("customer_number")
+  userId            String?               @unique @map("user_id")
+  firstName         String                @map("first_name")
+  lastName          String                @map("last_name")
+  nationalId        String?               @unique @map("national_id")
+  mobile            String                @unique
+  email             String?               @unique
+  dateOfBirth       DateTime?             @map("date_of_birth")
+  address           String?
   avatarKey         String?               @map("avatar_key")
   type              CustomerType?
   gender            CustomerGender?
@@ -337,19 +475,19 @@ model Customer {
   rejectionReason   String?               @map("rejection_reason")
   createdAt         DateTime              @default(now()) @map("created_at")
   updatedAt         DateTime              @updatedAt @map("updated_at")
-  account          CustomerAccount?
-  bankAccounts     CustomerBankAccount[]
-  documents        CustomerDocument[]
-  user             User?                 @relation(fields: [userId], references: [id])
-  kycVerifications KYCVerification[]
-  notes            CustomerNote[]
-  orders           Order[]
-  payments         Payment[]
-  quotations       Quotation[]
-  trades           Trade[]
-  physicalPickups  PhysicalGoldPickup[]
-  referrer         Customer?             @relation("CustomerReferrals", fields: [referrerId], references: [id], onDelete: SetNull)
-  referrals        Customer[]            @relation("CustomerReferrals")
+  account           CustomerAccount?
+  bankAccounts      CustomerBankAccount[]
+  documents         CustomerDocument[]
+  user              User?                 @relation(fields: [userId], references: [id])
+  kycVerifications  KYCVerification[]
+  notes             CustomerNote[]
+  orders            Order[]
+  payments          Payment[]
+  quotations        Quotation[]
+  trades            Trade[]
+  physicalPickups   PhysicalGoldPickup[]
+  referrer          Customer?             @relation("CustomerReferrals", fields: [referrerId], references: [id], onDelete: SetNull)
+  referrals         Customer[]            @relation("CustomerReferrals")
 
   @@index([status])
   @@index([accountStatus])
@@ -361,19 +499,19 @@ model Customer {
 }
 
 model CustomerBankAccount {
-  id            String   @id @default(cuid())
-  customerId    String   @map("customer_id")
+  id            String    @id @default(cuid())
+  customerId    String    @map("customer_id")
   iban          String
-  cardLast4     String?  @map("card_last4")
-  accountLast4  String?  @map("account_last4")
-  isDefault     Boolean  @default(false) @map("is_default")
-  bankCode      String?  @map("bank_code")
-  bankName      String?  @map("bank_name")
-  accountHolder String   @map("account_holder")
-  status        String   @default("PENDING")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-  customer      Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  cardLast4     String?   @map("card_last4")
+  accountLast4  String?   @map("account_last4")
+  isDefault     Boolean   @default(false) @map("is_default")
+  bankCode      String?   @map("bank_code")
+  bankName      String?   @map("bank_name")
+  accountHolder String    @map("account_holder")
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
   payments      Payment[]
 
   @@unique([customerId, iban])
@@ -396,23 +534,23 @@ model CustomerNote {
 }
 
 model CustomerDocument {
-  id              String             @id @default(cuid())
-  customerId      String             @map("customer_id")
-  documentType    String             @map("document_type")
-  fileKey         String             @map("file_key")
-  originalFileKey String?            @map("original_file_key")
-  processedFileKey String?           @map("processed_file_key")
-  fileName        String             @map("file_name")
-  fileMimeType    String             @map("file_mime_type")
-  fileSizeBytes   Int                @map("file_size_bytes")
-  status          VerificationStatus @default(PENDING)
-  reviewedBy      String?            @map("reviewed_by")
-  reviewedAt      DateTime?          @map("reviewed_at")
-  rejectionReason String?            @map("rejection_reason")
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
-  customer        Customer           @relation(fields: [customerId], references: [id])
-  reviewer        User?              @relation("DocumentReviewer", fields: [reviewedBy], references: [id])
+  id               String             @id @default(cuid())
+  customerId       String             @map("customer_id")
+  documentType     String             @map("document_type")
+  fileKey          String             @map("file_key")
+  originalFileKey  String?            @map("original_file_key")
+  processedFileKey String?            @map("processed_file_key")
+  fileName         String             @map("file_name")
+  fileMimeType     String             @map("file_mime_type")
+  fileSizeBytes    Int                @map("file_size_bytes")
+  status           VerificationStatus @default(PENDING)
+  reviewedBy       String?            @map("reviewed_by")
+  reviewedAt       DateTime?          @map("reviewed_at")
+  rejectionReason  String?            @map("rejection_reason")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  customer         Customer           @relation(fields: [customerId], references: [id])
+  reviewer         User?              @relation("DocumentReviewer", fields: [reviewedBy], references: [id])
 
   @@index([customerId])
   @@index([status])
@@ -564,23 +702,23 @@ model PricingRule {
 
 /// Independent BUY/SELL transaction fee policy per customer type (not wage).
 model CustomerTypeFeePolicy {
-  id               String              @id @default(cuid())
-  customerType     CustomerType?       @map("customer_type")
-  side             FeeChargeSide
-  code             FeeChargeCode       @default(TRANSACTION_FEE)
-  labelFa          String              @default("کارمزد معامله") @map("label_fa")
-  mode             FeeMode             @default(NONE)
-  value            Decimal             @default(0) @db.Decimal(20, 6)
-  calculationBase  FeeCalculationBase? @map("calculation_base")
-  enabled          Boolean             @default(true)
-  priority         Int                 @default(0)
-  activeFrom       DateTime            @map("active_from")
-  activeTo         DateTime?           @map("active_to")
-  status           String              @default("ACTIVE")
-  createdBy        String?             @map("created_by")
-  createdAt        DateTime            @default(now()) @map("created_at")
-  updatedAt        DateTime            @updatedAt @map("updated_at")
-  actor            User?               @relation("FeePolicyActor", fields: [createdBy], references: [id])
+  id              String              @id @default(cuid())
+  customerType    CustomerType?       @map("customer_type")
+  side            FeeChargeSide
+  code            FeeChargeCode       @default(TRANSACTION_FEE)
+  labelFa         String              @default("کارمزد معامله") @map("label_fa")
+  mode            FeeMode             @default(NONE)
+  value           Decimal             @default(0) @db.Decimal(20, 6)
+  calculationBase FeeCalculationBase? @map("calculation_base")
+  enabled         Boolean             @default(true)
+  priority        Int                 @default(0)
+  activeFrom      DateTime            @map("active_from")
+  activeTo        DateTime?           @map("active_to")
+  status          String              @default("ACTIVE")
+  createdBy       String?             @map("created_by")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+  actor           User?               @relation("FeePolicyActor", fields: [createdBy], references: [id])
 
   @@index([customerType, side])
   @@index([status])
@@ -590,20 +728,20 @@ model CustomerTypeFeePolicy {
 
 /// Immutable per-order charge line (fees etc.) locked at order create.
 model TransactionChargeSnapshot {
-  id               String              @id @default(cuid())
-  orderId          String              @map("order_id")
-  code             FeeChargeCode       @default(TRANSACTION_FEE)
-  labelFa          String              @map("label_fa")
-  side             TradeSide
-  mode             FeeMode
-  rateValue        Decimal             @default(0) @map("rate_value") @db.Decimal(20, 6)
-  calculationBase  FeeCalculationBase? @map("calculation_base")
-  baseAmount       Decimal             @default(0) @map("base_amount") @db.Decimal(20, 2)
-  amount           Decimal             @db.Decimal(20, 2)
-  policyId         String?             @map("policy_id")
-  sortOrder        Int                 @default(0) @map("sort_order")
-  createdAt        DateTime            @default(now()) @map("created_at")
-  order            Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id              String              @id @default(cuid())
+  orderId         String              @map("order_id")
+  code            FeeChargeCode       @default(TRANSACTION_FEE)
+  labelFa         String              @map("label_fa")
+  side            TradeSide
+  mode            FeeMode
+  rateValue       Decimal             @default(0) @map("rate_value") @db.Decimal(20, 6)
+  calculationBase FeeCalculationBase? @map("calculation_base")
+  baseAmount      Decimal             @default(0) @map("base_amount") @db.Decimal(20, 2)
+  amount          Decimal             @db.Decimal(20, 2)
+  policyId        String?             @map("policy_id")
+  sortOrder       Int                 @default(0) @map("sort_order")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
   @@map("transaction_charge_snapshots")
@@ -675,38 +813,38 @@ model PricingCalculation {
 }
 
 model Order {
-  id                   String              @id @default(cuid())
-  orderNumber          String              @unique @map("order_number")
-  customerId           String              @map("customer_id")
-  customerAccountId    String              @map("customer_account_id")
-  pricingCalculationId String?             @unique @map("pricing_calculation_id")
-  status               OrderStatus         @default(DRAFT)
-  totalAmountRial      Decimal             @map("total_amount_rial") @db.Decimal(20, 2)
+  id                   String                      @id @default(cuid())
+  orderNumber          String                      @unique @map("order_number")
+  customerId           String                      @map("customer_id")
+  customerAccountId    String                      @map("customer_account_id")
+  pricingCalculationId String?                     @unique @map("pricing_calculation_id")
+  status               OrderStatus                 @default(DRAFT)
+  totalAmountRial      Decimal                     @map("total_amount_rial") @db.Decimal(20, 2)
   /// Gold commercial = PricingCalculation.finalPrice (excludes transaction fees)
-  goldAmountRial       Decimal             @default(0) @map("gold_amount_rial") @db.Decimal(20, 2)
+  goldAmountRial       Decimal                     @default(0) @map("gold_amount_rial") @db.Decimal(20, 2)
   /// Sum of transaction fees (BUY: added; SELL: deducted from gold)
-  feeAmountRial        Decimal             @default(0) @map("fee_amount_rial") @db.Decimal(20, 2)
-  reservedAmountRial   Decimal             @default(0) @map("reserved_amount_rial") @db.Decimal(20, 2)
-  weightGrams          Decimal             @map("weight_grams") @db.Decimal(12, 6)
-  purityRatio          Decimal             @map("purity_ratio") @db.Decimal(8, 6)
-  customerType         CustomerType?       @map("customer_type")
-  submittedAt          DateTime?           @map("submitted_at") @db.Timestamptz(6)
-  cancelledAt          DateTime?           @map("cancelled_at") @db.Timestamptz(6)
-  rejectedAt           DateTime?           @map("rejected_at") @db.Timestamptz(6)
-  cancellationReason   String?             @map("cancellation_reason")
-  cancelledByUserId    String?             @map("cancelled_by_user_id")
-  rejectionReason      String?             @map("rejection_reason")
-  rejectedByUserId     String?             @map("rejected_by_user_id")
-  createdAt            DateTime            @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt            DateTime            @updatedAt @map("updated_at") @db.Timestamptz(6)
+  feeAmountRial        Decimal                     @default(0) @map("fee_amount_rial") @db.Decimal(20, 2)
+  reservedAmountRial   Decimal                     @default(0) @map("reserved_amount_rial") @db.Decimal(20, 2)
+  weightGrams          Decimal                     @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio          Decimal                     @map("purity_ratio") @db.Decimal(8, 6)
+  customerType         CustomerType?               @map("customer_type")
+  submittedAt          DateTime?                   @map("submitted_at") @db.Timestamptz(6)
+  cancelledAt          DateTime?                   @map("cancelled_at") @db.Timestamptz(6)
+  rejectedAt           DateTime?                   @map("rejected_at") @db.Timestamptz(6)
+  cancellationReason   String?                     @map("cancellation_reason")
+  cancelledByUserId    String?                     @map("cancelled_by_user_id")
+  rejectionReason      String?                     @map("rejection_reason")
+  rejectedByUserId     String?                     @map("rejected_by_user_id")
+  createdAt            DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt            DateTime                    @updatedAt @map("updated_at") @db.Timestamptz(6)
   assignments          Assignment[]
   items                OrderItem[]
   chargeSnapshots      TransactionChargeSnapshot[]
-  cancelledByUser      User?               @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id])
-  customerAccount      CustomerAccount     @relation(fields: [customerAccountId], references: [id])
-  customer             Customer            @relation(fields: [customerId], references: [id])
-  pricingCalculation   PricingCalculation? @relation(fields: [pricingCalculationId], references: [id], onDelete: Restrict)
-  rejectedByUser       User?               @relation("OrderRejectedBy", fields: [rejectedByUserId], references: [id])
+  cancelledByUser      User?                       @relation("OrderCancelledBy", fields: [cancelledByUserId], references: [id])
+  customerAccount      CustomerAccount             @relation(fields: [customerAccountId], references: [id])
+  customer             Customer                    @relation(fields: [customerId], references: [id])
+  pricingCalculation   PricingCalculation?         @relation(fields: [pricingCalculationId], references: [id], onDelete: Restrict)
+  rejectedByUser       User?                       @relation("OrderRejectedBy", fields: [rejectedByUserId], references: [id])
   quotations           Quotation[]
   trade                Trade?
 
@@ -986,36 +1124,36 @@ model PurchaseItem {
 }
 
 model Payment {
-  id                        String              @id @default(cuid())
-  idempotencyKey            String              @unique @map("idempotency_key")
-  tradeId                   String?             @map("trade_id")
-  customerId                String              @map("customer_id")
-  direction                 PaymentDirection    @default(DEPOSIT)
-  method                    PaymentMethod
-  amount                    Decimal             @db.Decimal(20, 2)
-  currency                  String              @default("IRR")
-  status                    PaymentStatus       @default(PENDING)
-  referenceNumber           String?             @map("reference_number")
-  receiptKey                String?             @map("receipt_key")
-  receiptMimeType           String?             @map("receipt_mime_type")
-  receiptFileName           String?             @map("receipt_file_name")
-  customerBankAccountId     String?             @map("customer_bank_account_id")
-  destinationIban           String?             @map("destination_iban")
-  destinationBankName       String?             @map("destination_bank_name")
-  destinationAccountHolder  String?             @map("destination_account_holder")
-  notes                     String?
-  receivedAt                DateTime?           @map("received_at")
-  recordedByUserId          String?             @map("recorded_by_user_id")
-  validatedAt               DateTime?           @map("validated_at")
-  validatedByUserId         String?             @map("validated_by_user_id")
-  createdAt                 DateTime            @default(now()) @map("created_at")
-  updatedAt                 DateTime            @updatedAt @map("updated_at")
-  allocations               PaymentAllocation[]
-  customer                  Customer            @relation(fields: [customerId], references: [id])
-  customerBankAccount       CustomerBankAccount? @relation(fields: [customerBankAccountId], references: [id], onDelete: SetNull)
-  recordedBy                User?               @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
-  trade                     Trade?              @relation(fields: [tradeId], references: [id])
-  validatedBy               User?               @relation("PaymentValidatedBy", fields: [validatedByUserId], references: [id])
+  id                       String               @id @default(cuid())
+  idempotencyKey           String               @unique @map("idempotency_key")
+  tradeId                  String?              @map("trade_id")
+  customerId               String               @map("customer_id")
+  direction                PaymentDirection     @default(DEPOSIT)
+  method                   PaymentMethod
+  amount                   Decimal              @db.Decimal(20, 2)
+  currency                 String               @default("IRR")
+  status                   PaymentStatus        @default(PENDING)
+  referenceNumber          String?              @map("reference_number")
+  receiptKey               String?              @map("receipt_key")
+  receiptMimeType          String?              @map("receipt_mime_type")
+  receiptFileName          String?              @map("receipt_file_name")
+  customerBankAccountId    String?              @map("customer_bank_account_id")
+  destinationIban          String?              @map("destination_iban")
+  destinationBankName      String?              @map("destination_bank_name")
+  destinationAccountHolder String?              @map("destination_account_holder")
+  notes                    String?
+  receivedAt               DateTime?            @map("received_at")
+  recordedByUserId         String?              @map("recorded_by_user_id")
+  validatedAt              DateTime?            @map("validated_at")
+  validatedByUserId        String?              @map("validated_by_user_id")
+  createdAt                DateTime             @default(now()) @map("created_at")
+  updatedAt                DateTime             @updatedAt @map("updated_at")
+  allocations              PaymentAllocation[]
+  customer                 Customer             @relation(fields: [customerId], references: [id])
+  customerBankAccount      CustomerBankAccount? @relation(fields: [customerBankAccountId], references: [id], onDelete: SetNull)
+  recordedBy               User?                @relation("PaymentRecordedBy", fields: [recordedByUserId], references: [id])
+  trade                    Trade?               @relation(fields: [tradeId], references: [id])
+  validatedBy              User?                @relation("PaymentValidatedBy", fields: [validatedByUserId], references: [id])
 
   @@index([tradeId])
   @@index([customerId])
@@ -1541,44 +1679,44 @@ model TradingLimit {
 /// Customer request to redeem melted-gold balance as a physical bar at the store.
 /// Non-CANCELLED rows reduce sellable holding from the moment of request.
 model PhysicalGoldPickup {
-  id             String                    @id @default(cuid())
-  pickupNumber   String                    @unique @map("pickup_number")
-  customerId     String                    @map("customer_id")
-  storeId        String                    @map("store_id")
-  weightGrams    Decimal                   @map("weight_grams") @db.Decimal(12, 6)
-  purityRatio    Decimal                   @map("purity_ratio") @db.Decimal(8, 6)
-  status         PhysicalGoldPickupStatus  @default(REQUESTED)
-  customerNote       String?                   @map("customer_note")
-  staffNote          String?                   @map("staff_note")
-  cancelReason       String?                   @map("cancel_reason")
+  id                    String                    @id @default(cuid())
+  pickupNumber          String                    @unique @map("pickup_number")
+  customerId            String                    @map("customer_id")
+  storeId               String                    @map("store_id")
+  weightGrams           Decimal                   @map("weight_grams") @db.Decimal(12, 6)
+  purityRatio           Decimal                   @map("purity_ratio") @db.Decimal(8, 6)
+  status                PhysicalGoldPickupStatus  @default(REQUESTED)
+  customerNote          String?                   @map("customer_note")
+  staffNote             String?                   @map("staff_note")
+  cancelReason          String?                   @map("cancel_reason")
   /// CUSTOMER | STAFF — who cancelled the pickup.
-  cancelledByKind    String?                   @map("cancelled_by_kind")
+  cancelledByKind       String?                   @map("cancelled_by_kind")
   /// Planned in-store handover date (set when staff starts PREPARING).
-  scheduledPickupAt  DateTime?                 @map("scheduled_pickup_at")
-  requestedAt        DateTime                  @default(now()) @map("requested_at")
-  preparingAt        DateTime?                 @map("preparing_at")
-  readyAt            DateTime?                 @map("ready_at")
-  deliveredAt        DateTime?                 @map("delivered_at")
-  cancelledAt        DateTime?                 @map("cancelled_at")
-  preparingById      String?                   @map("preparing_by_id")
-  readyById          String?                   @map("ready_by_id")
-  deliveredById      String?                   @map("delivered_by_id")
-  cancelledById      String?                   @map("cancelled_by_id")
-  preInvoiceKey         String?                @map("pre_invoice_key")
-  preInvoiceMimeType    String?                @map("pre_invoice_mime_type")
-  preInvoiceGeneratedAt DateTime?              @map("pre_invoice_generated_at")
-  invoiceKey            String?                @map("invoice_key")
-  invoiceMimeType       String?                @map("invoice_mime_type")
-  invoiceGeneratedAt    DateTime?              @map("invoice_generated_at")
-  createdAt      DateTime                  @default(now()) @map("created_at")
-  updatedAt      DateTime                  @updatedAt @map("updated_at")
-  customer       Customer                  @relation(fields: [customerId], references: [id])
-  preparingBy    User?                     @relation("PickupPreparingBy", fields: [preparingById], references: [id])
-  readyBy        User?                     @relation("PickupReadyBy", fields: [readyById], references: [id])
-  deliveredBy    User?                     @relation("PickupDeliveredBy", fields: [deliveredById], references: [id])
-  cancelledBy    User?                     @relation("PickupCancelledBy", fields: [cancelledById], references: [id])
-  events         PhysicalGoldPickupEvent[]
-  charge         PickupChargeSnapshot?
+  scheduledPickupAt     DateTime?                 @map("scheduled_pickup_at")
+  requestedAt           DateTime                  @default(now()) @map("requested_at")
+  preparingAt           DateTime?                 @map("preparing_at")
+  readyAt               DateTime?                 @map("ready_at")
+  deliveredAt           DateTime?                 @map("delivered_at")
+  cancelledAt           DateTime?                 @map("cancelled_at")
+  preparingById         String?                   @map("preparing_by_id")
+  readyById             String?                   @map("ready_by_id")
+  deliveredById         String?                   @map("delivered_by_id")
+  cancelledById         String?                   @map("cancelled_by_id")
+  preInvoiceKey         String?                   @map("pre_invoice_key")
+  preInvoiceMimeType    String?                   @map("pre_invoice_mime_type")
+  preInvoiceGeneratedAt DateTime?                 @map("pre_invoice_generated_at")
+  invoiceKey            String?                   @map("invoice_key")
+  invoiceMimeType       String?                   @map("invoice_mime_type")
+  invoiceGeneratedAt    DateTime?                 @map("invoice_generated_at")
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+  customer              Customer                  @relation(fields: [customerId], references: [id])
+  preparingBy           User?                     @relation("PickupPreparingBy", fields: [preparingById], references: [id])
+  readyBy               User?                     @relation("PickupReadyBy", fields: [readyById], references: [id])
+  deliveredBy           User?                     @relation("PickupDeliveredBy", fields: [deliveredById], references: [id])
+  cancelledBy           User?                     @relation("PickupCancelledBy", fields: [cancelledById], references: [id])
+  events                PhysicalGoldPickupEvent[]
+  charge                PickupChargeSnapshot?
 
   @@index([customerId, status])
   @@index([status, requestedAt])
@@ -1605,6 +1743,7 @@ model AuthRateLimit {
   key       String   @id
   count     Int      @default(0)
   expiresAt DateTime @map("expires_at")
+
   @@index([expiresAt])
   @@map("auth_rate_limits")
 }

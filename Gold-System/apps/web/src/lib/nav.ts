@@ -17,6 +17,9 @@ import {
   Shield,
   Percent,
   MessageSquare,
+  PlugZap,
+  PackageSearch,
+  DatabaseBackup,
 } from 'lucide-react';
 import { hasPermission } from './permissions';
 
@@ -122,6 +125,13 @@ export const DASHBOARD_NAV: NavItem[] = [
     group: 'تأمین',
   },
   {
+    href: '/dashboard/supply/connect-products',
+    label: 'محصولات Connect',
+    icon: PackageSearch,
+    anyOf: ['connect.products.read'],
+    group: 'تأمین',
+  },
+  {
     href: '/dashboard/reports',
     label: 'گزارش‌ها',
     icon: BarChart3,
@@ -157,6 +167,13 @@ export const DASHBOARD_NAV: NavItem[] = [
     group: 'سیستم',
   },
   {
+    href: '/dashboard/settings/database-backup',
+    label: 'پشتیبان اضطراری پایگاه داده',
+    icon: DatabaseBackup,
+    anyOf: ['database.backup.create'],
+    group: 'سیستم',
+  },
+  {
     href: '/dashboard/settings/sms',
     label: 'تنظیمات پیامک',
     icon: MessageSquare,
@@ -168,6 +185,13 @@ export const DASHBOARD_NAV: NavItem[] = [
     label: 'مدیریت رویدادهای پیامکی',
     icon: MessageSquare,
     anyOf: ['sms.settings.manage'],
+    group: 'سیستم',
+  },
+  {
+    href: '/dashboard/settings/integrations/connect',
+    label: 'اتصال به تأمین‌کننده Connect',
+    icon: PlugZap,
+    anyOf: ['connect.settings.read'],
     group: 'سیستم',
   },
 ];

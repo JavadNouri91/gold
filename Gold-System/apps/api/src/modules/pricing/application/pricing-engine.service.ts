@@ -246,7 +246,24 @@ export class PricingEngineService {
       throw new StalePriceError(snapshot.id, 0, 0);
     }
 
-    const step1BasePrice = snapshot.normalizedValue;
+    return this.calculateFromBase(input, snapshot.normalizedValue, snapshot.id, true);
+  }
+
+  /** Runs the same pricing pipeline against an ephemeral base price without writing a calculation. */
+  async calculatePreview(input: PricingEngineInput, basePrice: Decimal, sourceId: string): Promise<PricingEngineResult> {
+    this.validateWeight(input.weightGrams);
+    this.validatePurity(input.purityRatio);
+    if (!basePrice.isFinite() || basePrice.lte(0)) throw new NoPriceAvailableError();
+    return this.calculateFromBase(input, basePrice, sourceId, false);
+  }
+
+  private async calculateFromBase(
+    input: PricingEngineInput,
+    basePrice: Decimal,
+    snapshotId: string,
+    persist: boolean,
+  ): Promise<PricingEngineResult> {
+    const step1BasePrice = basePrice;
 
     // ── Step 2: Global seller adjustment ──────────────────────
     let globalAdj: PriceAdjustmentEntity | null = null;
@@ -260,7 +277,7 @@ export class PricingEngineService {
 
     if (globalAdj) {
       step2AfterGlobalAdj = globalAdj.apply(step1BasePrice);
-      this.logger.debug(
+      if (persist) this.logger.debug(
         `Step 2 — Global adj [${globalAdj.id}]: ${step1BasePrice.toFixed(2)} → ${step2AfterGlobalAdj.toFixed(2)}`,
       );
     }
@@ -275,7 +292,7 @@ export class PricingEngineService {
 
     // ── Step 4: Weight calculation ────────────────────────────
     const step4AfterWeight = step3PricePerGram.times(input.weightGrams);
-    this.logger.debug(
+    if (persist) this.logger.debug(
       `Step 4 — Weight: ${step3PricePerGram.toFixed(2)} × ${input.weightGrams.toFixed(6)}g = ${step4AfterWeight.toFixed(2)}`,
     );
 
@@ -291,7 +308,7 @@ export class PricingEngineService {
 
     if (pricingRule) {
       step5AfterGroupRule = pricingRule.applyGroupAdj(step4AfterWeight);
-      this.logger.debug(
+      if (persist) this.logger.debug(
         `Step 5 — Group rule [${pricingRule.id}]: ${step4AfterWeight.toFixed(2)} → ${step5AfterGroupRule.toFixed(2)}`,
       );
     }
@@ -342,17 +359,17 @@ export class PricingEngineService {
       roundingAmount = delta;
     }
 
-    this.logger.debug(
+    if (persist) this.logger.debug(
       `Step 10 — Final: ${finalPrice.toFixed(2)} (incomplete — profit + tax blocked)`,
     );
 
     // ── Persist PricingCalculation (immutable snapshot) ───────
-    const calculationId = uuidv4();
+    const calculationId = persist ? uuidv4() : `shadow-preview:${snapshotId}:${uuidv4()}`;
     const calcRecord: PricingCalculationRecord = {
       id: calculationId,
       referenceType: input.referenceType ?? null,
       referenceId: input.referenceId ?? null,
-      priceSnapshotId: snapshot.id,
+      priceSnapshotId: snapshotId,
       globalAdjId: globalAdj?.id ?? null,
       pricingRuleId: pricingRule?.id ?? null,
       weightGrams: input.weightGrams,
@@ -377,7 +394,7 @@ export class PricingEngineService {
       calculationVersion: '1',
     };
 
-    await this.calcRepo.create(calcRecord);
+    if (persist) await this.calcRepo.create(calcRecord);
 
     return {
       calculationId,
@@ -397,7 +414,7 @@ export class PricingEngineService {
       finalPrice,
       isComplete: false as const,
       blockedSteps,
-      snapshotId: snapshot.id,
+      snapshotId,
       globalAdjId: globalAdj?.id ?? null,
       pricingRuleId: pricingRule?.id ?? null,
     };

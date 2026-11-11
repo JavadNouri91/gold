@@ -1,4 +1,5 @@
 import * as Joi from 'joi';
+import { isValidConnectEncryptionKey } from '../common/crypto/secret-box';
 
 export function validateEnv(config: Record<string, unknown>) {
   const schema = Joi.object({
@@ -17,6 +18,16 @@ export function validateEnv(config: Record<string, unknown>) {
     SMS_API_KEY: Joi.string().default(''),
     SMS_SENDER_LINE: Joi.string().default(''),
     SMS_ENCRYPTION_KEY: Joi.string().min(32).allow('').default(''),
+    CONNECT_ENCRYPTION_KEY: Joi.string()
+      .allow('')
+      .custom((value, helpers) =>
+        value === '' || isValidConnectEncryptionKey(value) ? value : helpers.error('any.invalid'),
+      )
+      .messages({
+        'any.invalid':
+          '"CONNECT_ENCRYPTION_KEY" must be 64 hexadecimal characters with sufficient entropy.',
+      })
+      .default(''),
     OTP_HASH_KEY: Joi.string().min(32).allow('').default(''),
     // Local filesystem storage — docs/deployment.md
     STORAGE_LOCAL_ROOT: Joi.string().default('.data/uploads'),

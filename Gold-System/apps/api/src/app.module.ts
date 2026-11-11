@@ -60,6 +60,8 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { ReportsModule } from './modules/reports/reports.module';
 import { TradingPolicyModule } from './modules/trading-policy/trading-policy.module';
 import { SmsModule } from './modules/sms/sms.module';
+import { ConnectModule } from './modules/connect/connect.module';
+import { DatabaseBackupModule } from './modules/database-backup/database-backup.module';
 
 @Module({
   imports: [
@@ -141,6 +143,8 @@ import { SmsModule } from './modules/sms/sms.module';
     NotificationsModule,
     // SMS provider adapters + the admin-panel configuration endpoints.
     SmsModule,
+    ConnectModule,
+    DatabaseBackupModule,
 
     // ─── Phase 8 — Reports + Dashboard ──────────────────────────────────────────
     ReportsModule,
